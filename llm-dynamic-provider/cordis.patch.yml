@@ -1,0 +1,5 @@
+# The dsh-llm-dynamic-provider bundle layer: installing this package into a
+# profile inserts the startup-reprobing provider plugin row.
+- insert:
+    - id: llm-dynamic-provider
+      name: 'dsh-llm-dynamic-provider'

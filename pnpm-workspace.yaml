@@ -1,0 +1,14 @@
+packages:
+  - 'llm-endpoint-base'
+  - 'llm-discovery'
+  - 'ui-settings-discovery'
+  - 'llm-dynamic-provider'
+
+# The @deepseek-ai/dsh-* peers are provided by the harness host at runtime and
+# are not fetchable from npm.
+autoInstallPeers: false
+
+# Pure-JS transitive dependencies of pi-ai; neither needs its install script.
+allowBuilds:
+  '@google/genai': false
+  protobufjs: false

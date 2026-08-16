@@ -1,0 +1,42 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../../vendor/cordis"
+    },
+    {
+      "path": "../../vendor/schemastery"
+    },
+    {
+      "path": "../../packages/credentials/credentials"
+    },
+    {
+      "path": "../../packages/llm/llm"
+    },
+    {
+      "path": "../../packages/llm/llm-pi-ai"
+    },
+    {
+      "path": "../../packages/util/home-paths"
+    },
+    {
+      "path": "../../packages/util/launch-environment"
+    },
+    {
+      "path": "../../packages/runtime-diagnostics/invariants"
+    },
+    {
+      "path": "../../packages/storage/storage-domain"
+    },
+    {
+      "path": "../llm-endpoint-base"
+    }
+  ]
+}

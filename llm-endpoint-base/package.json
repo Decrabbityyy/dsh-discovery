@@ -1,0 +1,47 @@
+{
+  "name": "dsh-llm-endpoint-base",
+  "description": "Shared primitives for endpoint model discovery: the engine ladder, catalog enrichment, protocol and thinking-level vocabularies, and the models.dev catalog. The pure parsers and vocabularies are browser-safe (`.`/`./vocabulary`); `./store` is the host-only storage-domain persistence for the models.dev catalog",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./vocabulary": {
+      "types": "./lib/types/vocabulary.d.ts",
+      "default": "./lib/vocabulary.js"
+    },
+    "./store": {
+      "types": "./lib/types/store.d.ts",
+      "default": "./lib/store.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc -b tsconfig.json && tsdown",
+    "prepack": "tsdown",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "*",
+    "@deepseek-ai/dsh-llm": "*",
+    "@deepseek-ai/dsh-storage-domain": "*",
+    "@deepseek-ai/schemastery": "*",
+    "@earendil-works/pi-ai": "*",
+    "zod": "^4.4.3"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@earendil-works/pi-ai": "^0.82.1",
+    "tsdown": "^0.22.2",
+    "zod": "^4.4.3"
+  }
+}

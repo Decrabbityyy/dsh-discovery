@@ -1,0 +1,33 @@
+{
+  "extends": "../../tsconfig.base.client.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../../vendor/cordis"
+    },
+    {
+      "path": "../../packages/client/ui-slots"
+    },
+    {
+      "path": "../../packages/client/runtime"
+    },
+    {
+      "path": "../../packages/client/ui-settings"
+    },
+    {
+      "path": "../../packages/runtime-diagnostics/invariants"
+    },
+    {
+      "path": "../../packages/api/remotes/tsconfig.client.json"
+    },
+    {
+      "path": "../llm-endpoint-base"
+    }
+  ]
+}

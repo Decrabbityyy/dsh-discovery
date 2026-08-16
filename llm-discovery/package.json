@@ -1,0 +1,45 @@
+{
+  "name": "dsh-llm-discovery",
+  "description": "Engine-detecting endpoint model discovery with bundled-catalog enrichment for the DeepSeek Harness LLM seam",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./invariant": {
+      "types": "./lib/types/invariant.d.ts",
+      "default": "./lib/invariant.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc -b tsconfig.json && tsdown",
+    "prepack": "tsdown",
+    "test": "vitest run"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "*",
+    "@deepseek-ai/dsh-llm": "*"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@earendil-works/pi-ai": "^0.82.1",
+    "dsh-llm-endpoint-base": "workspace:*",
+    "tsdown": "^0.22.2"
+  }
+}

@@ -1,0 +1,5 @@
+# The dsh-llm-discovery bundle layer: installing this package into a profile
+# inserts the endpoint model-discovery plugin row.
+- insert:
+    - id: llm-discovery
+      name: 'dsh-llm-discovery'

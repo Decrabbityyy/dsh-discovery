@@ -1,0 +1,5 @@
+# The dsh-client-ui-settings-discovery bundle layer: installing this package
+# into a profile inserts the model-discovery settings section's client row.
+- insert:
+    - id: ui-settings-discovery
+      name: 'dsh-client-ui-settings-discovery'
