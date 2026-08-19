@@ -1,0 +1,32 @@
+name: Publish npm packages
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.21.0
+          run_install: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.15.0'
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r run test
+      - run: pnpm -r run build
+      - run: pnpm --filter dsh-llm-discovery publish --no-git-checks
+      - run: pnpm --filter dsh-llm-dynamic-provider publish --no-git-checks
+      - run: pnpm --filter dsh-client-ui-settings-discovery publish --no-git-checks
