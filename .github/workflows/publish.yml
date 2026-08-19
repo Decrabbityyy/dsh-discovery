@@ -27,6 +27,38 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r run test
       - run: pnpm -r run build
-      - run: pnpm --filter dsh-llm-discovery publish --no-git-checks
-      - run: pnpm --filter dsh-llm-dynamic-provider publish --no-git-checks
-      - run: pnpm --filter dsh-client-ui-settings-discovery publish --no-git-checks
+      - name: Publish versions missing from npmjs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          publish_if_missing() {
+            local directory="$1"
+            local name version status
+            name="$(node -p "require('./${directory}/package.json').name")"
+            version="$(node -p "require('./${directory}/package.json').version")"
+
+            if [[ "${GITHUB_REF_TYPE:-}" == "tag" && "${GITHUB_REF_NAME#v}" != "$version" ]]; then
+              echo "::error::$name@$version does not match tag $GITHUB_REF_NAME"
+              return 1
+            fi
+
+            status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+              "https://registry.npmjs.org/${name}/${version}")"
+            case "$status" in
+              200)
+                echo "::notice::Skipping $name@$version because npmjs already has it"
+                ;;
+              404)
+                pnpm --filter "$name" publish --no-git-checks
+                ;;
+              *)
+                echo "::error::npmjs returned HTTP $status while checking $name@$version"
+                return 1
+                ;;
+            esac
+          }
+
+          publish_if_missing llm-discovery
+          publish_if_missing llm-dynamic-provider
+          publish_if_missing ui-settings-discovery
