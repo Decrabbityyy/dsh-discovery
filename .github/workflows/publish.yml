@@ -36,6 +36,9 @@ jobs:
       - name: Install Harness dependencies
         working-directory: harness
         run: pnpm install --frozen-lockfile
+      - name: Build pinned Harness artifacts
+        working-directory: harness
+        run: pnpm run build
       - name: Install plugin dependencies
         working-directory: harness/third-plugin
         run: pnpm install --frozen-lockfile
