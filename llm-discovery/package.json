@@ -2,7 +2,16 @@
   "name": "dsh-llm-discovery",
   "description": "Engine-detecting endpoint model discovery with bundled-catalog enrichment for the DeepSeek Harness LLM seam",
   "version": "0.1.0",
-  "private": true,
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "llm",
+    "model-discovery"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -25,7 +34,8 @@
   "scripts": {
     "build": "tsc -b tsconfig.json && tsdown",
     "prepack": "tsdown",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "pnpm run test && pnpm run build"
   },
   "dsh": {
     "bundle": {
@@ -37,6 +47,17 @@
     "@deepseek-ai/dsh-llm": "*",
     "@deepseek-ai/schemastery": "*",
     "@earendil-works/pi-ai": "*"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-llm": {
+      "optional": true
+    },
+    "@deepseek-ai/schemastery": {
+      "optional": true
+    }
   },
   "dependencies": {},
   "devDependencies": {

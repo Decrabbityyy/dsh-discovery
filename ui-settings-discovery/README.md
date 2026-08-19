@@ -9,30 +9,22 @@ Web UI 本身不强制依赖其中任何一个；只需安装你要使用的功�
 
 ## 安装
 
-如果你拿到的是本仓库源码，先打包 UI，再按需要打包一个或两个宿主插件：
+先从 npmjs 安装 UI：
 
 ```sh
-pnpm -C third-plugin/ui-settings-discovery pack
-pnpm -C third-plugin/llm-discovery pack
-pnpm -C third-plugin/llm-dynamic-provider pack
-```
-
-先安装 UI：
-
-```sh
-dsh plugin --profile web add ./third-plugin/ui-settings-discovery/dsh-client-ui-settings-discovery-0.1.0.tgz
+dsh plugin --profile web add dsh-client-ui-settings-discovery
 ```
 
 需要端点探测和 Provider 采纳时，安装：
 
 ```sh
-dsh plugin --profile web add ./third-plugin/llm-discovery/dsh-llm-discovery-0.1.0.tgz
+dsh plugin --profile web add dsh-llm-discovery
 ```
 
 需要动态路由管理时，安装：
 
 ```sh
-dsh plugin --profile web add ./third-plugin/llm-dynamic-provider/dsh-llm-dynamic-provider-0.1.0.tgz
+dsh plugin --profile web add dsh-llm-dynamic-provider
 ```
 
 两个功能都需要时，同时安装两个宿主插件。最后确认配置：

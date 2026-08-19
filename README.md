@@ -23,21 +23,15 @@
 
 要求：已经安装 `dsh`，并已创建目标 profile。设置页面只能用于 Web profile。
 
-如果你拿到的是本仓库源码，先生成安装包：
+按需要从 npmjs 安装插件：
 
 ```sh
-pnpm -C third-plugin/llm-dynamic-provider pack
-pnpm -C third-plugin/llm-discovery pack
-pnpm -C third-plugin/ui-settings-discovery pack
+dsh plugin --profile web add dsh-llm-discovery
+dsh plugin --profile web add dsh-client-ui-settings-discovery
+dsh plugin --profile web add dsh-llm-dynamic-provider
 ```
 
-按需要安装插件：
-
-```sh
-dsh plugin --profile web add ./third-plugin/llm-discovery/dsh-llm-discovery-0.1.0.tgz
-dsh plugin --profile web add ./third-plugin/ui-settings-discovery/dsh-client-ui-settings-discovery-0.1.0.tgz
-dsh plugin --profile web add ./third-plugin/llm-dynamic-provider/dsh-llm-dynamic-provider-0.1.0.tgz
-```
+只安装你需要的组合。`dsh plugin` 会把 npm 包加入目标 profile，并自动启用包内的插件层。
 
 确认插件已经进入配置：
 
@@ -62,7 +56,7 @@ dsh --profile web --dump-config
 
 ### 自动管理一个端点的全部模型
 
-安装 `dsh-llm-dynamic-provider`，然后在 profile 的 `cordis.patch.yml` 中声明路由。插件会在启动时探测端点；探测成功后，该路由会出现在模型选择器中。
+安装 `dsh-llm-dynamic-provider`，然后在 `$DSH_HOME/settings.yaml` 的 `llm-dynamic-provider.routes` 下声明路由。保存后插件会立即探测端点；探测成功后，该路由会出现在模型选择器中。
 
 配置字段、凭证和缓存说明见 [`dsh-llm-dynamic-provider`](./llm-dynamic-provider/README.md)。
 

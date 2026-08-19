@@ -2,7 +2,17 @@
   "name": "dsh-client-ui-settings-discovery",
   "description": "Model discovery settings section: probe local-engine and custom endpoints and adopt their models into a pi-ai provider profile",
   "version": "0.1.0",
-  "private": true,
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "llm",
+    "model-discovery",
+    "web-ui"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -37,7 +47,8 @@
   "scripts": {
     "build": "tsc -b tsconfig.json && tsdown",
     "prepack": "tsdown",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "pnpm run test && pnpm run build"
   },
   "license": "MIT",
   "dependencies": {
@@ -57,6 +68,15 @@
     "@deepseek-ai/dsh-client-ui-slots": "*",
     "@deepseek-ai/dsh-invariants": "*",
     "react": "^18.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": { "optional": true },
+    "@deepseek-ai/dsh-api-remotes": { "optional": true },
+    "@deepseek-ai/dsh-client-connection": { "optional": true },
+    "@deepseek-ai/dsh-client-runtime": { "optional": true },
+    "@deepseek-ai/dsh-client-ui-settings": { "optional": true },
+    "@deepseek-ai/dsh-client-ui-slots": { "optional": true },
+    "@deepseek-ai/dsh-invariants": { "optional": true }
   },
   "files": [
     "lib/index.js",

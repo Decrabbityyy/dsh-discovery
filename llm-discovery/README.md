@@ -6,18 +6,11 @@
 
 ## 安装
 
-如果你拿到的是本仓库源码，先打包：
+从 npmjs 安装探测插件和设置页面：
 
 ```sh
-pnpm -C third-plugin/llm-discovery pack
-pnpm -C third-plugin/ui-settings-discovery pack
-```
-
-安装探测插件和设置页面：
-
-```sh
-dsh plugin --profile web add ./third-plugin/llm-discovery/dsh-llm-discovery-0.1.0.tgz
-dsh plugin --profile web add ./third-plugin/ui-settings-discovery/dsh-client-ui-settings-discovery-0.1.0.tgz
+dsh plugin --profile web add dsh-llm-discovery
+dsh plugin --profile web add dsh-client-ui-settings-discovery
 dsh --profile web --dump-config
 ```
 

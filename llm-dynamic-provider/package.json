@@ -1,8 +1,18 @@
 {
   "name": "dsh-llm-dynamic-provider",
   "version": "0.1.0",
-  "private": true,
   "description": "Runtime-discovered pi-ai provider routes: probe an endpoint at boot, register its models into the in-memory LLM registry — nothing written to settings",
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "llm",
+    "model-discovery",
+    "dynamic-provider"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -25,7 +35,8 @@
   "scripts": {
     "build": "tsc -b tsconfig.json && tsdown",
     "prepack": "tsdown",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepublishOnly": "pnpm run test && pnpm run build"
   },
   "dsh": {
     "bundle": {
@@ -44,6 +55,17 @@
     "@deepseek-ai/schemastery": "*",
     "@earendil-works/pi-ai": "*",
     "zod": "^4.4.3"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": { "optional": true },
+    "@deepseek-ai/dsh-credentials": { "optional": true },
+    "@deepseek-ai/dsh-home-paths": { "optional": true },
+    "@deepseek-ai/dsh-launch-environment": { "optional": true },
+    "@deepseek-ai/dsh-llm": { "optional": true },
+    "@deepseek-ai/dsh-llm-pi-ai": { "optional": true },
+    "@deepseek-ai/dsh-settings": { "optional": true },
+    "@deepseek-ai/dsh-storage-domain": { "optional": true },
+    "@deepseek-ai/schemastery": { "optional": true }
   },
   "devDependencies": {
     "@earendil-works/pi-ai": "^0.82.1",

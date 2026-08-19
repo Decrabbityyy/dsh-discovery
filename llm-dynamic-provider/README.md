@@ -6,16 +6,10 @@
 
 ## 安装
 
-如果你拿到的是本仓库源码，先打包：
+从 npmjs 安装到目标 profile：
 
 ```sh
-pnpm -C third-plugin/llm-dynamic-provider pack
-```
-
-安装到目标 profile：
-
-```sh
-dsh plugin --profile <name> add ./third-plugin/llm-dynamic-provider/dsh-llm-dynamic-provider-0.1.0.tgz
+dsh plugin --profile <name> add dsh-llm-dynamic-provider
 dsh --profile <name> --dump-config
 ```
 
@@ -23,32 +17,27 @@ dsh --profile <name> --dump-config
 
 ## 配置一个动态路由
 
-在目标 profile 的 `cordis.patch.yml` 中配置已安装的插件行：
+在 `$DSH_HOME/settings.yaml` 中写入本插件的用户设置。未设置 `DSH_HOME` 时，默认文件是 `~/.dsh/settings.yaml`：
 
 ```yaml
-- id: llm-dynamic-provider
-  config:
-    routes:
-      upstream:
-        baseURL: https://gateway.example.com/v1
-        api: openai-completions
-        apiKeyEnv: UPSTREAM_API_KEY
-        displayName: 公司网关
-        defaultContextWindow: 262144
-        defaultMaxTokens: 32768
-    cache: true
-    timeoutMs: 10000
-    maxResponseBytes: 4194304
-    enrichment: true
+llm-dynamic-provider:
+  routes:
+    upstream:
+      baseURL: https://gateway.example.com/v1
+      api: openai-completions
+      apiKeyEnv: UPSTREAM_API_KEY
+      displayName: 公司网关
+      defaultContextWindow: 262144
+      defaultMaxTokens: 32768
 ```
 
-把凭证写入 DSH 使用的 `.env` 或启动环境，不要把真实密钥提交到配置文件：
+把凭证写入 DSH 使用的 `.env` 或启动环境，不要把真实密钥写入 `settings.yaml`：
 
 ```text
 UPSTREAM_API_KEY=你的密钥
 ```
 
-重启 profile。探测成功后，路由名 `upstream` 会出现在模型选择器中，端点返回的模型都可以直接使用。
+保存 `settings.yaml` 后插件会自动重新探测，不需要重启。探测成功后，路由名 `upstream` 会出现在模型选择器中，端点返回的模型都可以直接使用。
 
 ## 路由字段
 
@@ -65,6 +54,17 @@ UPSTREAM_API_KEY=你的密钥
 
 ## 插件配置
 
+这些是部署级选项，不属于用户 `settings.yaml`。需要修改时，在 profile 的 `cordis.patch.yml` 中配置插件行：
+
+```yaml
+- id: llm-dynamic-provider
+  config:
+    cache: true
+    timeoutMs: 10000
+    maxResponseBytes: 4194304
+    enrichment: true
+```
+
 | 字段 | 默认值 | 说明 |
 |---|---:|---|
 | `cache` | `false` | 保存上一次成功发现的目录；端点暂时不可用时仍可启动旧目录 |
@@ -72,7 +72,7 @@ UPSTREAM_API_KEY=你的密钥
 | `maxResponseBytes` | `4194304` | 模型列表响应的最大字节数 |
 | `enrichment` | `true` | 用内置模型目录补全端点未提供的名称和容量 |
 
-修改 profile patch 后需要重启。安装了 `dsh-client-ui-settings-discovery` 时，也可以在「模型发现」页面的「动态路由」区域新增、编辑和删除路由。
+修改 profile patch 后需要重启。安装了 `dsh-client-ui-settings-discovery` 时，也可以在「模型发现」页面的「动态路由」区域新增、编辑和删除路由；页面写入的也是同一份用户 settings。
 
 ## 协议和地址
 
@@ -88,6 +88,7 @@ UPSTREAM_API_KEY=你的密钥
 ## 启动和失败行为
 
 - 每次启动都会重新探测所有路由。
+- `settings.yaml` 中的路由发生变化时会自动重新探测，不需要重启。
 - 探测成功后，端点返回的模型会出现在模型选择器中。
 - 未启用缓存时，不可达、认证失败或返回空列表的路由不会注册。
 - 启用缓存后，启动时先使用上一次成功目录，再尝试刷新。
