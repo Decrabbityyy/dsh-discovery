@@ -1,80 +1,115 @@
 # dsh-llm-discovery
 
-English | [中文](README.zh.md)
+`dsh-llm-discovery` 为 DeepSeek Harness 提供端点模型探测。它通常与 [`dsh-client-ui-settings-discovery`](../ui-settings-discovery/README.md) 一起安装，让你在 Web 设置页输入一个端点、查看模型列表，再选择需要的模型创建 Provider。
 
-Engine-detecting endpoint model discovery for the [LLM seam](../llm/README.md). The plugin registers the `llm-discovery` offer on `ctx.llm.registerModelDiscovery`, so any configuration surface can interrogate a draft endpoint through the existing `llm.discoverModels` RPC with `settingsNs: 'llm-discovery'` — no adapter, gateway, or other plugin is modified. The discovery vocabulary (request draft, candidate model shape) belongs to the seam; this package owns the engine ladder and the enrichment step.
+探测只读取端点信息。输入的 API 密钥不会由本插件保存，探测结果也不会自动写入设置。
 
-## The ladder
+## 安装
 
-A probe walks engine rungs in order and the first engine that recognizes the endpoint wins:
-
-| Rung | Endpoints | Capacities it reads |
-|---|---|---|
-| `ollama` | `GET /api/tags`, then one `POST /api/show` per model | `model_info`'s `*.context_length`; a model without one reports `ollamaDefaultContextWindow` |
-| `litellm` | `GET /model_group/info`, `/v2/model/info`, `/model/info`, `/v1/model/info` in order | `max_input_tokens`/`context_window` and `max_output_tokens`/`max_tokens`, including each entry's nested `model_info` |
-| `openai-models` | `GET {baseURL}/models` | `context_window`/`context_length`/vLLM `max_model_len`, and `max_output_tokens`/`max_tokens` |
-
-The generic rung switches dialect when the draft names `api: 'anthropic-messages'`: Anthropic's [Models API](https://platform.claude.com/docs/en/api/models/list) is the same `data`-array listing but authenticates with `x-api-key` plus a required `anthropic-version` header (Bearer is for OAuth tokens), reads `max_input_tokens` as the context window, and is probed with `?limit=1000` (the documented page ceiling; `has_more` cursors are not followed).
-
-When the draft names `api: 'google-generative-ai'`, the same rung uses Google's native [Models API](https://ai.google.dev/api/models): `GET {baseURL}/models?pageSize=1000`, `x-goog-api-key` authentication, and the `models` array. It keeps entries that support `generateContent`, prefers `baseModelId` as the request id, and reads `displayName`, `inputTokenLimit`, and `outputTokenLimit`. The supplied `baseURL` must include the API version path, such as `https://generativelanguage.googleapis.com/v1beta`.
-
-The specific rungs come first because an Ollama host also answers an OpenAI-compatible listing without capacities, and a LiteLLM proxy's `/models` is bare where its management endpoints are rich. A rung that gets a 404, an unreachable host, an unparseable answer, or an answer without its expected payload shape skips to the next; a 401/403 is remembered as the most reportable failure and thrown when no rung produces a listing. Caller cancellation stops the ladder at once with `ABORTED`. The Ollama rung strips a trailing `/v1` from the base before joining its native paths, so the preset's OpenAI-compatible base URL still reaches `/api/tags`.
-
-## Enrichment
-
-When `enrichment` is on, fields an endpoint leaves undisclosed are filled from the bundled pi-ai model catalog by exact model id: a proxy listing `claude-haiku-4-5` with no capacities still yields a fully described candidate. Endpoint-reported values always win, and an id the catalog does not know stays honestly undisclosed — the [`LlmDiscoveredModel`](../llm/README.md) contract makes every field but `id` optional for exactly this reason. Nothing is ever inferred from id patterns.
-
-## Draft contract
-
-The request is the seam's `LlmModelDiscoveryRequest`: `baseURL` is required (this namespace owns no routes and no catalog of its own, so there is nothing to short-circuit with); `apiKey`, when supplied, is validated with the shared `normalizeApiKey` before any header is built and is never stored; `signal` aborts promptly. The reply is candidate metadata a surface may offer for adoption — nothing here writes settings or credentials.
-
-## Config
-
-```yaml
-- id: llm-discovery
-  name: 'dsh-llm-discovery'
-  config:
-    timeoutMs: 10000                  # per-request probe ceiling
-    maxResponseBytes: 4194304         # replies past this are refused, not truncated
-    enrichment: true                  # bundled-catalog fill of undisclosed fields
-    ollamaDefaultContextWindow: 128000
-    engines: { ollama: true, litellm: true, openaiModels: true }
-```
-
-Every field is optional with the defaults shown. The package is a [bundle](../../../../docs/user/develop/basic/publish.md): its own `cordis.patch.yml` inserts the `llm-discovery` row when a profile installs it.
-
-## Installation
-
-The package is a [bundle](../../../../docs/user/develop/basic/publish.md): its own `cordis.patch.yml` inserts the `llm-discovery` row when a profile installs it.
-
-With an **installed** `dsh` CLI, install the packed tarball — a `dsh plugin add ./path` link install leaves Node resolving the plugin's harness imports from the checkout's real location, which has no `@deepseek-ai/*` packages on its parent walk:
+如果你拿到的是本仓库源码，先打包：
 
 ```sh
 pnpm -C third-plugin/llm-discovery pack
-dsh plugin --profile <name> add ./third-plugin/llm-discovery/dsh-llm-discovery-0.1.0.tgz
-dsh --profile <name> --dump-config   # verify the layer appears
+pnpm -C third-plugin/ui-settings-discovery pack
 ```
 
-With a **source checkout** (`pnpm dsh …`), a plain path add works because the tsx launcher resolves harness imports through the repository's tsconfig paths — use it for development iteration:
+安装探测插件和设置页面：
 
 ```sh
-pnpm dsh plugin --profile <name> add ./third-plugin/llm-discovery
+dsh plugin --profile web add ./third-plugin/llm-discovery/dsh-llm-discovery-0.1.0.tgz
+dsh plugin --profile web add ./third-plugin/ui-settings-discovery/dsh-client-ui-settings-discovery-0.1.0.tgz
+dsh --profile web --dump-config
 ```
 
-All harness imports (`@deepseek-ai/*` and the pi-ai catalog library) are peer dependencies, resolved at runtime from the installation's dependency closure; no npm fetch happens at install. A user patch on the `llm-discovery` row replaces its whole `config` value rather than deep-merging keys.
+输出中应同时出现 `llm-discovery` 和 `ui-settings-discovery`。
+
+## 使用
+
+1. 启动 Web profile。
+2. 打开「设置」→「模型发现」。
+3. 选择预设，或者填写自定义 `baseURL`。
+4. 选择端点协议。
+5. 如果端点需要认证，输入 API 密钥。
+6. 点击「探测」。
+7. 检查模型名称、上下文窗口和最大输出。
+8. 选择要使用的模型并点击「采纳为 Provider」。
+
+采纳完成后，到「模型」设置页查看和编辑新 Provider。
+
+## 支持的端点
+
+| 端点类型 | 协议 | 地址要求 |
+|---|---|---|
+| Ollama | `openai-completions` | 使用 `http://127.0.0.1:11434/v1`；探测会自动读取 Ollama 原生模型信息 |
+| LM Studio | `openai-completions` | 通常为 `http://127.0.0.1:1234/v1` |
+| llama.cpp | `openai-completions` | 通常为 `http://127.0.0.1:8080` |
+| LiteLLM / OpenAI 兼容网关 | `openai-completions` 或 `openai-responses` | 使用供应方提供的模型 API baseURL |
+| Anthropic | `anthropic-messages` | 使用 Anthropic API baseURL，并提供 API 密钥 |
+| Google Gemini | `google-generative-ai` | baseURL 必须包含版本路径，例如 `https://generativelanguage.googleapis.com/v1beta` |
+
+端点没有提供模型名称或容量时，插件默认会尝试用内置模型目录补全；无法确认的字段会在页面中显示为空。
+
+## 可选配置
+
+默认配置适合大多数用户。需要调整超时、响应大小或关闭某类探测时，在 profile 的 `cordis.patch.yml` 中配置：
+
+```yaml
+- id: llm-discovery
+  config:
+    timeoutMs: 10000
+    maxResponseBytes: 4194304
+    enrichment: true
+    ollamaDefaultContextWindow: 128000
+    engines:
+      ollama: true
+      litellm: true
+      openaiModels: true
+```
+
+| 字段 | 默认值 | 说明 |
+|---|---:|---|
+| `timeoutMs` | `10000` | 单次 HTTP 请求超时，单位毫秒 |
+| `maxResponseBytes` | `4194304` | 模型列表响应上限；超过后探测失败 |
+| `enrichment` | `true` | 用内置目录补全端点未披露的信息 |
+| `ollamaDefaultContextWindow` | `128000` | Ollama 未返回上下文长度时使用的值 |
+| `engines.ollama` | `true` | 是否探测 Ollama 原生接口 |
+| `engines.litellm` | `true` | 是否探测 LiteLLM 管理接口 |
+| `engines.openaiModels` | `true` | 是否探测 OpenAI、Anthropic 和 Gemini 模型列表 |
+
+profile patch 会整体替换该插件的 `config`，因此需要保留你仍想使用的字段。
+
+## 常见问题
+
+### 页面中没有「模型发现」
+
+确认安装了 `dsh-client-ui-settings-discovery`，并使用 Web profile。再用 `dsh --profile web --dump-config` 检查两个插件是否都已加载。
+
+### 401 或 403
+
+API 密钥无效或没有列出模型的权限。确认密钥和协议对应同一个端点。
+
+### 返回“没有模型列表”
+
+该地址可能不是模型 API baseURL，或者服务没有实现模型列表接口。检查供应方文档；必要时在「模型」设置页手工添加模型。
+
+### Gemini 探测失败
+
+选择 `google-generative-ai`，并使用包含 `/v1beta` 的原生 Gemini baseURL。OpenAI 兼容地址应改选 OpenAI 协议。
+
+### Ollama 能探测但采纳后无法对话
+
+Provider 的 baseURL 必须包含 `/v1`。推荐直接使用页面预设。
+
+## 已知限制
+
+- Anthropic 和 Gemini 每次最多读取 1000 个模型，不继续读取后续分页。
+- 同一端点上的模型必须共用你在页面中选择的协议。
+- 本插件不探测 `deepseek-official`；该 Provider 使用 Harness 自带配置。
 
 ## Model Experience
 
-None, as discovery candidates are configuration-time facts offered to a human and never enter a prompt, message, schema, or tool result.
+探测结果只显示给配置用户，不会进入模型的 prompt、消息、schema 或工具结果。
 
-#### KV Cache effect
+#### KV Cache 影响
 
-None; the plugin never participates in a model request, so it cannot touch a request prefix.
-
-## Known Limitations and Deferred Work
-
-- **Per-model wire protocol is not reportable** — `LlmDiscoveredModel` carries no `api` field, so a dual-wire proxy's per-model `supported_endpoint_types` (the OMP `proxy` discovery type) cannot be expressed; the adopting profile keeps its single draft `api`.
-- **The Ollama engine default outranks enrichment** — when `/api/show` discloses no context length the configured `ollamaDefaultContextWindow` fills the field before the catalog step runs, so a catalog-known id keeps the engine default rather than its catalog capacity; local Ollama variants are the common case and are not the catalog's model.
-- **Nothing persists the engine an answer came from** — detection re-runs on every probe; a saved route profile carries no discovery field because that schema belongs to the adapter package.
-- **Anthropic and Google listings beyond 1,000 models are truncated** — each protocol's documented page ceiling is requested, but continuation cursors are not followed; no real deployment is near this amount.
-- **No discovery for `deepseek-official`** — that adapter answers from its own configured catalog under the `llm-deepseek` directory entry; this namespace interrogates endpoints only.
+无。插件不参与模型请求。

@@ -1,43 +1,120 @@
 # dsh-client-ui-settings-discovery
 
-English | [中文](README.zh.md)
+`dsh-client-ui-settings-discovery` 在 DeepSeek Harness Web 设置中增加「模型发现」页面。你可以探测本地引擎或自定义模型端点，选择模型，并创建 pi-ai Provider。
 
-Model discovery settings plugin. It registers one settings section, 模型发现, whose single flow is: pick a local-engine preset or enter a custom endpoint, probe it through the host's `llm.discoverModels` offer, inspect the advertised metadata, and adopt a selection into a NEW pi-ai provider profile. The host half — the `llm-discovery` namespace whose registered offer answers the probe with engine-type auto-detection (Ollama native, LiteLLM management, generic OpenAI, Anthropic, and native Google listings) — is a separate plugin; this page consumes only its public RPC and never mounts it. The section depends on that offer: a probe whose namespace has no registered discovery answers with a business error the page shows verbatim.
+本插件只提供页面：
 
-## Installation
+- 探测模型必须同时安装 [`dsh-llm-discovery`](../llm-discovery/README.md)。
+- 在页面中管理自动刷新目录的动态路由，必须同时安装 [`dsh-llm-dynamic-provider`](../llm-dynamic-provider/README.md)。
 
-Both halves are bundles — each package's own `cordis.patch.yml` inserts its row when a profile installs it. With an installed `dsh` CLI, pack first: `dsh plugin add` of a local directory link-installs, and the host package's harness imports then resolve from the checkout's real path, which has no `@deepseek-ai/*` packages above it. Under `pnpm dsh` (source launch) a path add is fine and preferred for development.
+## 安装
+
+如果你拿到的是本仓库源码，先打包：
 
 ```sh
-pnpm -C third-plugin/llm-discovery pack && pnpm -C third-plugin/ui-settings-discovery pack
-dsh plugin --profile web add ./third-plugin/llm-discovery/dsh-llm-discovery-0.1.0.tgz
-dsh plugin --profile web add ./third-plugin/ui-settings-discovery/dsh-client-ui-settings-discovery-0.1.0.tgz
-dsh --profile web --dump-config   # verify the two layers appear
+pnpm -C third-plugin/llm-discovery pack
+pnpm -C third-plugin/ui-settings-discovery pack
 ```
 
-No install-time build scripts exist (prepack builds the tarball), so no `allowBuilds` entry is needed. Users can override the host plugin's config in the profile's own `cordis.patch.yml` — a patch on the `llm-discovery` row replaces its whole `config` value.
+安装到 Web profile：
 
-**Preset cards** prefill the probe form for the common local engines — Ollama (`http://127.0.0.1:11434/v1`), LM Studio (`http://127.0.0.1:1234/v1`), llama.cpp (`http://127.0.0.1:8080`) — and a 自定义端点 card for anything else. Prefill only: every field stays editable, and the route id of the adoption follows the chosen card only until the user edits it. The page notes that local engines usually need no key.
+```sh
+dsh plugin --profile web add ./third-plugin/llm-discovery/dsh-llm-discovery-0.1.0.tgz
+dsh plugin --profile web add ./third-plugin/ui-settings-discovery/dsh-client-ui-settings-discovery-0.1.0.tgz
+dsh --profile web --dump-config
+```
 
-**探测** sends `llm.discoverModels({ settingsNs: 'llm-discovery', baseURL, api, apiKey? })` for the form as it currently shows, including a key typed but not yet stored. The reply renders as a table of discovered models — id / name / contextWindow / maxTokens, with `—` for absent metadata — every row starting checked. A `model-discovery-failed` rejection (or any transport failure) renders as an error line with the message verbatim, and an empty reply renders its own row-less state.
+如果还要在页面中管理动态路由，再安装：
 
-**采纳为 Provider** performs ONE `settings.mutate` on `llm-pi-ai`, writing the whole profile at `providers.<route>`: optional `displayName`, the wire protocol, `baseURL`, the selected models, and — only when a key was typed — `apiKeyEnv` under the same `<ROUTE>_API_KEY` derivation the Models page uses. The 思考档位（可选） group writes the picked levels as each adopted model's `reasoningEfforts` (`off` carries the empty wire spelling, per the adapter contract); nothing picked writes nothing — catalog routes keep their catalog inheritance, and only hand-declared routes need the explicit levels. When the route id names an installed-catalog pi-ai provider (e.g. `anthropic`), the picker disables itself and any picked levels are ignored: catalog entries carry reasoning already. A route id that already has a profile is refused with a pointer to the Models page — a `set` at `providers.<route>` would otherwise replace that profile wholesale. For fully automatic catalog-derived levels on hand-declared routes, install the sibling [`dsh-llm-catalog-sync`](../../llm-catalog-sync/README.md) plugin and leave the picker empty. The typed key is stored FIRST through `credentials.set` under that reference, so the profile only commits once its credential exists; an orphaned ref (the profile write then refused) is harmless. When the user selected nothing, `models` is omitted entirely — an absent list serves the route's whole catalog. The route id must match `[a-z0-9-]+`. The write carries the `llm-pi-ai` revision read from `settings.describe({})` just before it, exactly like the Models page: a concurrent change is refused as `settings-conflict` and the page shows that message rather than retrying. Success is a plain text line pointing the user at the 模型 settings page — no navigation machinery. The API key is write-only: it never renders back and only travels inside probe payloads and the credential write.
+```sh
+dsh plugin --profile web add ./third-plugin/llm-dynamic-provider/dsh-llm-dynamic-provider-0.1.0.tgz
+```
 
-All probe and adoption state is component-local; the section declares no store, subscribes to no invalidation events, and re-reads the wire on every action.
+启动 Web profile 后，打开「设置」→「模型发现」。
+
+## 探测并采纳模型
+
+1. 选择一个预设：Ollama、LM Studio 或 llama.cpp。其他服务选择「自定义端点」。
+2. 检查 `baseURL`：
+   - Ollama：`http://127.0.0.1:11434/v1`
+   - LM Studio：`http://127.0.0.1:1234/v1`
+   - llama.cpp：`http://127.0.0.1:8080`
+   - Gemini：`https://generativelanguage.googleapis.com/v1beta`
+3. 选择协议：
+   - OpenAI Chat Completions：`openai-completions`
+   - OpenAI Responses：`openai-responses`
+   - Anthropic Messages：`anthropic-messages`
+   - Google Gemini：`google-generative-ai`
+4. 输入 API 密钥；本地无认证端点可以留空。
+5. 点击「探测」。
+6. 检查返回的模型，取消不想添加的条目。
+7. 填写路由 ID。只能使用小写字母、数字和连字符。
+8. 可选填写显示名称和思考档位。
+9. 点击「采纳为 Provider」。
+10. 到「模型」设置页查看并使用新 Provider。
+
+如果填写了 API 密钥，页面会把它保存到凭证存储，并让 Provider 引用该凭证；密钥不会写进普通 settings 配置。
+
+## 字段说明
+
+| 字段 | 说明 |
+|---|---|
+| 端点地址 | 模型 API 的 baseURL，不是控制台或文档页面地址 |
+| 协议 | 端点实际接受的请求格式；选错会导致探测或对话失败 |
+| API 密钥 | 探测和后续模型请求使用的凭证 |
+| 路由 ID | Provider 的唯一标识，例如 `local-ollama` 或 `company-gateway` |
+| 显示名称 | 模型设置和选择器中显示的名称 |
+| 思考档位 | 为手工路由声明可用的 reasoning effort；不确定时保持未选择 |
+
+如果路由 ID 已存在，页面会拒绝覆盖。请到「模型」设置页编辑已有 Provider。
+
+## 管理动态路由
+
+安装 `dsh-llm-dynamic-provider` 后，页面会显示「动态路由」区域。
+
+1. 点击新增路由。
+2. 填写路由 ID、端点、协议和可选显示名称。
+3. 端点需要认证时输入 API 密钥。
+4. 保存后等待探测完成。
+5. 探测成功后，该路由的整个模型目录会出现在模型选择器中。
+
+删除动态路由会移除该路由注册的模型，但不会删除凭证存储中已经保存的密钥。
+
+编辑已有动态路由时，如果它使用凭证，请重新输入 API 密钥；当前版本不会在编辑表单中回显旧密钥。
+
+## 常见问题
+
+### 页面没有显示探测表单
+
+确认 `dsh-llm-discovery` 已安装并出现在 `dsh --profile web --dump-config` 输出中。只有 UI 插件时无法探测。
+
+### 点击探测后显示认证错误
+
+检查 API 密钥、协议和 baseURL 是否属于同一个服务。Anthropic 与 Gemini 不能使用 OpenAI 协议地址进行原生探测。
+
+### 探测成功，但模型对话失败
+
+检查采纳后的 Provider 配置。Ollama 地址必须包含 `/v1`；协议必须与服务实际支持的生成接口一致。
+
+### 思考档位或模态信息为空
+
+端点可能没有返回这些信息。安装 `dsh-llm-dynamic-provider` 后，页面可以读取更多内置目录元数据；未知模型仍可能没有这些字段。
+
+### 其他页面刚修改的配置没有立即出现
+
+重新打开「模型发现」页面，或者重新执行一次探测。当前页面不接收其他设置页面的实时更新。
+
+## 已知限制
+
+- 页面创建 Provider 后，只能到「模型」设置页继续编辑。
+- 协议列表是固定的四种协议。
+- 路由 ID 建议以字母开头；数字开头虽然可能通过页面校验，但不适合作为环境变量派生名。
+- 连续快速保存动态路由可能触发重叠探测；一次保存后请等待结果再继续修改。
 
 ## Model Experience
 
-None, as the section renders a browser configuration UI; nothing here reaches a model request.
+本插件只提供浏览器配置界面，不向模型请求添加内容。
 
-#### KV Cache effect
+#### KV Cache 影响
 
-None; this package neither assembles nor sends a provider request.
-
-## Known Limitations and Deferred Work
-
-- **The page is inert without the host discovery offer** — the probe answers with a business error unless a plugin registers a discovery for the `llm-discovery` namespace, and nothing in this package declares, verifies, or fallbacks that offer; the section renders as-is and reports whatever the wire answers.
-- **No pushed-invalidation subscription** — unlike the Models page, this section subscribes to no forwarded settings/credentials events, so a profile another surface writes is only seen at the next probe/adopt; the adopt's `expectedRevision` still refuses a stale overwrite.
-- **Static protocol list** — the protocol select is a fixed constant (`openai-completions`, `openai-responses`, `anthropic-messages`, `google-generative-ai`), not a schema read; if the pi-ai schema's union grows, this page's choices drift until updated.
-- **Thinking levels are user-declared, not discovered** — `LlmDiscoveredModel` carries no reasoning field, so endpoints that disclose capability metadata (Anthropic's `capabilities.effort`) cannot return it through the seam; hand-declared routes need the picker's explicit levels.
-- **Relaxed route-id pattern** — the adopt flow accepts `[a-z0-9-]+`, so a digit-leading id passes here but derives a credential reference that is not a POSIX shell identifier; hardening to the Models page's leading-letter pattern is deferred.
-- **Adoption is write-only from this page** — a profile created here is reviewed and edited on the 模型 settings page; this section has no edit surface of its own.
+无。插件不组装或发送模型请求。
