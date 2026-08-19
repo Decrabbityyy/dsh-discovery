@@ -15,7 +15,8 @@
 常用组合：
 
 - **在页面中探测并手动采纳模型：**安装 `dsh-llm-discovery` 和 `dsh-client-ui-settings-discovery`。
-- **让一个端点的模型目录自动保持更新：**安装 `dsh-llm-dynamic-provider`。
+- **让一个端点的模型目录自动保持更新：**只安装 `dsh-llm-dynamic-provider`。
+- **在页面中管理动态路由：**安装 `dsh-llm-dynamic-provider` 和 `dsh-client-ui-settings-discovery`，不需要 `dsh-llm-discovery`。
 - **同时使用页面探测和动态路由管理：**安装三个插件。
 
 ## 安装

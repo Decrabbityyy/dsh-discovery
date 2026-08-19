@@ -1,33 +1,44 @@
 # dsh-client-ui-settings-discovery
 
-`dsh-client-ui-settings-discovery` 在 DeepSeek Harness Web 设置中增加「模型发现」页面。你可以探测本地引擎或自定义模型端点，选择模型，并创建 pi-ai Provider。
+`dsh-client-ui-settings-discovery` 在 DeepSeek Harness Web 设置中增加「模型发现」页面。页面包含两个相互独立的区域，按已安装的宿主插件显示：
 
-本插件只提供页面：
+- 安装 [`dsh-llm-discovery`](../llm-discovery/README.md) 后，显示端点探测和 Provider 采纳区域。
+- 安装 [`dsh-llm-dynamic-provider`](../llm-dynamic-provider/README.md) 后，显示动态路由管理区域。
 
-- 探测模型必须同时安装 [`dsh-llm-discovery`](../llm-discovery/README.md)。
-- 在页面中管理自动刷新目录的动态路由，必须同时安装 [`dsh-llm-dynamic-provider`](../llm-dynamic-provider/README.md)。
+Web UI 本身不强制依赖其中任何一个；只需安装你要使用的功能。若两者都未安装，页面没有可操作区域。
 
 ## 安装
 
-如果你拿到的是本仓库源码，先打包：
+如果你拿到的是本仓库源码，先打包 UI，再按需要打包一个或两个宿主插件：
 
 ```sh
-pnpm -C third-plugin/llm-discovery pack
 pnpm -C third-plugin/ui-settings-discovery pack
+pnpm -C third-plugin/llm-discovery pack
+pnpm -C third-plugin/llm-dynamic-provider pack
 ```
 
-安装到 Web profile：
+先安装 UI：
+
+```sh
+dsh plugin --profile web add ./third-plugin/ui-settings-discovery/dsh-client-ui-settings-discovery-0.1.0.tgz
+```
+
+需要端点探测和 Provider 采纳时，安装：
 
 ```sh
 dsh plugin --profile web add ./third-plugin/llm-discovery/dsh-llm-discovery-0.1.0.tgz
-dsh plugin --profile web add ./third-plugin/ui-settings-discovery/dsh-client-ui-settings-discovery-0.1.0.tgz
-dsh --profile web --dump-config
 ```
 
-如果还要在页面中管理动态路由，再安装：
+需要动态路由管理时，安装：
 
 ```sh
 dsh plugin --profile web add ./third-plugin/llm-dynamic-provider/dsh-llm-dynamic-provider-0.1.0.tgz
+```
+
+两个功能都需要时，同时安装两个宿主插件。最后确认配置：
+
+```sh
+dsh --profile web --dump-config
 ```
 
 启动 Web profile 后，打开「设置」→「模型发现」。
