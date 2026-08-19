@@ -12,6 +12,15 @@
     "access": "public",
     "registry": "https://registry.npmjs.org/"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Decrabbityyy/dsh-discovery.git",
+    "directory": "llm-discovery"
+  },
+  "homepage": "https://github.com/Decrabbityyy/dsh-discovery#readme",
+  "bugs": {
+    "url": "https://github.com/Decrabbityyy/dsh-discovery/issues"
+  },
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
