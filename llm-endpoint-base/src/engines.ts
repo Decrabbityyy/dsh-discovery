@@ -204,17 +204,90 @@ async function probeLitellm(facts: ProbeFacts): Promise<EngineVerdict> {
  */
 const ANTHROPIC_LISTING_HEADERS = { 'anthropic-version': '2023-06-01' } as const
 
+/** Convert a final listing request failure into the public discovery error. */
+function listingFailure(url: string, result: JsonFetchFailure): EngineVerdict {
+  switch (result.kind) {
+    case 'http':
+      return {
+        kind: 'fail',
+        error: new LlmError(
+          result.status === 401 || result.status === 403
+            ? `llm-discovery: ${url} answered ${result.status}; check the API key`
+            : `llm-discovery: ${url} answered ${result.status}`,
+          'DISCOVERY_FAILED',
+        ),
+      }
+    case 'too-large':
+      return { kind: 'fail', error: new LlmError(`llm-discovery: ${url} answered with a listing larger than the configured ceiling`, 'DISCOVERY_FAILED') }
+    case 'bad-json':
+      return { kind: 'fail', error: new LlmError(`llm-discovery: ${url} did not answer with JSON`, 'DISCOVERY_FAILED') }
+    case 'timeout':
+      return { kind: 'fail', error: new LlmError(`llm-discovery: ${url} did not answer in time`, 'DISCOVERY_FAILED') }
+    case 'aborted':
+      return { kind: 'fail', error: new LlmError('llm-discovery: model discovery aborted by caller', 'ABORTED') }
+    default:
+      return { kind: 'fail', error: new LlmError(`llm-discovery: could not reach ${url} (${result.detail})`, 'DISCOVERY_FAILED') }
+  }
+}
+
 /**
- * The generic OpenAI-compatible floor: `GET {baseURL}/models`. Beyond the
- * stock `context_window`/`context_length` fields it also reads vLLM's
- * `max_model_len`, so one rung covers LM Studio, llama.cpp, vLLM, and every
- * gateway exposing an OpenAI listing. A draft naming `anthropic-messages`
- * switches the rung to the Anthropic listing dialect (see above). As the last
- * rung its failures are always reported rather than skipped.
+ * Google Generative Language discovery: list the native `models` collection,
+ * authenticate with `x-goog-api-key`, and retain models that can generate
+ * content. The documented 1,000-item page ceiling keeps the probe bounded.
+ * @param facts - the probe facts.
+ * @returns the verdict for the Google listing dialect.
+ */
+async function probeGoogleModels(facts: ProbeFacts): Promise<EngineVerdict> {
+  const url = `${facts.baseURL.replace(/\/+$/, '')}/models?pageSize=1000`
+  const result = await fetchJson({
+    url,
+    apiKey: undefined,
+    ...(facts.apiKey === undefined ? {} : { extraHeaders: { 'x-goog-api-key': facts.apiKey } }),
+    timeoutMs: facts.config.timeoutMs,
+    maxBytes: facts.config.maxResponseBytes,
+    signal: facts.signal,
+  })
+  if (result.kind !== 'ok') return listingFailure(url, result)
+  const entries = record(result.body)?.['models']
+  if (!Array.isArray(entries)) {
+    return {
+      kind: 'fail',
+      error: new LlmError(`llm-discovery: ${url} has no "models" array; enter this provider's models by hand`, 'DISCOVERY_FAILED'),
+    }
+  }
+  const models: LlmDiscoveredModel[] = []
+  for (const entry of entries) {
+    const row = record(entry)
+    if (!row) continue
+    const methods = row['supportedGenerationMethods']
+    if (Array.isArray(methods) && !methods.includes('generateContent')) continue
+    const resourceName = label(row['name'])
+    const id = label(row['baseModelId'], resourceName?.replace(/^models\//, ''))
+    if (!id) continue
+    const name = label(row['displayName'])
+    const contextWindow = capacity(row['inputTokenLimit'])
+    const maxTokens = capacity(row['outputTokenLimit'])
+    models.push({
+      id,
+      ...(name === undefined ? {} : { name }),
+      ...(contextWindow === undefined ? {} : { contextWindow }),
+      ...(maxTokens === undefined ? {} : { maxTokens }),
+    })
+  }
+  return { kind: 'models', models }
+}
+
+/**
+ * The generic protocol-listing floor. OpenAI-compatible routes use
+ * `GET {baseURL}/models`; `anthropic-messages` switches to Anthropic's
+ * listing dialect, and `google-generative-ai` switches to the native Google
+ * listing above. OpenAI replies may disclose stock `context_window` /
+ * `context_length` fields or vLLM's `max_model_len`.
  * @param facts - the probe facts.
  * @returns the verdict for this rung.
  */
 async function probeOpenAiModels(facts: ProbeFacts): Promise<EngineVerdict> {
+  if (facts.api === 'google-generative-ai') return probeGoogleModels(facts)
   const anthropic = facts.api === 'anthropic-messages'
   const url = anthropic
     ? `${facts.baseURL.replace(/\/+$/, '')}/models?limit=1000`
@@ -231,30 +304,7 @@ async function probeOpenAiModels(facts: ProbeFacts): Promise<EngineVerdict> {
     maxBytes: facts.config.maxResponseBytes,
     signal: facts.signal,
   })
-  if (result.kind !== 'ok') {
-    switch (result.kind) {
-      case 'http':
-        return {
-          kind: 'fail',
-          error: new LlmError(
-            result.status === 401 || result.status === 403
-              ? `llm-discovery: ${url} answered ${result.status}; check the API key`
-              : `llm-discovery: ${url} answered ${result.status}`,
-            'DISCOVERY_FAILED',
-          ),
-        }
-      case 'too-large':
-        return { kind: 'fail', error: new LlmError(`llm-discovery: ${url} answered with a listing larger than the configured ceiling`, 'DISCOVERY_FAILED') }
-      case 'bad-json':
-        return { kind: 'fail', error: new LlmError(`llm-discovery: ${url} did not answer with JSON`, 'DISCOVERY_FAILED') }
-      case 'timeout':
-        return { kind: 'fail', error: new LlmError(`llm-discovery: ${url} did not answer in time`, 'DISCOVERY_FAILED') }
-      case 'aborted':
-        return { kind: 'fail', error: new LlmError('llm-discovery: model discovery aborted by caller', 'ABORTED') }
-      default:
-        return { kind: 'fail', error: new LlmError(`llm-discovery: could not reach ${url} (${result.detail})`, 'DISCOVERY_FAILED') }
-    }
-  }
+  if (result.kind !== 'ok') return listingFailure(url, result)
   const entries = record(result.body)?.['data']
   if (!Array.isArray(entries)) {
     return {

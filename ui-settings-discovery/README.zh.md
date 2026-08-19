@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-模型发现设置插件。它注册一个设置分节「模型发现」，完整流程是：选择一个本地引擎预设或输入自定义端点，通过宿主的 `llm.discoverModels` offer 探测该端点，查看返回的模型元数据，再把选中的模型采纳为一个新的 pi-ai 提供方配置。宿主侧——注册了 `llm-discovery` 命名空间、负责引擎类型自动检测（Ollama 原生接口、LiteLLM 管理接口、带 vLLM 容量的通用 OpenAI 列表）的插件——是另一个独立插件；本页面只消费它的公开 RPC，从不挂载它。该分节依赖这个 offer：当命名空间没有注册任何 discovery 时，探测会以业务错误回答，页面原样展示该消息。
+模型发现设置插件。它注册一个设置分节「模型发现」，完整流程是：选择一个本地引擎预设或输入自定义端点，通过宿主的 `llm.discoverModels` offer 探测该端点，查看返回的模型元数据，再把选中的模型采纳为一个新的 pi-ai 提供方配置。宿主侧——注册了 `llm-discovery` 命名空间、负责引擎类型自动检测（Ollama 原生接口、LiteLLM 管理接口、通用 OpenAI、Anthropic 与 Google 原生列表）的插件——是另一个独立插件；本页面只消费它的公开 RPC，从不挂载它。该分节依赖这个 offer：当命名空间没有注册任何 discovery 时，探测会以业务错误回答，页面原样展示该消息。
 
 ## 安装
 
@@ -17,7 +17,7 @@ dsh --profile web --dump-config   # 验证两个层都出现
 
 没有安装期构建脚本（prepack 在打包时构建），因此不需要任何 `allowBuilds` 条目。用户可在 profile 自己的 `cordis.patch.yml` 里覆盖宿主插件配置——针对 `llm-discovery` 行的 patch 会整体替换其 `config` 值。
 
-**预设卡片**为常见本地引擎预填探测表单——Ollama（`http://127.0.0.1:11434`）、LM Studio（`http://127.0.0.1:1234/v1`）、llama.cpp（`http://127.0.0.1:8080`）——以及用于其他一切端点的「自定义端点」卡片。仅预填：每个字段都保持可编辑，采纳流程的路由 ID 也只在用户尚未手动修改前跟随所选卡片。页面提示：本地引擎通常无需密钥。
+**预设卡片**为常见本地引擎预填探测表单——Ollama（`http://127.0.0.1:11434/v1`）、LM Studio（`http://127.0.0.1:1234/v1`）、llama.cpp（`http://127.0.0.1:8080`）——以及用于其他一切端点的「自定义端点」卡片。仅预填：每个字段都保持可编辑，采纳流程的路由 ID 也只在用户尚未手动修改前跟随所选卡片。页面提示：本地引擎通常无需密钥。
 
 **探测**针对表单**当前显示**的内容调用 `llm.discoverModels({ settingsNs: 'llm-discovery', baseURL, api, apiKey? })`，包括已键入但尚未存储的密钥。回复以表格呈现发现的模型——ID / 名称 / 上下文窗口 / 最大输出，缺失的元数据以 `—` 显示——每行默认勾选。`model-discovery-failed` 拒绝（或任何传输失败）以错误行展示消息原文，空回复则渲染自己的无结果状态。
 
@@ -37,7 +37,7 @@ None; this package neither assembles nor sends a provider request.
 
 - **没有宿主 discovery offer 时页面不可用** —— 除非有插件为 `llm-discovery` 命名空间注册 discovery，否则探测只会以业务错误回答；本包既不声明也不校验或兜底该 offer，分节照常渲染并原样展示线上的回答。
 - **不订阅推送失效事件** —— 与模型设置页不同，本分节不订阅任何转发的 settings/credentials 事件，其他页面写入的 profile 只能在下次探测/采纳时被看到；采纳的 `expectedRevision` 仍然会拒绝过期覆盖。
-- **静态协议列表** —— 协议下拉是固定常量（`openai-completions`、`openai-responses`、`anthropic-messages`），不是 schema 读取；若 pi-ai schema 的联合类型扩充，本页的选择会漂移，直到手动更新。
+- **静态协议列表** —— 协议下拉是固定常量（`openai-completions`、`openai-responses`、`anthropic-messages`、`google-generative-ai`），不是 schema 读取；若 pi-ai schema 的联合类型扩充，本页的选择会漂移，直到手动更新。
 - **思考档位是用户声明而非发现**——`LlmDiscoveredModel` 没有 reasoning 字段，端点披露的能力元数据（如 Anthropic 的 `capabilities.effort`）无法经该 seam 传回；手工声明的路由需要勾选组显式指定。
 - **宽松的路由 ID 模式** —— 采纳流程接受 `[a-z0-9-]+`，因此数字开头的 ID 能通过这里的校验，但派生的凭证引用不是合法的 POSIX shell 标识符；收紧到模型设置页的前导字母模式的工作被推迟。
 - **本页只写不读** —— 在此创建的 profile 需要到「模型」设置页查看和编辑；本分节没有自己的编辑界面。

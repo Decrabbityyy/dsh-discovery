@@ -41,6 +41,7 @@
     "@deepseek-ai/dsh-llm-pi-ai": "*",
     "@deepseek-ai/dsh-settings": "*",
     "@deepseek-ai/dsh-storage-domain": "*",
+    "@deepseek-ai/schemastery": "*",
     "@earendil-works/pi-ai": "*",
     "zod": "^4.4.3"
   },

@@ -169,7 +169,7 @@ describe('preset cards', () => {
 
     // First card: the empty route id follows it.
     fireEvent.click(screen.getByText('Ollama'))
-    expect(baseURL.value).toBe('http://127.0.0.1:11434')
+    expect(baseURL.value).toBe('http://127.0.0.1:11434/v1')
     expect((screen.getByLabelText<HTMLSelectElement>('协议')).value).toBe('openai-completions')
 
     // A second card while the id still holds the previous card's default.

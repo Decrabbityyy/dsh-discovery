@@ -25,7 +25,7 @@ export interface EnginePreset {
 
 /** Local engines the section offers as one-click cards. */
 export const ENGINE_PRESETS: readonly EnginePreset[] = [
-  { key: 'ollama', label: 'Ollama', baseURL: 'http://127.0.0.1:11434', api: 'openai-completions' },
+  { key: 'ollama', label: 'Ollama', baseURL: 'http://127.0.0.1:11434/v1', api: 'openai-completions' },
   { key: 'lm-studio', label: 'LM Studio', baseURL: 'http://127.0.0.1:1234/v1', api: 'openai-completions' },
   { key: 'llama-cpp', label: 'llama.cpp', baseURL: 'http://127.0.0.1:8080', api: 'openai-completions' },
 ]

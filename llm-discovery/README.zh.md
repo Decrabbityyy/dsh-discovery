@@ -16,7 +16,9 @@
 
 当草稿指定 `api: 'anthropic-messages'` 时，通用梯级切换为 Anthropic 方言：其 [Models API](https://platform.claude.com/docs/en/api/models/list) 是同样的 `data` 数组列举，但用 `x-api-key` 加必需的 `anthropic-version` 头认证（Bearer 是给 OAuth token 的），上下文窗口读 `max_input_tokens`，并以 `?limit=1000` 探测（文档页上限；不跟随 `has_more` 游标）。
 
-特定梯级在前，因为 Ollama 主机也能回答 OpenAI 兼容列举但没有容量，而 LiteLLM 代理的 `/models` 是裸列表、其管理端点才有富元数据。梯级遇到 404、连接失败、无法解析或缺少预期负载形状的回答就跳到下一级；401/403 会被记为最值得报告的失败，在所有梯级都无果时抛出。调用方取消立即以 `ABORTED` 停止梯子。原生 API 梯级在拼接路径前会剥掉 base 末尾的 `/v1`，因此 OpenAI 风格的 base URL 也能到达 `/api/tags`。
+当草稿指定 `api: 'google-generative-ai'` 时，同一梯级改用 Google 原生 [Models API](https://ai.google.dev/api/models)：`GET {baseURL}/models?pageSize=1000`、`x-goog-api-key` 认证，以及 `models` 数组。它保留支持 `generateContent` 的条目，优先用 `baseModelId` 作为请求 ID，并读取 `displayName`、`inputTokenLimit` 与 `outputTokenLimit`。传入的 `baseURL` 必须包含 API 版本路径，例如 `https://generativelanguage.googleapis.com/v1beta`。
+
+特定梯级在前，因为 Ollama 主机也能回答 OpenAI 兼容列举但没有容量，而 LiteLLM 代理的 `/models` 是裸列表、其管理端点才有富元数据。梯级遇到 404、连接失败、无法解析或缺少预期负载形状的回答就跳到下一级；401/403 会被记为最值得报告的失败，在所有梯级都无果时抛出。调用方取消立即以 `ABORTED` 停止梯子。Ollama 梯级在拼接原生路径前会剥掉 base 末尾的 `/v1`，因此预设的 OpenAI 兼容 base URL 仍能到达 `/api/tags`。
 
 ## Enrichment
 
@@ -74,5 +76,5 @@ pnpm dsh plugin --profile <name> add ./third-plugin/llm-discovery
 - **无法报告逐模型的 wire 协议**——`LlmDiscoveredModel` 没有 `api` 字段，因此双 wire 代理的逐模型 `supported_endpoint_types`（OMP 的 `proxy` 发现类型）无法表达；采纳后的 profile 保留草稿的单一 `api`。
 - **Ollama 引擎默认值优先于 enrichment**——`/api/show` 未披露上下文长度时，配置的 `ollamaDefaultContextWindow` 先填充该字段，目录步骤不再覆盖；本地 Ollama 变体是常见情形，且本来就不是目录里的模型。
 - **不持久化答案来自哪个引擎**——每次探测都重新检测；保存后的路由 profile 不携带发现字段，因为那个 schema 属于 adapter 包。
-- **超过 1000 个模型的 Anthropic 列举会被截断**——按文档上限请求 `limit=1000`，不跟随 `has_more` 游标；真实部署不会接近这个量级。
+- **超过 1000 个模型的 Anthropic 与 Google 列举会被截断**——各协议都请求文档规定的单页上限，但不跟随后续游标；真实部署不会接近这个量级。
 - **不支持 `deepseek-official` 的发现**——该 adapter 在 `llm-deepseek` 目录条目下从自己配置的 catalog 回答；本 namespace 只探测端点。

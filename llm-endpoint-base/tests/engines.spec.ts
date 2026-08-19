@@ -259,6 +259,46 @@ describe('generic OpenAI listing engine', () => {
     })
   })
 
+  it('reads a native Google listing with its auth header and token limits', async () => {
+    await withServer({
+      '/models?pageSize=1000': {
+        body: JSON.stringify({
+          models: [
+            {
+              name: 'models/gemini-native-test-001',
+              baseModelId: 'gemini-native-test',
+              displayName: 'Gemini Native Test',
+              inputTokenLimit: 1_000_000,
+              outputTokenLimit: 65_536,
+              supportedGenerationMethods: ['generateContent'],
+            },
+            {
+              name: 'models/text-embedding-test',
+              supportedGenerationMethods: ['embedContent'],
+            },
+            {
+              name: 'models/gemini-resource-only',
+              supportedGenerationMethods: ['generateContent'],
+            },
+            'junk-row',
+          ],
+        }),
+      },
+    }, async (server) => {
+      const models = await discoverEndpoint(
+        { baseURL: server.url, api: 'google-generative-ai', apiKey: 'google-test-key' },
+        config,
+      )
+      expect(models).toEqual([
+        { id: 'gemini-native-test', name: 'Gemini Native Test', contextWindow: 1_000_000, maxTokens: 65_536 },
+        { id: 'gemini-resource-only' },
+      ])
+      const listing = server.requests.find(request => request.path === '/models?pageSize=1000')
+      expect(listing?.authorization).toBeUndefined()
+      expect(listing?.headers['x-goog-api-key']).toBe('google-test-key')
+    })
+  })
+
   it('fails when the listing has no data array', async () => {
     await withServer({
       '/models': { body: JSON.stringify({}) },

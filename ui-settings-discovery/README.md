@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Model discovery settings plugin. It registers one settings section, 模型发现, whose single flow is: pick a local-engine preset or enter a custom endpoint, probe it through the host's `llm.discoverModels` offer, inspect the advertised metadata, and adopt a selection into a NEW pi-ai provider profile. The host half — the `llm-discovery` namespace whose registered offer answers the probe with engine-type auto-detection (Ollama native, LiteLLM management, generic OpenAI listings with vLLM capacities) — is a separate plugin; this page consumes only its public RPC and never mounts it. The section depends on that offer: a probe whose namespace has no registered discovery answers with a business error the page shows verbatim.
+Model discovery settings plugin. It registers one settings section, 模型发现, whose single flow is: pick a local-engine preset or enter a custom endpoint, probe it through the host's `llm.discoverModels` offer, inspect the advertised metadata, and adopt a selection into a NEW pi-ai provider profile. The host half — the `llm-discovery` namespace whose registered offer answers the probe with engine-type auto-detection (Ollama native, LiteLLM management, generic OpenAI, Anthropic, and native Google listings) — is a separate plugin; this page consumes only its public RPC and never mounts it. The section depends on that offer: a probe whose namespace has no registered discovery answers with a business error the page shows verbatim.
 
 ## Installation
 
@@ -17,7 +17,7 @@ dsh --profile web --dump-config   # verify the two layers appear
 
 No install-time build scripts exist (prepack builds the tarball), so no `allowBuilds` entry is needed. Users can override the host plugin's config in the profile's own `cordis.patch.yml` — a patch on the `llm-discovery` row replaces its whole `config` value.
 
-**Preset cards** prefill the probe form for the common local engines — Ollama (`http://127.0.0.1:11434`), LM Studio (`http://127.0.0.1:1234/v1`), llama.cpp (`http://127.0.0.1:8080`) — and a 自定义端点 card for anything else. Prefill only: every field stays editable, and the route id of the adoption follows the chosen card only until the user edits it. The page notes that local engines usually need no key.
+**Preset cards** prefill the probe form for the common local engines — Ollama (`http://127.0.0.1:11434/v1`), LM Studio (`http://127.0.0.1:1234/v1`), llama.cpp (`http://127.0.0.1:8080`) — and a 自定义端点 card for anything else. Prefill only: every field stays editable, and the route id of the adoption follows the chosen card only until the user edits it. The page notes that local engines usually need no key.
 
 **探测** sends `llm.discoverModels({ settingsNs: 'llm-discovery', baseURL, api, apiKey? })` for the form as it currently shows, including a key typed but not yet stored. The reply renders as a table of discovered models — id / name / contextWindow / maxTokens, with `—` for absent metadata — every row starting checked. A `model-discovery-failed` rejection (or any transport failure) renders as an error line with the message verbatim, and an empty reply renders its own row-less state.
 
@@ -37,7 +37,7 @@ None; this package neither assembles nor sends a provider request.
 
 - **The page is inert without the host discovery offer** — the probe answers with a business error unless a plugin registers a discovery for the `llm-discovery` namespace, and nothing in this package declares, verifies, or fallbacks that offer; the section renders as-is and reports whatever the wire answers.
 - **No pushed-invalidation subscription** — unlike the Models page, this section subscribes to no forwarded settings/credentials events, so a profile another surface writes is only seen at the next probe/adopt; the adopt's `expectedRevision` still refuses a stale overwrite.
-- **Static protocol list** — the protocol select is a fixed constant (`openai-completions`, `openai-responses`, `anthropic-messages`), not a schema read; if the pi-ai schema's union grows, this page's choices drift until updated.
+- **Static protocol list** — the protocol select is a fixed constant (`openai-completions`, `openai-responses`, `anthropic-messages`, `google-generative-ai`), not a schema read; if the pi-ai schema's union grows, this page's choices drift until updated.
 - **Thinking levels are user-declared, not discovered** — `LlmDiscoveredModel` carries no reasoning field, so endpoints that disclose capability metadata (Anthropic's `capabilities.effort`) cannot return it through the seam; hand-declared routes need the picker's explicit levels.
 - **Relaxed route-id pattern** — the adopt flow accepts `[a-z0-9-]+`, so a digit-leading id passes here but derives a credential reference that is not a POSIX shell identifier; hardening to the Models page's leading-letter pattern is deferred.
 - **Adoption is write-only from this page** — a profile created here is reviewed and edited on the 模型 settings page; this section has no edit surface of its own.

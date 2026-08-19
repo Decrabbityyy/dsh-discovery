@@ -101,9 +101,15 @@ describe('discoverDynamicProviders', () => {
     }
   })
 
-  it('assembles a google-generative-ai route once the endpoint lists models', async () => {
+  it('assembles a google-generative-ai route once the native endpoint lists models', async () => {
     const context = await boot()
-    server = await startProbeServer({ '/models': { body: JSON.stringify({ data: [{ id: 'gemini-2.5-pro' }] }) } })
+    server = await startProbeServer({
+      '/models?pageSize=1000': {
+        body: JSON.stringify({
+          models: [{ baseModelId: 'gemini-2.5-pro', supportedGenerationMethods: ['generateContent'] }],
+        }),
+      },
+    })
     const outcome = await discoverDynamicProviders(context, {
       gemini: { baseURL: server.url, api: 'google-generative-ai' },
     }, undefined, { signal: undefined })
