@@ -32,8 +32,8 @@ describe('vocabulary', () => {
     expect(DYNAMIC_NS).toBe('llm-dynamic-provider')
   })
 
-  it('spells off as the empty wire value and passes other levels through', () => {
-    expect(reasoningEffortsOf(new Set(['off', 'high']))).toEqual({ off: '', high: 'high' })
+  it('spells off as null and passes other wire values through', () => {
+    expect(reasoningEffortsOf(new Set(['off', 'high']))).toEqual({ off: null, high: 'high' })
   })
 
   it('omits the declaration when no level is picked', () => {

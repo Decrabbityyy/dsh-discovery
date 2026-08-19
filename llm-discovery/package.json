@@ -1,7 +1,7 @@
 {
   "name": "dsh-llm-discovery",
   "description": "Engine-detecting endpoint model discovery with bundled-catalog enrichment for the DeepSeek Harness LLM seam",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "keywords": [
     "deepseek-harness",
     "dsh",

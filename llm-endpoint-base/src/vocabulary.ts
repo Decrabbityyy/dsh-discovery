@@ -30,8 +30,8 @@ export const DYNAMIC_NS = 'llm-dynamic-provider'
 
 /**
  * Thinking levels the pi-ai adapter accepts as `reasoningEfforts` keys. The
- * wire spelling is the canonical name itself; only `off` writes an empty
- * spelling (supported, send nothing), per the adapter's profile contract.
+ * wire spelling is the canonical name itself; only `off` writes `null`
+ * (supported, send nothing), per the adapter's profile contract.
  */
 export const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
 
@@ -44,10 +44,10 @@ export type ThinkingLevel = (typeof THINKING_LEVELS)[number]
  * @param levels - the picked level set.
  * @returns the declaration map, or undefined.
  */
-export function reasoningEffortsOf(levels: ReadonlySet<string>): Record<string, string> | undefined {
+export function reasoningEffortsOf(levels: ReadonlySet<string>): Record<string, string | null> | undefined {
   if (levels.size === 0) return undefined
-  const efforts: Record<string, string> = {}
-  for (const level of levels) efforts[level] = level === 'off' ? '' : level
+  const efforts: Record<string, string | null> = {}
+  for (const level of levels) efforts[level] = level === 'off' ? null : level
   return efforts
 }
 

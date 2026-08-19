@@ -356,8 +356,8 @@ describe('adoption', () => {
     const { api, mutate } = scriptedFace()
     await renderLoaded(api)
     await probeWith()
-    // The catalog defaults preselect each model's levels (off writes the empty
-    // wire spelling); adopting without touching the pickers writes them.
+    // The catalog defaults preselect each model's levels (`off: null` means
+    // supported while omitting the reasoning option); adoption preserves them.
     typeRoute('local-qwen')
     fireEvent.click(adoptButton())
     await waitFor(() => { expect(mutate.mock.calls).toHaveLength(1) })
@@ -376,7 +376,7 @@ describe('adoption', () => {
               name: 'Qwen 2.5 7B',
               contextWindow: 32768,
               maxTokens: 4096,
-              reasoningEfforts: { off: '', high: 'high' },
+              reasoningEfforts: { off: null, high: 'high' },
             },
             { id: 'llama3.2:1b', reasoningEfforts: { high: 'high' } },
           ],
