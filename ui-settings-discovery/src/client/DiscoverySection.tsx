@@ -72,6 +72,9 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
   // from a settle, and an empty list is its own row-less state.
   const [candidates, setCandidates] = useState<readonly DiscoveredModelView[] | undefined>(undefined)
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set())
+  // Case-insensitive name/id filter over the results table. Purely a view
+  // concern: hidden rows keep their picks, and a fresh probe resets it.
+  const [query, setQuery] = useState('')
   const [route, setRoute] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [adopting, setAdopting] = useState(false)
@@ -192,6 +195,17 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
   const adoptReady = !adopting && candidates !== undefined && candidates.length > 0
     && routeId.length > 0 && !routeInvalid
 
+  // The rows the table shows: candidates matching the filter by id or by
+  // disclosed name (probe metadata or the models.dev facts).
+  const needle = query.trim().toLowerCase()
+  const visible = candidates === undefined
+    ? []
+    : needle.length === 0
+      ? [...candidates]
+      : candidates.filter(model =>
+        model.id.toLowerCase().includes(needle)
+        || (model.name ?? facts[normalizeModelName(model.id)]?.name ?? '').toLowerCase().includes(needle))
+
   /** Whether the route id names an installed-catalog pi-ai provider. */
   const checkCatalogRoute = async (candidate: string): Promise<void> => {
     if (!ROUTE_PATTERN.test(candidate)) {
@@ -230,6 +244,27 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
     })
   }
 
+  /** Replace the selection with every discovered model. */
+  const selectAll = (): void => {
+    setPicked(new Set((candidates ?? []).map(model => model.id)))
+  }
+
+  /** Clear the selection; adoption then serves the route's whole catalog. */
+  const selectNone = (): void => {
+    setPicked(new Set())
+  }
+
+  /** Flip every discovered model's membership in the selection. */
+  const invertSelection = (): void => {
+    setPicked((current) => {
+      const next = new Set<string>()
+      for (const model of candidates ?? []) {
+        if (!current.has(model.id)) next.add(model.id)
+      }
+      return next
+    })
+  }
+
   /** Toggle one thinking level on one model. */
   const toggleModelLevel = (id: string, level: string): void => {
     setModelLevels((current) => {
@@ -259,6 +294,8 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
       }
       const found = response.result.value.models
       setCandidates(found)
+      // A fresh result set resets the filter so nothing starts hidden.
+      setQuery('')
       // Everything found starts checked: adoption copies the whole listing.
       setPicked(new Set(found.map(model => model.id)))
       // Each model starts at the levels the catalog records for it; an
@@ -432,11 +469,39 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
       {candidates !== undefined
         ? (
           <section className={styles['resultsArea']} aria-label="发现的模型">
-            <span className={styles['resultsTitle']}>发现的模型</span>
+            <div className={styles['resultsHeader']}>
+              <span className={styles['resultsTitle']}>发现的模型</span>
+              {candidates.length > 0
+                ? <span className={styles['resultsCount']}>已选 {picked.size} / 共 {candidates.length}</span>
+                : null}
+            </div>
             {candidates.length === 0
               ? <p className={styles['empty']}>未发现任何模型</p>
               : (
                 <>
+                  <div className={styles['toolbar']}>
+                    <input
+                      className={`${styles['input']} ${styles['searchInput']}`}
+                      type="search"
+                      value={query}
+                      placeholder="搜索模型 ID 或名称…"
+                      aria-label="搜索模型"
+                      disabled={adopting}
+                      onChange={(event) => { setQuery(event.target.value) }}
+                    />
+                    <button type="button" className={styles['toolButton']} disabled={adopting} onClick={selectAll}>
+                      全选
+                    </button>
+                    <button type="button" className={styles['toolButton']} disabled={adopting} onClick={selectNone}>
+                      全不选
+                    </button>
+                    <button type="button" className={styles['toolButton']} disabled={adopting} onClick={invertSelection}>
+                      反选
+                    </button>
+                  </div>
+                  {visible.length === 0
+                    ? <p className={styles['empty']}>没有匹配「{query.trim()}」的模型</p>
+                    : (
                   <table className={styles['results']}>
                     <thead>
                       <tr>
@@ -450,7 +515,7 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
                       </tr>
                     </thead>
                     <tbody>
-                      {candidates.map((model) => {
+                      {visible.map((model) => {
                         // The levels this model accepts per the catalog; an
                         // unknown id offers none (a non-reasoning model).
                         const available = catalog[model.id] ?? []
@@ -502,6 +567,7 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
                       })}
                     </tbody>
                   </table>
+                    )}
 
                   <div className={styles['adoptCard']}>
                     <span className={styles['adoptTitle']}>采纳为 Provider</span>

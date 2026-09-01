@@ -191,6 +191,63 @@
   margin-top: 4px;
 }
 
+/* Header row: the title on the left, the picked/total counter on the right. */
+.resultsHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.resultsCount {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* Filter + bulk-selection row above the results table. */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The search field takes the free width; the buttons keep their own size. */
+.searchInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 28px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* Compact capsule buttons, a smaller sibling of the preset cards. */
+.toolButton {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 12px;
+  flex: none;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.toolButton:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.toolButton:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .resultsTitle {
   font-size: 12px;
   line-height: 18px;

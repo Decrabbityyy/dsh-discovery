@@ -290,6 +290,96 @@ describe('probe', () => {
     expect(screen.queryByLabelText('路由 ID')).toBeNull()
   })
 
+describe('results filtering and bulk selection', () => {
+  it('filters rows by model id, case-insensitively, and reports no matches', async () => {
+    const { api } = scriptedFace()
+    await renderLoaded(api)
+    await probeWith()
+    const table = screen.getByRole('table')
+    expect(within(table).getByText('qwen2.5:7b')).toBeDefined()
+
+    fireEvent.change(screen.getByLabelText('搜索模型'), { target: { value: 'LLAMA' } })
+    expect(screen.queryByText('qwen2.5:7b')).toBeNull()
+    expect(within(screen.getByRole('table')).getByText('llama3.2:1b')).toBeDefined()
+
+    fireEvent.change(screen.getByLabelText('搜索模型'), { target: { value: 'no-such-model' } })
+    expect(screen.queryByRole('table')).toBeNull()
+    expect(screen.getByText('没有匹配「no-such-model」的模型')).toBeDefined()
+  })
+
+  it('filters rows by display name and keeps hidden rows picked', async () => {
+    const { api, mutate } = scriptedFace()
+    await renderLoaded(api)
+    await probeWith()
+    fireEvent.change(screen.getByLabelText('搜索模型'), { target: { value: 'qwen 2.5' } })
+    expect(screen.queryByText('llama3.2:1b')).toBeNull()
+    // The hidden row stays selected: the counter still reports both picks.
+    expect(screen.getByText('已选 2 / 共 2')).toBeDefined()
+    // Adoption still takes the hidden row along.
+    typeRoute('custom')
+    fireEvent.click(adoptButton())
+    await waitFor(() => { expect(mutate.mock.calls).toHaveLength(1) })
+    expect(mutate.mock.calls[0]![0]).toMatchObject({
+      ops: [{
+        op: 'set',
+        value: {
+          models: [
+            { id: 'qwen2.5:7b' },
+            { id: 'llama3.2:1b' },
+          ],
+        },
+      }],
+    })
+  })
+
+  it('selects all and clears all with the toolbar buttons', async () => {
+    const { api } = scriptedFace()
+    await renderLoaded(api)
+    await probeWith()
+    fireEvent.click(screen.getByLabelText('选择 qwen2.5:7b'))
+    expect(screen.getByText('已选 1 / 共 2')).toBeDefined()
+
+    fireEvent.click(screen.getByRole('button', { name: '全选' }))
+    expect((screen.getByLabelText<HTMLInputElement>('选择 qwen2.5:7b')).checked).toBe(true)
+    expect((screen.getByLabelText<HTMLInputElement>('选择 llama3.2:1b')).checked).toBe(true)
+    expect(screen.getByText('已选 2 / 共 2')).toBeDefined()
+
+    fireEvent.click(screen.getByRole('button', { name: '全不选' }))
+    expect((screen.getByLabelText<HTMLInputElement>('选择 qwen2.5:7b')).checked).toBe(false)
+    expect((screen.getByLabelText<HTMLInputElement>('选择 llama3.2:1b')).checked).toBe(false)
+    expect(screen.getByText('已选 0 / 共 2')).toBeDefined()
+  })
+
+  it('inverts the selection across every discovered model', async () => {
+    const { api } = scriptedFace()
+    await renderLoaded(api)
+    await probeWith()
+    fireEvent.click(screen.getByLabelText('选择 llama3.2:1b'))
+    expect(screen.getByText('已选 1 / 共 2')).toBeDefined()
+
+    fireEvent.click(screen.getByRole('button', { name: '反选' }))
+    expect((screen.getByLabelText<HTMLInputElement>('选择 qwen2.5:7b')).checked).toBe(false)
+    expect((screen.getByLabelText<HTMLInputElement>('选择 llama3.2:1b')).checked).toBe(true)
+    expect(screen.getByText('已选 1 / 共 2')).toBeDefined()
+
+    fireEvent.click(screen.getByRole('button', { name: '反选' }))
+    expect((screen.getByLabelText<HTMLInputElement>('选择 qwen2.5:7b')).checked).toBe(true)
+    expect((screen.getByLabelText<HTMLInputElement>('选择 llama3.2:1b')).checked).toBe(false)
+  })
+
+  it('resets the filter when a fresh probe lands', async () => {
+    const { api } = scriptedFace()
+    await renderLoaded(api)
+    await probeWith()
+    fireEvent.change(screen.getByLabelText('搜索模型'), { target: { value: 'llama' } })
+    expect(screen.queryByText('qwen2.5:7b')).toBeNull()
+
+    fireEvent.click(probeButton())
+    await waitFor(() => { expect(probeCalls(api.llm.discoverModels as Mock)).toHaveLength(2) })
+    expect((screen.getByLabelText<HTMLInputElement>('搜索模型')).value).toBe('')
+    expect(within(screen.getByRole('table')).getByText('qwen2.5:7b')).toBeDefined()
+  })
+})
   it('shows the busy label and freezes the form while a probe is in flight', async () => {
     let resolveProbe!: (response: RpcResponse<{ models: readonly DiscoveredModelView[] }>) => void
     const { api } = scriptedFace({
