@@ -1,0 +1,9 @@
+{
+  // Client-side compiler shape for the settings-card browser halves: browser
+  // library API and React JSX on top of the shared base.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["ES2024", "DOM", "DOM.Iterable"]
+  }
+}

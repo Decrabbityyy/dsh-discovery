@@ -1,12 +1,10 @@
 import { fileURLToPath } from 'node:url'
-import tsconfigPaths from 'vite-tsconfig-paths'
 import { defineConfig } from 'vitest/config'
 
-// @deepseek-ai/* imports resolve to the sibling harness checkout's sources via
-// the shared base paths; the package's own public entries are aliased because
-// the workspace wildcard no longer covers this directory.
+// @deepseek-ai/* imports resolve from node_modules (@alpha/@next); the
+// package's own public entries and endpoint-base are aliased to source for
+// clean-checkout tests.
 export default defineConfig({
-  plugins: [tsconfigPaths({ projects: ['../../tsconfig.base.json'], loose: true })],
   resolve: {
     alias: [
       {

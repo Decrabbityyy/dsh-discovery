@@ -23,8 +23,11 @@ import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import { assertUsableApiKey, LlmError } from '@deepseek-ai/dsh-llm'
 import type { AdapterRegistrationHandle, LlmDiscoveredModel } from '@deepseek-ai/dsh-llm'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
+// The adapter's auth injectables are built from the cordis context the same
+// way the llm-pi-ai host composes them; the helpers live behind ./src/*.
+import { authContextFrom, credentialStoreFrom } from './auth.ts'
 import type { ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-settings/types'
 import type { LlmConfigurableProvider } from '@deepseek-ai/dsh-llm'
 import type { DirectoryRegistrationHandle } from '@deepseek-ai/dsh-llm'
@@ -57,7 +60,9 @@ export const name = 'llm-dynamic-provider'
 export const inject = ['llm', 'settings']
 
 /** This plugin's settings namespace: the webui-editable dynamic route declarations. */
-export const DYNAMIC_NS = settingsNamespace('llm-dynamic-provider')
+// alpha.4 dropped the settingsNamespace() factory; a namespace is a branded
+// string validated by SettingsNamespaceInput at registration time.
+export const DYNAMIC_NS = 'llm-dynamic-provider' as SettingsNamespace
 
 /** The cache file name under the harness home. */
 const CACHE_FILE = 'llm-dynamic-provider-cache.json'
@@ -278,6 +283,7 @@ export function apply(ctx: Context, config?: Config): void {
   let registration: AdapterRegistrationHandle | undefined
 
   const adapter = new PiAiAdapter({
+    auth: { credentials: credentialStoreFrom(ctx), authContext: authContextFrom(ctx) },
     profiles: () => current,
     resolveApiKey: async (provider, profile) => {
       const ref = profile.apiKeyEnv

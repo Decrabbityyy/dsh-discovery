@@ -14,18 +14,9 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      # The plugin workspace's tsconfigs reference the Harness sources at
-      # ../../ (tsconfig project references and tsconfig.base.json paths), so
-      # this repo must sit inside a Harness checkout as harness/third-plugin.
+      # Harness packages resolve from npm (@alpha/@next channels) as ordinary
+      # dependencies — no Harness checkout needed. Single-repo install.
       - uses: actions/checkout@v6
-        with:
-          repository: deepseek-ai/deepseek-harness
-          path: harness
-      - uses: actions/checkout@v6
-        with:
-          repository: ${{ github.repository }}
-          ref: ${{ github.sha }}
-          path: harness/third-plugin
       - uses: pnpm/action-setup@v4
         with:
           version: 11.21.0
@@ -35,22 +26,13 @@ jobs:
           node-version: '24.15.0'
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
-      # The plugin compiles against Harness TypeScript sources, not built
-      # artifacts, so installing dependencies is enough — no Harness build.
-      - name: Install Harness dependencies
-        working-directory: harness
-        run: pnpm install --frozen-lockfile
       - name: Install plugin dependencies
-        working-directory: harness/third-plugin
         run: pnpm install --frozen-lockfile
       - name: Test plugin workspace
-        working-directory: harness/third-plugin
         run: pnpm -r run test
       - name: Build plugin workspace
-        working-directory: harness/third-plugin
         run: pnpm -r run build
       - name: Publish versions missing from npmjs
-        working-directory: harness/third-plugin
         shell: bash
         run: |
           set -euo pipefail

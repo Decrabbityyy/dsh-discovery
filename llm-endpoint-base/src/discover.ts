@@ -6,7 +6,7 @@
  */
 
 import { INVALID_CREDENTIAL_CODE, LlmError, normalizeApiKey } from '@deepseek-ai/dsh-llm'
-import type { LlmDiscoveredModel, LlmModelDiscoveryRequest } from '@deepseek-ai/dsh-llm'
+import type { LlmDiscoveredModel, LlmModelDiscoveryOperation } from '@deepseek-ai/dsh-llm'
 import type { ResolvedDiscoveryConfig } from './config.ts'
 import { discoveryEngines } from './engines.ts'
 import { enrichModels } from './enrich.ts'
@@ -49,7 +49,7 @@ function probeKey(raw: string | undefined): string | undefined {
  * @returns the discovered models, enriched when configured.
  */
 export async function discoverEndpoint(
-  request: LlmModelDiscoveryRequest,
+  request: LlmModelDiscoveryOperation,
   config: ResolvedDiscoveryConfig,
 ): Promise<LlmDiscoveredModel[]> {
   const baseURL = request.baseURL?.trim()

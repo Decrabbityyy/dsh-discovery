@@ -94,8 +94,8 @@ export function DynamicRoutes({ api }: { api: DiscoveryApi }): ReactNode {
     let apiKeyEnv: string | undefined
     if (keyValue.length > 0) {
       apiKeyEnv = deriveKeyRef(routeId)
-      const stored = await api.credentials.set({ ref: apiKeyEnv, value: keyValue })
-      if (!stored.result.ok) return stored.result.error.message
+      const stored = await api.credentials.set(apiKeyEnv, keyValue)
+      if (!stored.ok) return stored.error.message
     }
     const route: DynamicRoute = {
       baseURL: draft.baseURL.trim(),

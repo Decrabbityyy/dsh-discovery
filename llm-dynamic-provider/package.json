@@ -53,15 +53,15 @@
     }
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "*",
-    "@deepseek-ai/dsh-credentials": "*",
-    "@deepseek-ai/dsh-home-paths": "*",
-    "@deepseek-ai/dsh-launch-environment": "*",
-    "@deepseek-ai/dsh-llm": "*",
-    "@deepseek-ai/dsh-llm-pi-ai": "*",
-    "@deepseek-ai/dsh-settings": "*",
-    "@deepseek-ai/dsh-storage-domain": "*",
-    "@deepseek-ai/schemastery": "*",
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-credentials": "^0.1.2-alpha.4",
+    "@deepseek-ai/dsh-home-paths": "^0.1.2-alpha.4",
+    "@deepseek-ai/dsh-launch-environment": "^0.1.2-alpha.4",
+    "@deepseek-ai/dsh-llm": "^0.1.2-alpha.4",
+    "@deepseek-ai/dsh-llm-pi-ai": "^0.1.2-alpha.4",
+    "@deepseek-ai/dsh-settings": "^0.1.2-alpha.4",
+    "@deepseek-ai/dsh-storage-domain": "^0.1.2-alpha.4",
+    "@deepseek-ai/schemastery": "^3.18.2",
     "@earendil-works/pi-ai": "*",
     "zod": "^4.4.3"
   },
@@ -77,7 +77,17 @@
     "@deepseek-ai/schemastery": { "optional": true }
   },
   "devDependencies": {
-    "@earendil-works/pi-ai": "^0.82.1",
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-credentials": "^0.1.2-alpha.4",
+    "@deepseek-ai/dsh-home-paths": "^0.1.2-alpha.4",
+    "@deepseek-ai/dsh-invariants": "^0.1.2-alpha.4",
+    "@deepseek-ai/dsh-launch-environment": "^0.1.2-alpha.4",
+    "@deepseek-ai/dsh-llm": "^0.1.2-alpha.4",
+    "@deepseek-ai/dsh-llm-pi-ai": "^0.1.2-alpha.4",
+    "@deepseek-ai/dsh-settings": "^0.1.2-alpha.4",
+    "@deepseek-ai/dsh-storage-domain": "^0.1.2-alpha.4",
+    "@deepseek-ai/schemastery": "^3.18.2",
+    "@earendil-works/pi-ai": "^0.84.4",
     "dsh-llm-endpoint-base": "workspace:*",
     "tsdown": "^0.22.2",
     "zod": "^4.4.3"

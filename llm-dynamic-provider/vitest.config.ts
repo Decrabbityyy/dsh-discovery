@@ -1,11 +1,9 @@
 import { fileURLToPath } from 'node:url'
-import tsconfigPaths from 'vite-tsconfig-paths'
 import { defineConfig } from 'vitest/config'
 
-// Harness packages resolve to the checkout's sources; the sibling endpoint-base
-// package is aliased to its source because the harness wildcard cannot see it.
+// Harness packages resolve from node_modules (@alpha/@next); the sibling
+// endpoint-base package is aliased to its source for clean-checkout tests.
 export default defineConfig({
-  plugins: [tsconfigPaths({ projects: ['../../tsconfig.base.json'], loose: true })],
   resolve: {
     alias: [{
       find: 'dsh-llm-endpoint-base/store',

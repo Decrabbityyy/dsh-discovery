@@ -4,11 +4,41 @@ packages:
   - 'ui-settings-discovery'
   - 'llm-dynamic-provider'
 
-# The @deepseek-ai/dsh-* peers are provided by the harness host at runtime and
-# are not fetchable from npm.
+# Harness packages (@deepseek-ai/dsh-*) resolve from npm as ordinary
+# dependencies — the 0.1.2-alpha channel carries the full internal dependency
+# graph, so no Harness checkout is needed to build or test. Peers stay declared
+# (the host injects these modules at runtime) but are NOT auto-installed: each
+# package pins the compile-time copy it builds against in devDependencies.
 autoInstallPeers: false
 
 # Pure-JS transitive dependencies of pi-ai; neither needs its install script.
 allowBuilds:
   '@google/genai': false
   protobufjs: false
+
+overrides:
+  # dsh-client-runtime@next asks for dsh-session@>=0.1.2 <0.2.0-0; only the
+  # 0.1.2-alpha prereleases satisfy that range, which pnpm will not pick on its
+  # own. Pin it so the client types install.
+  '@deepseek-ai/dsh-session': '0.1.2-alpha.4'
+
+minimumReleaseAgeExclude:
+  - '@deepseek-ai/dsh-brand@0.1.2-alpha.4'
+  - '@deepseek-ai/dsh-llm@0.1.2-alpha.4'
+  - '@deepseek-ai/dsh-storage-domain@0.1.2-alpha.4'
+  - '@deepseek-ai/dsh-timeout@0.1.2-alpha.4'
+  - '@deepseek-ai/dsh-typert-protocol@0.1.2-alpha.4'
+  - '@deepseek-ai/dsh-util-crypto@0.1.2-alpha.4'
+  - '@deepseek-ai/dsh-util-values@0.1.2-alpha.4'
+  - '@deepseek-ai/dsh-api-remotes@0.1.2-alpha.4'
+  - '@deepseek-ai/dsh-client-connection@0.1.2-alpha.4'
+  - '@deepseek-ai/dsh-client-ui-settings@0.1.2-alpha.4'
+  - '@deepseek-ai/dsh-client-ui-slots@0.1.2-alpha.4'
+  - '@deepseek-ai/dsh-credentials@0.1.2-alpha.4'
+  - '@deepseek-ai/dsh-deque@0.1.2-alpha.4'
+  - '@deepseek-ai/dsh-home-paths@0.1.2-alpha.4'
+  - '@deepseek-ai/dsh-invariants@0.1.2-alpha.4'
+  - '@deepseek-ai/dsh-launch-environment@0.1.2-alpha.4'
+  - '@deepseek-ai/dsh-llm-pi-ai@0.1.2-alpha.4'
+  - '@deepseek-ai/dsh-session@0.1.2-alpha.4'
+  - '@deepseek-ai/dsh-settings@0.1.2-alpha.4'

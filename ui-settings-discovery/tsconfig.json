@@ -1,6 +1,30 @@
 {
-  "extends": "../../tsconfig.base.client.json",
+  // Self-contained client compiler shape: harness types resolve from
+  // node_modules (@alpha/@next); only the workspace endpoint-base is a project
+  // reference. Browser library API + React JSX, no ambient node types.
   "compilerOptions": {
+    "target": "es2024",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "declaration": true,
+    "sourceMap": true,
+    "declarationMap": true,
+    "composite": true,
+    "incremental": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "verbatimModuleSyntax": false,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "jsx": "react-jsx",
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
     "rootDir": "src",
     "outDir": "lib/types"
   },
@@ -8,24 +32,6 @@
     "src"
   ],
   "references": [
-    {
-      "path": "../../vendor/cordis"
-    },
-    {
-      "path": "../../packages/client/ui-slots"
-    },
-    {
-      "path": "../../packages/client/runtime"
-    },
-    {
-      "path": "../../packages/client/ui-settings"
-    },
-    {
-      "path": "../../packages/runtime-diagnostics/invariants"
-    },
-    {
-      "path": "../../packages/api/remotes/tsconfig.client.json"
-    },
     {
       "path": "../llm-endpoint-base"
     }

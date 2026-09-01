@@ -19,7 +19,7 @@
 
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { DiscoveredModelView } from '@deepseek-ai/dsh-api-remotes/client'
+import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-api-remotes/client'
 import clsx from 'clsx'
 import { deriveKeyRef, DISCOVERY_NS, DYNAMIC_NS, messageOf, normalizeModelName, PI_AI_NS, ROUTE_PATTERN } from './discovery.ts'
 import type { DiscoveryApi } from './discovery.ts'
@@ -70,7 +70,7 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
   const [probeError, setProbeError] = useState<string | undefined>(undefined)
   // `undefined` until the first probe settles; the results area renders only
   // from a settle, and an empty list is its own row-less state.
-  const [candidates, setCandidates] = useState<readonly DiscoveredModelView[] | undefined>(undefined)
+  const [candidates, setCandidates] = useState<readonly LlmDiscoveredModel[] | undefined>(undefined)
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set())
   // Case-insensitive name/id filter over the results table. Purely a view
   // concern: hidden rows keep their picks, and a fresh probe resets it.
@@ -113,12 +113,12 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
 
   useEffect(() => {
     let cancelled = false
-    void api.llm.discoverModels({ settingsNs: DYNAMIC_NS, baseURL: 'http://127.0.0.1:1' }).then((response) => {
+    void api.llm.discoverModels(DYNAMIC_NS, { baseURL: 'http://127.0.0.1:1' }).then((response) => {
       if (cancelled) return
       // A registered offer fails the probe with a network/protocol error; an
       // unregistered one fails naming the missing discovery. Only the latter
       // means the plugin is absent.
-      const missing = !response.result.ok && /no model discovery is registered/i.test(response.result.error.message)
+      const missing = !response.ok && /no model discovery is registered/i.test(response.error.message)
       setDynamicLoaded(!missing)
     }).catch(() => {
       // A transport failure leaves the block hidden, matching a not-loaded plugin.
@@ -131,9 +131,9 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
 
   useEffect(() => {
     let cancelled = false
-    void api.llm.discoverModels({ settingsNs: DISCOVERY_NS, baseURL: 'http://127.0.0.1:1' }).then((response) => {
+    void api.llm.discoverModels(DISCOVERY_NS, { baseURL: 'http://127.0.0.1:1' }).then((response) => {
       if (cancelled) return
-      const missing = !response.result.ok && /no model discovery is registered/i.test(response.result.error.message)
+      const missing = !response.ok && /no model discovery is registered/i.test(response.error.message)
       setDiscoveryLoaded(!missing)
     }).catch(() => {
       // A transport failure leaves the block hidden, matching a not-loaded plugin.
@@ -217,10 +217,10 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
 
   /** The installed-catalog pi-ai provider routes, empty on a wire failure. */
   const catalogRoutes = async (): Promise<ReadonlySet<string>> => {
-    const listed = await api.llm.providers({})
-    if (!listed.result.ok) return new Set()
+    const listed = await api.llm.providers()
+    if (!listed.ok) return new Set()
     return new Set(
-      listed.result.value.providers
+      listed.value.providers
         .filter(entry => entry.settingsNs === PI_AI_NS && entry.declared === false)
         .map(entry => entry.provider),
     )
@@ -280,19 +280,18 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
     setProbeError(undefined)
     setAdoptedRoute(undefined)
     try {
-      const response = await api.llm.discoverModels({
-        settingsNs: DISCOVERY_NS,
+      const response = await api.llm.discoverModels(DISCOVERY_NS, {
         baseURL: baseURL.trim(),
         api: protocol,
         ...keyValue.length === 0 ? {} : { apiKey: keyValue },
       })
-      if (!response.result.ok) {
+      if (!response.ok) {
         // A `model-discovery-failed` rejection names the engine's own answer;
         // the page shows it verbatim.
-        setProbeError(response.result.error.message)
+        setProbeError(response.error.message)
         return
       }
-      const found = response.result.value.models
+      const found = response.value.models
       setCandidates(found)
       // A fresh result set resets the filter so nothing starts hidden.
       setQuery('')
@@ -316,9 +315,9 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
    * an orphaned ref (mutate refused) is harmless.
    */
   const adoptOnce = async (): Promise<string | undefined> => {
-    const described = await api.settings.describe({})
-    if (!described.result.ok) return described.result.error.message
-    const namespace = described.result.value.namespaces.find(candidate => candidate.ns === PI_AI_NS)
+    const described = await api.settings.describe()
+    if (!described.ok) return described.error.message
+    const namespace = described.value.namespaces.find(candidate => candidate.ns === PI_AI_NS)
     if (namespace === undefined) return '缺少 llm-pi-ai 设置命名空间，无法写入提供方配置'
     // A set at providers.<route> replaces that profile wholesale, so an
     // existing route belongs to the Models page's editor, not this create
@@ -331,8 +330,8 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
     const keyRef = deriveKeyRef(routeId)
     const storesKey = keyValue.length > 0
     if (storesKey) {
-      const stored = await api.credentials.set({ ref: keyRef, value: keyValue })
-      if (!stored.result.ok) return stored.result.error.message
+      const stored = await api.credentials.set(keyRef, keyValue)
+      if (!stored.ok) return stored.error.message
     }
     /* v8 ignore next -- the adopt button only renders above a non-empty candidate list */
     const selected = candidates === undefined ? [] : candidates.filter(model => picked.has(model.id))
@@ -357,15 +356,15 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
             }),
           },
     }
-    const response = await api.settings.mutate({
-      ns: PI_AI_NS,
-      ops: [{ op: 'set', path: ['providers', routeId], value: profile }],
+    const response = await api.settings.mutate(
+      PI_AI_NS,
+      [{ op: 'set', path: ['providers', routeId], value: profile }],
       // The write is judged against the revision read just now; a concurrent
       // change makes the host refuse with `settings-conflict` and the page
       // reports that message verbatim — retry is the user's call, not a loop.
-      expectedRevision: namespace.revision,
-    })
-    if (!response.result.ok) return response.result.error.message
+      namespace.revision,
+    )
+    if (!response.ok) return response.error.message
     return undefined
   }
 

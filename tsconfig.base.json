@@ -1,7 +1,7 @@
 {
-  // Self-contained: harness deps resolve from node_modules (@alpha/@next), so
-  // no project references and no extends into a repo-relative base that could
-  // be mistaken for the harness checkout's facade.
+  // Local copy of the compiler shape the plugin packages need, decoupled from
+  // the harness checkout: harness packages now resolve from node_modules
+  // (@alpha/@next channels), not ../../packages sources.
   "compilerOptions": {
     "target": "es2024",
     "module": "esnext",
@@ -23,11 +23,6 @@
     "noFallthroughCasesInSwitch": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "types": ["node"],
-    "rootDir": "src",
-    "outDir": "lib/types"
-  },
-  "include": [
-    "src"
-  ]
+    "types": ["node"]
+  }
 }

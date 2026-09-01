@@ -1,8 +1,34 @@
-/** Discovery section registration: slot declaration injection and fiber disposal. */
+// @vitest-environment jsdom
+/**
+ * Discovery section registration: slot declaration injection and fiber disposal.
+ *
+ * `@deepseek-ai/dsh-client-runtime/client` ships as a `__ModuleLoader__`
+ * bundle (the web shell's module seam), so the spec installs a minimal shim
+ * before importing it: the loader registers the factory, the require face
+ * forwards to the real packages, and the registered entry becomes the import.
+ */
+import * as cordis from '@deepseek-ai/cordis'
+import * as uiSlots from '@deepseek-ai/dsh-client-ui-slots'
+
+const __dshModules = new Map<string, (require: (id: string) => unknown) => unknown>()
+;(globalThis as { __ModuleLoader__?: unknown }).__ModuleLoader__ = {
+  load(entry: { id: string; factory: (require: (id: string) => unknown) => unknown }): void {
+    __dshModules.set(entry.id, entry.factory)
+  },
+}
+const __dshRequire = (id: string): unknown => {
+  if (id === '@deepseek-ai/cordis') return cordis
+  if (id === '@deepseek-ai/dsh-client-ui-slots') return uiSlots
+  throw new Error(`__ModuleLoader__ shim: unstubbed require "${id}"`)
+}
+// The register call happens when the runtime bundle is evaluated below.
+await import('@deepseek-ai/dsh-client-runtime/client')
+const clientRuntime = __dshModules.get('@deepseek-ai/dsh-client-runtime')!(__dshRequire) as typeof import('@deepseek-ai/dsh-client-runtime/client')
+const { SlotRegistry } = clientRuntime
+
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it } from 'vitest'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
-import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
 import { apply, inject, SECTION_ID } from 'dsh-client-ui-settings-discovery/client'
 import { DiscoverySection } from '../src/client/DiscoverySection.tsx'
 
@@ -10,8 +36,13 @@ async function bench() {
   const ctx = new Context()
   await ctx.plugin(SlotRegistry).await()
   // The apply path only captures the wire face; no call leaves this fake
-  // until the section actually probes or adopts.
+  // until the section actually probes or adopts. The alpha.4 contract reads
+  // the face from `ctx.remote`; `connection`/`locale`/`settingsScope` are
+  // inject-ordering requirements the section never reads.
   ctx.provide('connection', { api: {} } as never)
+  ctx.provide('remote', {} as never)
+  ctx.provide('locale', {} as never)
+  ctx.provide('settingsScope', {} as never)
   return { ctx, slots: ctx.get('slots') as SlotRegistry }
 }
 
@@ -29,7 +60,7 @@ function declare(slots: SlotRegistry): () => void {
 
 describe('ui-settings-discovery apply', () => {
   it('declares the services it uses', () => {
-    expect(inject).toEqual(['slots', 'connection'])
+    expect(inject).toEqual(['slots', 'locale', 'connection', 'remote', 'settingsScope'])
   })
 
   it('registers the discovery nav entry for declarations before or after apply', async () => {

@@ -147,6 +147,12 @@ export function assembleProfile(routeName: string, route: RouteProfile, models: 
     // would send the placeholder as a real credential (x-api-key and kin).
     ...(route.apiKeyEnv === undefined && route.api === 'openai-completions' ? { headers: { authorization: '' } } : {}),
     streamIdleTimeoutMs: 300_000,
+    // Image-payload budgets mirror the llm-pi-ai defaults (its DEFAULT_* are
+    // declared in config.d.ts but not re-exported from the package root):
+    // 20 MiB base64 payload, a 2048x2048 pixel budget, and a 1 MiB raw target.
+    maxRequestImageBytes: 20 * 1024 * 1024,
+    requestImagePixelBudget: 2048 * 2048,
+    requestImageMaxBytes: 1024 * 1024,
     retryPolicy: resolveRetryPolicy(undefined, `llm-dynamic-provider: route "${routeName}" retryPolicy`),
     configuredMaxTokens: new Map(),
     piProvider,

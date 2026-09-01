@@ -3,7 +3,8 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Mock } from 'vitest'
-import type { DiscoveredModelView, IApiClient, RpcResponse } from '@deepseek-ai/dsh-api-remotes/client'
+import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-api-remotes/client'
+import type { DiscoveryApi, DiscoveryResponse } from '../src/client/discovery.ts'
 import { DiscoverySection } from '../src/client/DiscoverySection.tsx'
 import { CUSTOM_PRESET } from '../src/client/presets.ts'
 
@@ -18,25 +19,22 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-let nextRpc = 0
-function ok<T>(value: T): RpcResponse<T> {
-  return { rpcId: `r-${nextRpc++}` as never, result: { ok: true, value } }
+function ok<T>(value: T): DiscoveryResponse<T> {
+  return { ok: true, value } as DiscoveryResponse<T>
 }
-function fail<T>(message: string, code: string): RpcResponse<T> {
-  return { rpcId: `r-${nextRpc++}` as never, result: { ok: false, error: { code, message, details: {} } as never } }
+function fail<T>(message: string, code: string): DiscoveryResponse<T> {
+  return { ok: false, error: { code, message } } as DiscoveryResponse<T>
 }
 
 /** One full-metadata row and one bare row, so every table cell has a sample. */
-const SAMPLES: DiscoveredModelView[] = [
+const SAMPLES: LlmDiscoveredModel[] = [
   { id: 'qwen2.5:7b', name: 'Qwen 2.5 7B', contextWindow: 32768, maxTokens: 4096 },
   { id: 'llama3.2:1b' },
 ]
 
-type WireFace = Pick<IApiClient, 'settings' | 'credentials' | 'llm'>
-
 /** Fixture options: `unknown` keeps call-site mocks unconstrained; the defaults are the scripted happy path. */
 interface ScriptedFaceOptions {
-  models?: readonly DiscoveredModelView[]
+  models?: readonly LlmDiscoveredModel[]
   discover?: unknown
   describe?: unknown
   mutate?: unknown
@@ -47,7 +45,7 @@ interface ScriptedFaceOptions {
 }
 
 function scriptedFace(options: ScriptedFaceOptions = {}): {
-  api: WireFace
+  api: DiscoveryApi
   discover: Mock
   describe: Mock
   mutate: Mock
@@ -63,31 +61,26 @@ function scriptedFace(options: ScriptedFaceOptions = {}): {
   // return the scripted models. A custom `discover` is wrapped so the
   // discovery-sentinel still reports loaded regardless of the script.
   const base = options.discover === undefined
-    ? vi.fn((request: { settingsNs?: string; baseURL?: string }) => {
+    ? vi.fn((settingsNs: string, request: { baseURL?: string }) => {
       if (request.baseURL !== 'http://127.0.0.1:1') return Promise.resolve(ok({ models }))
-      if (request.settingsNs === 'llm-discovery') {
-        return Promise.resolve({ result: { ok: false, error: { code: 'model-discovery-failed', message: 'connect ECONNREFUSED 127.0.0.1:1' } } })
+      if (settingsNs === 'llm-discovery') {
+        return Promise.resolve(fail('connect ECONNREFUSED 127.0.0.1:1', 'model-discovery-failed'))
       }
       return options.dynamicLoaded === true
-        ? Promise.resolve({ result: { ok: false, error: { code: 'model-discovery-failed', message: 'connect ECONNREFUSED 127.0.0.1:1' } } })
-        : Promise.resolve({ result: { ok: false, error: { code: 'model-discovery-failed', message: 'no model discovery is registered for "llm-dynamic-provider"' } } })
+        ? Promise.resolve(fail('connect ECONNREFUSED 127.0.0.1:1', 'model-discovery-failed'))
+        : Promise.resolve(fail('no model discovery is registered for "llm-dynamic-provider"', 'model-discovery-failed'))
     })
-    : (options.discover as (request: { settingsNs?: string; baseURL?: string }) => unknown)
-  const discover = vi.fn((request: { settingsNs?: string; baseURL?: string }) =>
-    request.baseURL === 'http://127.0.0.1:1' && request.settingsNs === 'llm-discovery'
-      ? Promise.resolve({ result: { ok: false, error: { code: 'model-discovery-failed', message: 'connect ECONNREFUSED 127.0.0.1:1' } } })
-      : base(request)) as Mock
+    : (options.discover as (settingsNs: string, request: { baseURL?: string }) => unknown)
+  const discover = vi.fn((settingsNs: string, request: { baseURL?: string }) =>
+    request.baseURL === 'http://127.0.0.1:1' && settingsNs === 'llm-discovery'
+      ? Promise.resolve(fail('connect ECONNREFUSED 127.0.0.1:1', 'model-discovery-failed'))
+      : base(settingsNs, request)) as Mock
   const describe = (
     options.describe === undefined
       ? vi.fn(() => Promise.resolve(ok({
-        writable: true,
-        hasDocument: true,
         namespaces: [{
           ns: 'llm-pi-ai',
-          schema: {},
           value: { providers: {} },
-          applies: 'live',
-          secrets: [],
           revision: 3,
         }],
       })))
@@ -95,14 +88,7 @@ function scriptedFace(options: ScriptedFaceOptions = {}): {
   ) as Mock
   const mutate = (
     options.mutate === undefined
-      ? vi.fn(() => Promise.resolve(ok({
-        ns: 'llm-pi-ai',
-        schema: {},
-        value: { providers: {} },
-        applies: 'live',
-        secrets: [],
-        revision: 4,
-      })))
+      ? vi.fn(() => Promise.resolve(ok({ ns: 'llm-pi-ai', revision: 4 })))
       : options.mutate
   ) as Mock
   const set = (
@@ -115,7 +101,7 @@ function scriptedFace(options: ScriptedFaceOptions = {}): {
     llm: { discoverModels: discover, providers },
     settings: { describe, mutate },
     credentials: { set },
-  } as unknown as WireFace
+  } as DiscoveryApi
   return { api, discover, describe, mutate, set, providers }
 }
 
@@ -125,11 +111,11 @@ const adoptButton = (): HTMLButtonElement =>
 
 /** The probe calls a discover mock saw, excluding the dynamic-plugin detection ping (sentinel baseURL). */
 function probeCalls(discover: Mock): unknown[][] {
-  return discover.mock.calls.filter(call => (call[0] as { baseURL?: string }).baseURL !== 'http://127.0.0.1:1')
+  return discover.mock.calls.filter(call => (call[1] as { baseURL?: string }).baseURL !== 'http://127.0.0.1:1')
 }
 
 /** Render the section and wait for the discovery-offer detection to reveal the probe form. */
-async function renderLoaded(api: WireFace): Promise<void> {
+async function renderLoaded(api: DiscoveryApi): Promise<void> {
   render(<DiscoverySection api={api} />)
   await waitFor(() => { expect(screen.getByLabelText('端点地址')).toBeDefined() })
 }
@@ -216,12 +202,14 @@ describe('probe', () => {
     fireEvent.click(probeButton())
     await waitFor(() => { expect(probeCalls(discover)).toHaveLength(1) })
     // The key is trimmed and travels only inside the probe payload.
-    expect(probeCalls(discover)[0]![0]).toEqual({
-      settingsNs: 'llm-discovery',
-      baseURL: 'http://127.0.0.1:11434',
-      api: 'openai-completions',
-      apiKey: 'sk-abc',
-    })
+    expect(probeCalls(discover)[0]).toEqual([
+      'llm-discovery',
+      {
+        baseURL: 'http://127.0.0.1:11434',
+        api: 'openai-completions',
+        apiKey: 'sk-abc',
+      },
+    ])
     const table = screen.getByRole('table')
     expect(within(table).getByText('qwen2.5:7b')).toBeDefined()
     expect(within(table).getByText('Qwen 2.5 7B')).toBeDefined()
@@ -242,11 +230,13 @@ describe('probe', () => {
     const { api, discover } = scriptedFace()
     await renderLoaded(api)
     await probeWith()
-    expect(probeCalls(discover)[0]![0]).toEqual({
-      settingsNs: 'llm-discovery',
-      baseURL: 'http://127.0.0.1:11434',
-      api: 'openai-completions',
-    })
+    expect(probeCalls(discover)[0]).toEqual([
+      'llm-discovery',
+      {
+        baseURL: 'http://127.0.0.1:11434',
+        api: 'openai-completions',
+      },
+    ])
   })
 
   it('rides the selected protocol in the payload', async () => {
@@ -254,16 +244,18 @@ describe('probe', () => {
     await renderLoaded(api)
     fireEvent.change(screen.getByLabelText('协议'), { target: { value: 'anthropic-messages' } })
     await probeWith()
-    expect(probeCalls(discover)[0]![0]).toEqual({
-      settingsNs: 'llm-discovery',
-      baseURL: 'http://127.0.0.1:11434',
-      api: 'anthropic-messages',
-    })
+    expect(probeCalls(discover)[0]).toEqual([
+      'llm-discovery',
+      {
+        baseURL: 'http://127.0.0.1:11434',
+        api: 'anthropic-messages',
+      },
+    ])
   })
 
   it('shows a model-discovery-failed rejection verbatim', async () => {
     const { api } = scriptedFace({
-      discover: vi.fn((request: { baseURL?: string }) => request.baseURL === 'http://127.0.0.1:1'
+      discover: vi.fn((_settingsNs: string, request: { baseURL?: string }) => request.baseURL === 'http://127.0.0.1:1'
         ? Promise.resolve(fail('no model discovery is registered for "llm-dynamic-provider"', 'model-discovery-failed'))
         : Promise.resolve(fail('无法连接到 127.0.0.1:11434，请检查服务是否已启动', 'model-discovery-failed'))),
     })
@@ -319,17 +311,17 @@ describe('results filtering and bulk selection', () => {
     typeRoute('custom')
     fireEvent.click(adoptButton())
     await waitFor(() => { expect(mutate.mock.calls).toHaveLength(1) })
-    expect(mutate.mock.calls[0]![0]).toMatchObject({
-      ops: [{
-        op: 'set',
-        value: {
-          models: [
-            { id: 'qwen2.5:7b' },
-            { id: 'llama3.2:1b' },
-          ],
-        },
-      }],
-    })
+    expect(mutate.mock.calls[0]![0]).toBe('llm-pi-ai')
+    expect(mutate.mock.calls[0]![1]).toMatchObject([{
+      op: 'set',
+      value: {
+        models: [
+          { id: 'qwen2.5:7b' },
+          { id: 'llama3.2:1b' },
+        ],
+      },
+    }])
+    expect(mutate.mock.calls[0]![2]).toBe(3)
   })
 
   it('selects all and clears all with the toolbar buttons', async () => {
@@ -381,9 +373,9 @@ describe('results filtering and bulk selection', () => {
   })
 })
   it('shows the busy label and freezes the form while a probe is in flight', async () => {
-    let resolveProbe!: (response: RpcResponse<{ models: readonly DiscoveredModelView[] }>) => void
+    let resolveProbe!: (response: DiscoveryResponse<{ models: readonly LlmDiscoveredModel[] }>) => void
     const { api } = scriptedFace({
-      discover: vi.fn(() => new Promise<RpcResponse<{ models: readonly DiscoveredModelView[] }>>((resolve) => {
+      discover: vi.fn(() => new Promise<DiscoveryResponse<{ models: readonly LlmDiscoveredModel[] }>>((resolve) => {
         resolveProbe = resolve
       })),
     })
@@ -412,13 +404,12 @@ describe('adoption', () => {
     fireEvent.change(screen.getByLabelText('API 密钥（可选）'), { target: { value: 'sk-local' } })
     fireEvent.click(adoptButton())
     await waitFor(() => { expect(mutate.mock.calls).toHaveLength(1) })
-    expect(describe.mock.calls[0]).toEqual([{}])
+    expect(describe.mock.calls[0]).toEqual([])
     // The key write lands before the profile write.
-    expect(set.mock.calls[0]).toEqual([{ ref: 'LOCAL_QWEN_API_KEY', value: 'sk-local' }])
-    expect(mutate.mock.calls[0]![0]).toEqual({
-      ns: 'llm-pi-ai',
-      expectedRevision: 3,
-      ops: [{
+    expect(set.mock.calls[0]).toEqual(['LOCAL_QWEN_API_KEY', 'sk-local'])
+    expect(mutate.mock.calls[0]).toEqual([
+      'llm-pi-ai',
+      [{
         op: 'set',
         path: ['providers', 'local-qwen'],
         value: {
@@ -429,7 +420,8 @@ describe('adoption', () => {
           models: [{ id: 'qwen2.5:7b', name: 'Qwen 2.5 7B', contextWindow: 32768, maxTokens: 4096 }],
         },
       }],
-    })
+      3,
+    ])
     expect(screen.getByText('已采纳「local-qwen」，请在「模型」设置页查看该提供方。')).toBeDefined()
 
     // A fresh probe clears the confirmation.
@@ -451,10 +443,9 @@ describe('adoption', () => {
     typeRoute('local-qwen')
     fireEvent.click(adoptButton())
     await waitFor(() => { expect(mutate.mock.calls).toHaveLength(1) })
-    expect(mutate.mock.calls[0]![0]).toEqual({
-      ns: 'llm-pi-ai',
-      expectedRevision: 3,
-      ops: [{
+    expect(mutate.mock.calls[0]).toEqual([
+      'llm-pi-ai',
+      [{
         op: 'set',
         path: ['providers', 'local-qwen'],
         value: {
@@ -472,7 +463,8 @@ describe('adoption', () => {
           ],
         },
       }],
-    })
+      3,
+    ])
   })
 
   it('lets a catalog route inherit reasoning and ignores the picked levels', async () => {
@@ -480,10 +472,7 @@ describe('adoption', () => {
       providers: vi.fn(() => Promise.resolve(ok({
         providers: [{
           provider: 'anthropic',
-          displayName: 'Anthropic',
           settingsNs: 'llm-pi-ai',
-          settingsPath: ['providers', 'anthropic'],
-          active: false,
           declared: false,
         }],
       }))),
@@ -494,10 +483,9 @@ describe('adoption', () => {
     await waitFor(() => { expect(screen.getByText(/自动继承/)).toBeDefined() })
     fireEvent.click(adoptButton())
     await waitFor(() => { expect(mutate.mock.calls).toHaveLength(1) })
-    expect(mutate.mock.calls[0]![0]).toEqual({
-      ns: 'llm-pi-ai',
-      expectedRevision: 3,
-      ops: [{
+    expect(mutate.mock.calls[0]).toEqual([
+      'llm-pi-ai',
+      [{
         op: 'set',
         path: ['providers', 'anthropic'],
         value: {
@@ -509,20 +497,16 @@ describe('adoption', () => {
           ],
         },
       }],
-    })
+      3,
+    ])
   })
 
   it('refuses to clobber an existing provider profile', async () => {
     const { api, mutate } = scriptedFace({
       describe: vi.fn(() => Promise.resolve(ok({
-        writable: true,
-        hasDocument: true,
         namespaces: [{
           ns: 'llm-pi-ai',
-          schema: {},
           value: { providers: { ollama: { api: 'openai-completions' } } },
-          applies: 'live',
-          secrets: [],
           revision: 3,
         }],
       }))),
@@ -548,10 +532,9 @@ describe('adoption', () => {
     fireEvent.click(adoptButton())
     await waitFor(() => { expect(mutate.mock.calls).toHaveLength(1) })
     expect(set.mock.calls).toHaveLength(0)
-    expect(mutate.mock.calls[0]![0]).toEqual({
-      ns: 'llm-pi-ai',
-      expectedRevision: 3,
-      ops: [{
+    expect(mutate.mock.calls[0]).toEqual([
+      'llm-pi-ai',
+      [{
         op: 'set',
         path: ['providers', 'custom'],
         value: {
@@ -559,7 +542,8 @@ describe('adoption', () => {
           baseURL: 'http://127.0.0.1:11434',
         },
       }],
-    })
+      3,
+    ])
     expect(screen.getByText('已采纳「custom」，请在「模型」设置页查看该提供方。')).toBeDefined()
   })
 
@@ -590,7 +574,7 @@ describe('adoption', () => {
 
   it('reports a missing llm-pi-ai namespace honestly', async () => {
     const { api, mutate } = scriptedFace({
-      describe: vi.fn(() => Promise.resolve(ok({ writable: true, hasDocument: true, namespaces: [] }))),
+      describe: vi.fn(() => Promise.resolve(ok({ namespaces: [] }))),
     })
     await renderLoaded(api)
     await probeWith()
@@ -613,7 +597,7 @@ describe('adoption', () => {
     fireEvent.click(adoptButton())
     await waitFor(() => { expect(screen.getByText('设置已被其他页面修改')).toBeDefined() })
     // The key landed first; only the profile write was refused.
-    expect(set.mock.calls[0]).toEqual([{ ref: 'CUSTOM_API_KEY', value: 'sk' }])
+    expect(set.mock.calls[0]).toEqual(['CUSTOM_API_KEY', 'sk'])
   })
 
   it('reports a credential write failure and does not mutate', async () => {
@@ -656,9 +640,9 @@ describe('adoption', () => {
   })
 
   it('shows the busy label while an adoption is in flight', async () => {
-    let resolveMutate!: (response: RpcResponse<{ ns: string; revision: number }>) => void
+    let resolveMutate!: (response: DiscoveryResponse<unknown>) => void
     const { api, mutate } = scriptedFace({
-      mutate: vi.fn(() => new Promise<RpcResponse<{ ns: string; revision: number }>>((resolve) => {
+      mutate: vi.fn(() => new Promise<DiscoveryResponse<unknown>>((resolve) => {
         resolveMutate = resolve
       })),
     })
@@ -672,7 +656,7 @@ describe('adoption', () => {
     expect(screen.getByText('采纳中…')).toBeDefined()
     expect((screen.getByLabelText<HTMLInputElement>('路由 ID')).disabled).toBe(true)
     await act(async () => {
-      resolveMutate(ok({ ns: 'llm-pi-ai', schema: {}, value: {}, applies: 'live', secrets: [], revision: 4 }))
+      resolveMutate(ok({ ns: 'llm-pi-ai', revision: 4 }))
     })
     await waitFor(() => { expect(screen.getByText(/已采纳「/)).toBeDefined() })
   })

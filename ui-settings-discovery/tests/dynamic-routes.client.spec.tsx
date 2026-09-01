@@ -9,15 +9,13 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Mock } from 'vitest'
-import type { IApiClient } from '@deepseek-ai/dsh-api-remotes/client'
+import type { DiscoveryApi, DiscoveryResponse } from '../src/client/discovery.ts'
 import { DiscoverySection } from '../src/client/DiscoverySection.tsx'
 
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
 })
-
-type WireFace = Pick<IApiClient, 'settings' | 'credentials' | 'llm'>
 
 /** Stub the plugin's routes endpoint with an in-memory store; returns the store and the recorded writes. */
 function stubRoutesEndpoint(initial: Record<string, unknown> = {}): { store: Record<string, unknown>; writes: { op: string; routeId: string; route?: unknown }[] } {
@@ -40,28 +38,27 @@ function stubRoutesEndpoint(initial: Record<string, unknown> = {}): { store: Rec
   return { store, writes }
 }
 
-function ok(value: unknown): { result: { ok: true; value: unknown } } {
-  return { result: { ok: true, value } }
+function ok(value: unknown): DiscoveryResponse<unknown> {
+  return { ok: true, value } as DiscoveryResponse<unknown>
+}
+
+function fail(message: string, code: string): DiscoveryResponse<unknown> {
+  return { ok: false, error: { code, message } } as DiscoveryResponse<unknown>
 }
 
 /** A describe answer whose namespaces list is the given set of ns strings. */
 function describeWith(namespaces: readonly { ns: string; routes?: Record<string, unknown> }[]): Mock {
   return vi.fn(() => Promise.resolve(ok({
-    writable: true,
-    hasDocument: true,
     namespaces: namespaces.map(entry => ({
       ns: entry.ns,
-      schema: {},
       value: entry.routes === undefined ? {} : { routes: entry.routes },
-      applies: 'live',
-      secrets: [],
       revision: 1,
     })),
   })))
 }
 
 function faceWith(overrides: { describe?: Mock; mutate?: Mock; set?: Mock; providers?: Mock; discover?: Mock }): {
-  api: WireFace
+  api: DiscoveryApi
   describe: Mock
   mutate: Mock
   set: Mock
@@ -71,22 +68,22 @@ function faceWith(overrides: { describe?: Mock; mutate?: Mock; set?: Mock; provi
   const set = overrides.set ?? vi.fn(() => Promise.resolve(ok({})))
   const providers = overrides.providers ?? vi.fn(() => Promise.resolve(ok({ providers: [] })))
   // Default: the dynamic discovery offer answers (network error = loaded).
-  const discover = overrides.discover ?? vi.fn(() => Promise.resolve({
-    result: { ok: false, error: { code: 'model-discovery-failed', message: 'could not reach http://127.0.0.1:1/models' } },
-  }))
+  const discover = overrides.discover ?? vi.fn(() => Promise.resolve(
+    fail('could not reach http://127.0.0.1:1/models', 'model-discovery-failed'),
+  ))
   const api = {
     llm: { discoverModels: discover, providers },
     settings: { describe, mutate },
     credentials: { set },
-  } as unknown as WireFace
+  } as DiscoveryApi
   return { api, describe, mutate, set }
 }
 
 /** The discover rejection an UNREGISTERED dynamic namespace produces. */
 function notRegisteredDiscover(): Mock {
-  return vi.fn(() => Promise.resolve({
-    result: { ok: false, error: { code: 'model-discovery-failed', message: 'no model discovery is registered for "llm-dynamic-provider"' } },
-  }))
+  return vi.fn(() => Promise.resolve(
+    fail('no model discovery is registered for "llm-dynamic-provider"', 'model-discovery-failed'),
+  ))
 }
 
 /** The rendered 动态路由 block, scoped so its fields don't collide with the discovery block's. */
@@ -181,7 +178,7 @@ describe('dynamic-routes management', () => {
     fireEvent.change(within(block).getByLabelText('API 密钥（可选）'), { target: { value: 'sk-live' } })
     fireEvent.click(within(block).getByRole('button', { name: '添加路由' }))
     await waitFor(() => {
-      expect(set).toHaveBeenCalledWith({ ref: 'SECURE_API_KEY', value: 'sk-live' })
+      expect(set).toHaveBeenCalledWith('SECURE_API_KEY', 'sk-live')
     })
     await waitFor(() => {
       expect(writes).toEqual([expect.objectContaining({

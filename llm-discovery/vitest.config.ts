@@ -1,11 +1,9 @@
 import { fileURLToPath } from 'node:url'
-import tsconfigPaths from 'vite-tsconfig-paths'
 import { defineConfig } from 'vitest/config'
 
-// Harness imports resolve to the pinned checkout's sources; endpoint-base is
-// aliased explicitly so tests pass on a clean plugin checkout before build.
+// Harness packages resolve from node_modules (@alpha/@next); endpoint-base is
+// aliased to its source so tests pass on a clean checkout before its build.
 export default defineConfig({
-  plugins: [tsconfigPaths({ projects: ['../../tsconfig.base.json'], loose: true })],
   resolve: {
     alias: [{
       find: 'dsh-llm-endpoint-base',
