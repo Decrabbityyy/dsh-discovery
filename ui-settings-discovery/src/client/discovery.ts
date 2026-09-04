@@ -75,7 +75,7 @@ export interface ProviderWireEntry {
 export interface DiscoveryApi {
   readonly llm: {
     /** Interrogate one endpoint through a host discovery offer. */
-    discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest): Promise<DiscoveryResponse<{ readonly models: readonly LlmDiscoveredModel[] }>>
+    discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest): Promise<DiscoveryResponse<readonly LlmDiscoveredModel[]>>
     /** List the registered provider routes. */
     providers(): Promise<DiscoveryResponse<{ readonly providers: readonly ProviderWireEntry[] }>>
   }

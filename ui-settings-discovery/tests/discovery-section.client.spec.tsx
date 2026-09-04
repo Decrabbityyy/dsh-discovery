@@ -62,7 +62,7 @@ function scriptedFace(options: ScriptedFaceOptions = {}): {
   // discovery-sentinel still reports loaded regardless of the script.
   const base = options.discover === undefined
     ? vi.fn((settingsNs: string, request: { baseURL?: string }) => {
-      if (request.baseURL !== 'http://127.0.0.1:1') return Promise.resolve(ok({ models }))
+      if (request.baseURL !== 'http://127.0.0.1:1') return Promise.resolve(ok(models))
       if (settingsNs === 'llm-discovery') {
         return Promise.resolve(fail('connect ECONNREFUSED 127.0.0.1:1', 'model-discovery-failed'))
       }
@@ -373,9 +373,9 @@ describe('results filtering and bulk selection', () => {
   })
 })
   it('shows the busy label and freezes the form while a probe is in flight', async () => {
-    let resolveProbe!: (response: DiscoveryResponse<{ models: readonly LlmDiscoveredModel[] }>) => void
+    let resolveProbe!: (response: DiscoveryResponse<readonly LlmDiscoveredModel[]>) => void
     const { api } = scriptedFace({
-      discover: vi.fn(() => new Promise<DiscoveryResponse<{ models: readonly LlmDiscoveredModel[] }>>((resolve) => {
+      discover: vi.fn(() => new Promise<DiscoveryResponse<readonly LlmDiscoveredModel[]>>((resolve) => {
         resolveProbe = resolve
       })),
     })
@@ -385,7 +385,7 @@ describe('results filtering and bulk selection', () => {
     expect(screen.getByText('探测中…')).toBeDefined()
     expect((screen.getByLabelText<HTMLInputElement>('端点地址')).disabled).toBe(true)
     expect((screen.getByLabelText<HTMLSelectElement>('协议')).disabled).toBe(true)
-    await act(async () => { resolveProbe(ok({ models: SAMPLES })) })
+    await act(async () => { resolveProbe(ok(SAMPLES)) })
     expect(probeButton().disabled).toBe(false)
   })
 })

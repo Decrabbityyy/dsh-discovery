@@ -41,6 +41,11 @@ async function bench() {
   // inject-ordering requirements the section never reads.
   ctx.provide('connection', { api: {} } as never)
   ctx.provide('remote', {} as never)
+  // Nested remote faces are independent Cordis services and must be present
+  // for the plugin fiber's explicit namespace injections to activate.
+  ctx.provide('remote.llm', {} as never)
+  ctx.provide('remote.settings', {} as never)
+  ctx.provide('remote.credentials', {} as never)
   ctx.provide('locale', {} as never)
   ctx.provide('settingsScope', {} as never)
   return { ctx, slots: ctx.get('slots') as SlotRegistry }
@@ -60,7 +65,16 @@ function declare(slots: SlotRegistry): () => void {
 
 describe('ui-settings-discovery apply', () => {
   it('declares the services it uses', () => {
-    expect(inject).toEqual(['slots', 'locale', 'connection', 'remote', 'settingsScope'])
+    expect(inject).toEqual([
+      'slots',
+      'locale',
+      'connection',
+      'remote',
+      'remote.llm',
+      'remote.settings',
+      'remote.credentials',
+      'settingsScope',
+    ])
   })
 
   it('registers the discovery nav entry for declarations before or after apply', async () => {

@@ -291,7 +291,7 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
         setProbeError(response.error.message)
         return
       }
-      const found = response.value.models
+      const found = response.value
       setCandidates(found)
       // A fresh result set resets the filter so nothing starts hidden.
       setQuery('')

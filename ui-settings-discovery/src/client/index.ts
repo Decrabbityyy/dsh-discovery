@@ -33,7 +33,16 @@ const SECTION_LABEL = '模型发现'
  * relative to this one is NOT constrained; registration depends on each slot
  * through `slots.inject()`.
  */
-export const inject = ['slots', 'locale', 'connection', 'remote', 'settingsScope']
+export const inject = [
+  'slots',
+  'locale',
+  'connection',
+  'remote',
+  'remote.llm',
+  'remote.settings',
+  'remote.credentials',
+  'settingsScope',
+]
 
 /**
  * Register the discovery section once the `settings.section` declaration is
