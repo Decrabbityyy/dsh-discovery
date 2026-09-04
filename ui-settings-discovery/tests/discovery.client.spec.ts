@@ -1,7 +1,10 @@
 /** Wire constants, derivation helpers, and presets of the discovery section. */
 import { describe, expect, it } from 'vitest'
 import { CUSTOM_PRESET, ENGINE_PRESETS, PROTOCOLS } from '../src/client/presets.ts'
-import { deriveKeyRef, DISCOVERY_NS, messageOf, PI_AI_NS, ROUTE_PATTERN } from '../src/client/discovery.ts'
+import {
+  deriveKeyRef, DISCOVERY_NS, DISCOVERY_PLUGIN, DYNAMIC_PLUGIN, isActivePlugin,
+  messageOf, PI_AI_NS, ROUTE_PATTERN,
+} from '../src/client/discovery.ts'
 
 describe('discovery wire constants', () => {
   it('pins the fixed namespaces of the OMP wire', () => {
@@ -17,6 +20,21 @@ describe('discovery wire constants', () => {
 
   it('lists the static protocol choices', () => {
     expect(PROTOCOLS).toEqual(['openai-completions', 'openai-responses', 'anthropic-messages', 'google-generative-ai'])
+  })
+})
+
+describe('plugin inventory gating', () => {
+  const entries = [
+    { entryId: 'custom-id', moduleName: DISCOVERY_PLUGIN, enabled: true, fiberPhase: 'active' as const },
+    { entryId: 'disabled', moduleName: DYNAMIC_PLUGIN, enabled: false, fiberPhase: 'active' as const },
+    { entryId: 'pending', moduleName: DYNAMIC_PLUGIN, enabled: true, fiberPhase: 'pending' as const },
+    { entryId: 'failed', moduleName: DYNAMIC_PLUGIN, enabled: true, fiberPhase: 'failed' as const },
+    { entryId: 'wrong-module', moduleName: 'dsh-llm-discovery-copy', enabled: true, fiberPhase: 'active' as const },
+  ]
+
+  it('accepts only an exact active enabled module entry', () => {
+    expect(isActivePlugin({ entries }, DISCOVERY_PLUGIN)).toBe(true)
+    expect(isActivePlugin({ entries }, DYNAMIC_PLUGIN)).toBe(false)
   })
 })
 

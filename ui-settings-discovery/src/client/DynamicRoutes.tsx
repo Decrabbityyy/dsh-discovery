@@ -8,9 +8,9 @@
  * namespace the host plugin watches, so a hot edit reprobes without a
  * restart.
  *
- * The block renders only when the host plugin registered the namespace (the
- * merged Models panel gates on that); an absent namespace means the plugin is
- * not loaded and there is nothing to manage.
+ * The block renders only when the Host Loader inventory reports the plugin
+ * active (the merged Models panel gates on that); an inactive plugin means
+ * there is nothing to manage.
  */
 
 import { useEffect, useState } from 'react'

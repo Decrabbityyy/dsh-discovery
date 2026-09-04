@@ -46,6 +46,7 @@ async function bench() {
   ctx.provide('remote.llm', {} as never)
   ctx.provide('remote.settings', {} as never)
   ctx.provide('remote.credentials', {} as never)
+  ctx.provide('remote.pluginInventory', {} as never)
   ctx.provide('locale', {} as never)
   ctx.provide('settingsScope', {} as never)
   return { ctx, slots: ctx.get('slots') as SlotRegistry }
@@ -73,6 +74,7 @@ describe('ui-settings-discovery apply', () => {
       'remote.llm',
       'remote.settings',
       'remote.credentials',
+      'remote.pluginInventory',
       'settingsScope',
     ])
   })

@@ -1,11 +1,15 @@
 # dsh-client-ui-settings-discovery
 
-`dsh-client-ui-settings-discovery` 在 DeepSeek Harness Web 设置中增加「模型发现」页面。页面包含两个相互独立的区域，按已安装的宿主插件显示：
+`dsh-client-ui-settings-discovery` 在 DeepSeek Harness Web 设置中增加「模型发现」页面。页面包含两个相互独立的区域，按已启用且成功加载的宿主插件显示：
 
 - 安装 [`dsh-llm-discovery`](../llm-discovery/README.md) 后，显示端点探测和 Provider 采纳区域。
 - 安装 [`dsh-llm-dynamic-provider`](../llm-dynamic-provider/README.md) 后，显示动态路由管理区域。
 
 Web UI 本身不强制依赖其中任何一个；只需安装你要使用的功能。若两者都未安装，页面没有可操作区域。
+
+页面通过 Host 的 `pluginInventory/list` 快照判断可选宿主插件是否处于 active 状态，再显示对应区域。这只是插件状态读取，不是模型端点探测；用户不需要配置或访问任何特殊地址，只需在实际探测时填写真实的 `baseURL`。
+
+标准 Web profile 需要提供 Host 的 `plugin-inventory`，并使用能够挂载 `remote.llm`、`remote.settings`、`remote.credentials` 与 `remote.pluginInventory` 的匹配版本 `api-remotes`；不要混用不同发布系列的 Host 与 Client 包。如果清单 Remote 不可用，页面会安全地隐藏这些可选区域；这表示运行时状态未知，不等同于宿主插件一定未安装。
 
 ## 安装
 
@@ -89,7 +93,7 @@ dsh --profile web --dump-config
 
 ### 页面没有显示探测表单
 
-确认 `dsh-llm-discovery` 已安装并出现在 `dsh --profile web --dump-config` 输出中。只有 UI 插件时无法探测。
+确认 `dsh-llm-discovery` 已启用且成功加载，并检查 Web profile 的插件清单（「设置」→「插件」）中是否存在 active 条目。`dsh --profile web --dump-config` 只能确认配置层有该插件，不能证明它已成功启动。若 Host 的 `pluginInventory/list` 不可用，页面也会按安全策略隐藏区域；这不等同于插件未安装。只有 UI 插件时无法探测。
 
 ### 点击探测后显示认证错误
 
@@ -113,6 +117,7 @@ dsh --profile web --dump-config
 - 协议列表是固定的四种协议。
 - 路由 ID 建议以字母开头；数字开头虽然可能通过页面校验，但不适合作为环境变量派生名。
 - 连续快速保存动态路由可能触发重叠探测；一次保存后请等待结果再继续修改。
+- 宿主插件状态来自一次性的插件清单快照；启用、停用或热替换插件后，请重新打开页面以刷新可见区域。
 
 ## Model Experience
 

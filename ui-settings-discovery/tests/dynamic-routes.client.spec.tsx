@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 /**
  * The merged Models panel: the 动态路由 block renders only when the
- * dynamic-provider host plugin is mounted, and manages routes through the
- * plugin's own `/llm-dynamic-provider/routes` HTTP endpoint (not the gated
- * settings RPC, which refuses the namespace before its first route exists).
+ * dynamic-provider host plugin is active in the Host Loader inventory, and
+ * manages routes through the plugin's own `/llm-dynamic-provider/routes` HTTP
+ * endpoint (not the gated settings RPC).
  */
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
@@ -42,10 +42,6 @@ function ok(value: unknown): DiscoveryResponse<unknown> {
   return { ok: true, value } as DiscoveryResponse<unknown>
 }
 
-function fail(message: string, code: string): DiscoveryResponse<unknown> {
-  return { ok: false, error: { code, message } } as DiscoveryResponse<unknown>
-}
-
 /** A describe answer whose namespaces list is the given set of ns strings. */
 function describeWith(namespaces: readonly { ns: string; routes?: Record<string, unknown> }[]): Mock {
   return vi.fn(() => Promise.resolve(ok({
@@ -57,7 +53,15 @@ function describeWith(namespaces: readonly { ns: string; routes?: Record<string,
   })))
 }
 
-function faceWith(overrides: { describe?: Mock; mutate?: Mock; set?: Mock; providers?: Mock; discover?: Mock }): {
+function faceWith(overrides: {
+  describe?: Mock
+  mutate?: Mock
+  set?: Mock
+  providers?: Mock
+  discover?: Mock
+  pluginInventory?: Mock
+  dynamicLoaded?: boolean
+}): {
   api: DiscoveryApi
   describe: Mock
   mutate: Mock
@@ -67,23 +71,23 @@ function faceWith(overrides: { describe?: Mock; mutate?: Mock; set?: Mock; provi
   const mutate = overrides.mutate ?? vi.fn(() => Promise.resolve(ok({ ns: 'llm-dynamic-provider', revision: 2 })))
   const set = overrides.set ?? vi.fn(() => Promise.resolve(ok({})))
   const providers = overrides.providers ?? vi.fn(() => Promise.resolve(ok({ providers: [] })))
-  // Default: the dynamic discovery offer answers (network error = loaded).
-  const discover = overrides.discover ?? vi.fn(() => Promise.resolve(
-    fail('could not reach http://127.0.0.1:1/models', 'model-discovery-failed'),
-  ))
+  const discover = overrides.discover ?? vi.fn(() => Promise.resolve(ok([])))
+  const dynamicLoaded = overrides.dynamicLoaded !== false
+  const pluginInventory = overrides.pluginInventory ?? vi.fn(() => Promise.resolve(ok({
+    entries: [
+      { entryId: 'llm-discovery', moduleName: 'dsh-llm-discovery', enabled: true, fiberPhase: 'active' },
+      ...(dynamicLoaded
+        ? [{ entryId: 'llm-dynamic-provider', moduleName: 'dsh-llm-dynamic-provider', enabled: true, fiberPhase: 'active' }]
+        : []),
+    ],
+  })))
   const api = {
     llm: { discoverModels: discover, providers },
+    pluginInventory: { list: pluginInventory },
     settings: { describe, mutate },
     credentials: { set },
   } as DiscoveryApi
   return { api, describe, mutate, set }
-}
-
-/** The discover rejection an UNREGISTERED dynamic namespace produces. */
-function notRegisteredDiscover(): Mock {
-  return vi.fn(() => Promise.resolve(
-    fail('no model discovery is registered for "llm-dynamic-provider"', 'model-discovery-failed'),
-  ))
 }
 
 /** The rendered 动态路由 block, scoped so its fields don't collide with the discovery block's. */
@@ -92,14 +96,14 @@ function dynamicBlock(): HTMLElement {
 }
 
 describe('merged Models panel gating', () => {
-  it('hides the dynamic-routes block when the dynamic discovery offer is not registered', async () => {
-    const { api } = faceWith({ discover: notRegisteredDiscover() })
+  it('hides the dynamic-routes block when inventory has no active dynamic plugin', async () => {
+    const { api } = faceWith({ dynamicLoaded: false })
     render(<DiscoverySection api={api} />)
     await waitFor(() => { expect(screen.getByText('模型发现')).toBeTruthy() })
     await waitFor(() => { expect(screen.queryByText('动态路由')).toBeNull() })
   })
 
-  it('shows the dynamic-routes block when the dynamic discovery offer is registered', async () => {
+  it('shows the dynamic-routes block when inventory reports an active plugin', async () => {
     const { api } = faceWith({
       describe: describeWith([{ ns: 'llm-pi-ai' }, { ns: 'llm-dynamic-provider', routes: {} }]),
     })

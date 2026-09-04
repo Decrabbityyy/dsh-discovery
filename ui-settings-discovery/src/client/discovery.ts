@@ -7,9 +7,40 @@
  */
 
 import type { LlmDiscoveredModel, LlmModelDiscoveryRequest, RpcResponse } from '@deepseek-ai/dsh-api-remotes/client'
-import { DISCOVERY_NS, DYNAMIC_NS, normalizeModelName, PI_AI_NS, ROUTE_PATTERN, deriveKeyRef, messageOf } from 'dsh-llm-endpoint-base/vocabulary'
+import {
+  DISCOVERY_NS, DYNAMIC_NS, normalizeModelName, PI_AI_NS, ROUTE_PATTERN, deriveKeyRef, messageOf,
+} from 'dsh-llm-endpoint-base/vocabulary'
 
 export { DISCOVERY_NS, DYNAMIC_NS, normalizeModelName, PI_AI_NS, ROUTE_PATTERN, deriveKeyRef, messageOf }
+
+/** Exact Loader module names (`moduleName`, not the Cordis plugin name). */
+export const DISCOVERY_PLUGIN = 'dsh-llm-discovery'
+export const DYNAMIC_PLUGIN = 'dsh-llm-dynamic-provider'
+
+/** The plugin-inventory fields needed by this client-side gate. */
+export interface PluginInventoryEntry {
+  readonly entryId: string
+  readonly moduleName: string
+  readonly enabled: boolean
+  readonly fiberPhase: 'pending' | 'loading' | 'active' | 'failed' | 'unloading' | null
+}
+
+/** The point-in-time Host Loader inventory projection. */
+export interface PluginInventorySnapshot {
+  readonly entries: readonly PluginInventoryEntry[]
+}
+
+/** Whether one optional Host plugin has a live Loader fiber. */
+export function isActivePlugin(
+  snapshot: PluginInventorySnapshot,
+  moduleName: string,
+): boolean {
+  return snapshot.entries.some(entry =>
+    entry.moduleName === moduleName
+    && entry.enabled
+    && entry.fiberPhase === 'active',
+  )
+}
 
 /** One dynamic route declaration as stored under the dynamic namespace. */
 export interface DynamicRoute {
@@ -78,6 +109,10 @@ export interface DiscoveryApi {
     discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest): Promise<DiscoveryResponse<readonly LlmDiscoveredModel[]>>
     /** List the registered provider routes. */
     providers(): Promise<DiscoveryResponse<{ readonly providers: readonly ProviderWireEntry[] }>>
+  }
+  readonly pluginInventory: {
+    /** Read the current Host Loader entries for optional-feature gating. */
+    list(): Promise<DiscoveryResponse<PluginInventorySnapshot>>
   }
   readonly settings: {
     /** Read every registered namespace with its revision. */

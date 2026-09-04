@@ -11,7 +11,9 @@
  * selected models — or no `models` key at all when the user selected nothing,
  * which serves the route's whole catalog. A typed key is stored FIRST through
  * `credentials.set` under the derived `<ROUTE>_API_KEY` reference, and the
- * profile records `apiKeyEnv` only when a key was entered.
+ * profile records `apiKeyEnv` only when a key was entered. Optional host-backed
+ * blocks are selected from the Host Loader inventory; no model request is used
+ * merely to determine whether an optional plugin is present.
  *
  * Probe state is component-local: nothing here is shared across entries or
  * needs to survive remounts, so there is no store to declare.
@@ -21,7 +23,10 @@ import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-api-remotes/client'
 import clsx from 'clsx'
-import { deriveKeyRef, DISCOVERY_NS, DYNAMIC_NS, messageOf, normalizeModelName, PI_AI_NS, ROUTE_PATTERN } from './discovery.ts'
+import {
+  deriveKeyRef, DISCOVERY_NS, DISCOVERY_PLUGIN, DYNAMIC_PLUGIN, isActivePlugin,
+  messageOf, normalizeModelName, PI_AI_NS, ROUTE_PATTERN,
+} from './discovery.ts'
 import type { DiscoveryApi } from './discovery.ts'
 import { DynamicRoutes } from './DynamicRoutes.tsx'
 import { CUSTOM_PRESET, ENGINE_PRESETS, PROTOCOLS, reasoningEffortsOf } from './presets.ts'
@@ -100,57 +105,48 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
   // a route inherits each known model's reasoning from the catalog, so the
   // picker disables itself. Derived on route edits, not at render time.
   const [isCatalogRoute, setIsCatalogRoute] = useState(false)
-  // Whether the dynamic-provider host plugin is loaded. The panel probes its
-  // model-discovery offer: `llm.discoverModels` against the dynamic namespace
-  // answers (even with a network error) only while the plugin is mounted; an
-  // unregistered namespace fails with a `NO_DISCOVERY`-flavored message. This
-  // detects loading directly, so the block shows even with zero routes.
+  // Optional host blocks are gated by the Host Loader inventory. A plugin is
+  // usable only after its root fiber is active; pending and failed entries stay
+  // hidden rather than turning an unavailable operation into a visible form.
   const [dynamicLoaded, setDynamicLoaded] = useState(false)
-  // Whether the ad-hoc discovery host plugin (`llm-discovery`) is loaded,
-  // detected the same way against its own namespace. The probe form renders
-  // only while the offer is mounted; without it a probe could only fail.
   const [discoveryLoaded, setDiscoveryLoaded] = useState(false)
 
   useEffect(() => {
     let cancelled = false
-    void api.llm.discoverModels(DYNAMIC_NS, { baseURL: 'http://127.0.0.1:1' }).then((response) => {
+    void Promise.resolve().then(() => api.pluginInventory.list()).then((response) => {
       if (cancelled) return
-      // A registered offer fails the probe with a network/protocol error; an
-      // unregistered one fails naming the missing discovery. Only the latter
-      // means the plugin is absent.
-      const missing = !response.ok && /no model discovery is registered/i.test(response.error.message)
-      setDynamicLoaded(!missing)
+      if (!response.ok) {
+        setDynamicLoaded(false)
+        setDiscoveryLoaded(false)
+        return
+      }
+      setDynamicLoaded(isActivePlugin(response.value, DYNAMIC_PLUGIN))
+      setDiscoveryLoaded(isActivePlugin(response.value, DISCOVERY_PLUGIN))
     }).catch(() => {
-      // A transport failure leaves the block hidden, matching a not-loaded plugin.
+      if (cancelled) return
+      // A transport failure must not leave a previous snapshot's visibility
+      // behind when the API service is replaced or reconnects.
+      setDynamicLoaded(false)
+      setDiscoveryLoaded(false)
     })
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one detection read on mount.
-  }, [])
+  }, [api])
 
+  // Fetch the thinking-level catalog only after inventory confirms the
+  // dynamic provider is active. This metadata route is optional feature data,
+  // not a plugin-presence probe.
   useEffect(() => {
     let cancelled = false
-    void api.llm.discoverModels(DISCOVERY_NS, { baseURL: 'http://127.0.0.1:1' }).then((response) => {
-      if (cancelled) return
-      const missing = !response.ok && /no model discovery is registered/i.test(response.error.message)
-      setDiscoveryLoaded(!missing)
-    }).catch(() => {
-      // A transport failure leaves the block hidden, matching a not-loaded plugin.
-    })
-    return () => {
-      cancelled = true
+    if (!dynamicLoaded) {
+      setCatalog({})
+      setModalities({})
+      setFacts({})
+      return () => {
+        cancelled = true
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one detection read on mount.
-  }, [])
-
-  // Fetch the thinking-level catalog from the dynamic provider's own HTTP
-  // route (no wire schema strips it). An absent plugin answers a 404 the
-  // catch swallows, leaving the catalog empty and the pickers defaulting to
-  // no levels — so the fetch always runs regardless of the dynamic block's
-  // visibility.
-  useEffect(() => {
-    let cancelled = false
     void fetch('/llm-dynamic-provider/catalog').then(response => response.json()).then((body: {
       catalog?: Record<string, readonly string[]>
       modalities?: Record<string, { input?: readonly string[]; output?: readonly string[] }>
@@ -166,7 +162,7 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [dynamicLoaded])
 
   // When the catalog lands after a probe, backfill defaults for models the
   // probe initialized empty; a model with any pick already (user or catalog)

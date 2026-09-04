@@ -40,8 +40,26 @@ interface ScriptedFaceOptions {
   mutate?: unknown
   set?: unknown
   providers?: unknown
-  /** When true the dynamic-plugin sentinel answers a network error (offer present), so the catalog fetch fires. */
+  /** Whether the Host inventory reports each optional plugin as active. */
+  discoveryLoaded?: boolean
   dynamicLoaded?: boolean
+  /** Optional inventory payload for lifecycle-state cases. */
+  inventory?: unknown
+  /** Optional scripted list result for inventory failure cases. */
+  inventoryResult?: unknown
+  /** Optional list function for transport-rejection cases. */
+  pluginInventory?: unknown
+}
+
+function inventoryFor(options: ScriptedFaceOptions): unknown {
+  const entries: unknown[] = []
+  if (options.discoveryLoaded !== false) {
+    entries.push({ entryId: 'llm-discovery', moduleName: 'dsh-llm-discovery', enabled: true, fiberPhase: 'active' })
+  }
+  if (options.dynamicLoaded === true) {
+    entries.push({ entryId: 'llm-dynamic-provider', moduleName: 'dsh-llm-dynamic-provider', enabled: true, fiberPhase: 'active' })
+  }
+  return { entries }
 }
 
 function scriptedFace(options: ScriptedFaceOptions = {}): {
@@ -51,30 +69,17 @@ function scriptedFace(options: ScriptedFaceOptions = {}): {
   mutate: Mock
   set: Mock
   providers: Mock
+  pluginInventory: Mock
 } {
   const models = options.models ?? SAMPLES
-  // The panel probes each host plugin's offer with the sentinel baseURL to
-  // test registration. These specs assume the discovery plugin loaded (the
-  // probe form shows) and the dynamic plugin absent (its block stays hidden):
-  // the discovery sentinel answers a network error (offer present), the
-  // dynamic sentinel answers the not-registered rejection. Real probe calls
-  // return the scripted models. A custom `discover` is wrapped so the
-  // discovery-sentinel still reports loaded regardless of the script.
-  const base = options.discover === undefined
-    ? vi.fn((settingsNs: string, request: { baseURL?: string }) => {
-      if (request.baseURL !== 'http://127.0.0.1:1') return Promise.resolve(ok(models))
-      if (settingsNs === 'llm-discovery') {
-        return Promise.resolve(fail('connect ECONNREFUSED 127.0.0.1:1', 'model-discovery-failed'))
-      }
-      return options.dynamicLoaded === true
-        ? Promise.resolve(fail('connect ECONNREFUSED 127.0.0.1:1', 'model-discovery-failed'))
-        : Promise.resolve(fail('no model discovery is registered for "llm-dynamic-provider"', 'model-discovery-failed'))
-    })
-    : (options.discover as (settingsNs: string, request: { baseURL?: string }) => unknown)
-  const discover = vi.fn((settingsNs: string, request: { baseURL?: string }) =>
-    request.baseURL === 'http://127.0.0.1:1' && settingsNs === 'llm-discovery'
-      ? Promise.resolve(fail('connect ECONNREFUSED 127.0.0.1:1', 'model-discovery-failed'))
-      : base(settingsNs, request)) as Mock
+  // The inventory is the availability signal; discovery calls themselves only
+  // represent an actual user probe. The default composition has the ad-hoc
+  // discovery plugin active and the dynamic provider absent.
+  const discover = (
+    options.discover === undefined
+      ? vi.fn(() => Promise.resolve(ok(models)))
+      : options.discover
+  ) as Mock
   const describe = (
     options.describe === undefined
       ? vi.fn(() => Promise.resolve(ok({
@@ -97,39 +102,51 @@ function scriptedFace(options: ScriptedFaceOptions = {}): {
   const providers = (
     options.providers === undefined ? vi.fn(() => Promise.resolve(ok({ providers: [] }))) : options.providers
   ) as Mock
+  const pluginInventory = (
+    options.pluginInventory === undefined
+      ? vi.fn(() => Promise.resolve(
+        options.inventoryResult ?? ok(options.inventory ?? inventoryFor(options)),
+      ))
+      : options.pluginInventory
+  ) as Mock
   const api = {
     llm: { discoverModels: discover, providers },
+    pluginInventory: { list: pluginInventory },
     settings: { describe, mutate },
     credentials: { set },
   } as DiscoveryApi
-  return { api, discover, describe, mutate, set, providers }
+  return { api, discover, describe, mutate, set, providers, pluginInventory }
 }
 
 const probeButton = (): HTMLButtonElement => screen.getByRole('button', { name: '探测' }) as HTMLButtonElement
 const adoptButton = (): HTMLButtonElement =>
   screen.getByRole('button', { name: '采纳为 Provider' }) as HTMLButtonElement
 
-/** The probe calls a discover mock saw, excluding the dynamic-plugin detection ping (sentinel baseURL). */
+/** The discovery calls made by an actual user probe. Availability uses inventory. */
 function probeCalls(discover: Mock): unknown[][] {
-  return discover.mock.calls.filter(call => (call[1] as { baseURL?: string }).baseURL !== 'http://127.0.0.1:1')
+  return discover.mock.calls
 }
 
-/** Render the section and wait for the discovery-offer detection to reveal the probe form. */
+/** Render the section and wait for the Host inventory to reveal the probe form. */
 async function renderLoaded(api: DiscoveryApi): Promise<void> {
   render(<DiscoverySection api={api} />)
-  await waitFor(() => { expect(screen.getByLabelText('端点地址')).toBeDefined() })
+  await waitFor(() => { expect(screen.getAllByLabelText('端点地址').length).toBeGreaterThan(0) })
 }
 
 /** Fill the endpoint field and run one probe, waiting for it to settle. */
 async function probeWith(baseURL = 'http://127.0.0.1:11434'): Promise<void> {
-  fireEvent.change(screen.getByLabelText('端点地址'), { target: { value: baseURL } })
+  const endpoint = screen.getAllByLabelText<HTMLInputElement>('端点地址')[0]
+  if (endpoint === undefined) throw new Error('discovery endpoint field is missing')
+  fireEvent.change(endpoint, { target: { value: baseURL } })
   fireEvent.click(probeButton())
   await waitFor(() => { expect(screen.queryByText('探测中…')).toBeNull() })
 }
 
 /** Type a route id so the adopt button enables. */
 function typeRoute(route: string): void {
-  fireEvent.change(screen.getByLabelText('路由 ID'), { target: { value: route } })
+  const field = screen.getAllByLabelText<HTMLInputElement>('路由 ID')[0]
+  if (field === undefined) throw new Error('discovery route field is missing')
+  fireEvent.change(field, { target: { value: route } })
 }
 
 describe('DiscoverySection rendering', () => {
@@ -144,6 +161,85 @@ describe('DiscoverySection rendering', () => {
     expect(probeButton().disabled).toBe(true)
     fireEvent.change(screen.getByLabelText('端点地址'), { target: { value: 'http://127.0.0.1:11434' } })
     expect(probeButton().disabled).toBe(false)
+  })
+
+  it('uses the inventory for availability and makes no discovery call on mount', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ catalog: {}, routes: {} }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { api, discover, pluginInventory } = scriptedFace({ dynamicLoaded: true })
+    await renderLoaded(api)
+    expect(pluginInventory).toHaveBeenCalledTimes(1)
+    expect(discover).not.toHaveBeenCalled()
+    await waitFor(() => { expect(screen.getByText('动态路由')).toBeDefined() })
+    expect(fetchMock.mock.calls.some(([url]) => url === '/llm-dynamic-provider/catalog')).toBe(true)
+  })
+
+  it('does not request dynamic metadata when the dynamic plugin is absent', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    await renderLoaded(scriptedFace().api)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('gates the two optional blocks independently', async () => {
+    const { api } = scriptedFace({ discoveryLoaded: false, dynamicLoaded: true })
+    render(<DiscoverySection api={api} />)
+    await waitFor(() => { expect(screen.getByText('动态路由')).toBeDefined() })
+    expect(screen.queryByText('Ollama')).toBeNull()
+  })
+
+  it('keeps inactive inventory entries hidden', async () => {
+    const { api } = scriptedFace({
+      inventory: {
+        entries: [
+          { entryId: 'llm-discovery', moduleName: 'dsh-llm-discovery', enabled: false, fiberPhase: 'active' },
+          { entryId: 'llm-dynamic-provider', moduleName: 'dsh-llm-dynamic-provider', enabled: true, fiberPhase: 'pending' },
+          { entryId: 'failed-discovery', moduleName: 'dsh-llm-discovery', enabled: true, fiberPhase: 'failed' },
+          { entryId: 'unobserved-dynamic', moduleName: 'dsh-llm-dynamic-provider', enabled: true, fiberPhase: null },
+        ],
+      },
+    })
+    render(<DiscoverySection api={api} />)
+    await waitFor(() => { expect(screen.getByText('模型发现')).toBeDefined() })
+    expect(screen.queryByLabelText('端点地址')).toBeNull()
+    expect(screen.queryByText('动态路由')).toBeNull()
+  })
+
+  it('fails closed when the inventory Remote returns an error', async () => {
+    const { api, discover } = scriptedFace({
+      inventoryResult: fail('inventory unavailable', 'REMOTE_ERROR'),
+    })
+    render(<DiscoverySection api={api} />)
+    await waitFor(() => { expect(screen.getByText('模型发现')).toBeDefined() })
+    expect(screen.queryByLabelText('端点地址')).toBeNull()
+    expect(screen.queryByText('动态路由')).toBeNull()
+    expect(discover).not.toHaveBeenCalled()
+  })
+
+  it('fails closed when the inventory method throws synchronously', async () => {
+    const { api, discover } = scriptedFace({
+      pluginInventory: vi.fn(() => { throw new Error('inventory method missing') }),
+    })
+    render(<DiscoverySection api={api} />)
+    await waitFor(() => { expect(screen.getByText('模型发现')).toBeDefined() })
+    expect(screen.queryByLabelText('端点地址')).toBeNull()
+    expect(screen.queryByText('动态路由')).toBeNull()
+    expect(discover).not.toHaveBeenCalled()
+  })
+
+  it('fails closed when the inventory Remote rejects transport', async () => {
+    const { api, discover } = scriptedFace({
+      pluginInventory: vi.fn(() => Promise.reject(new Error('connection lost'))),
+    })
+    render(<DiscoverySection api={api} />)
+    await waitFor(() => { expect(screen.getByText('模型发现')).toBeDefined() })
+    expect(screen.queryByLabelText('端点地址')).toBeNull()
+    expect(screen.queryByText('动态路由')).toBeNull()
+    expect(discover).not.toHaveBeenCalled()
   })
 })
 
@@ -255,9 +351,7 @@ describe('probe', () => {
 
   it('shows a model-discovery-failed rejection verbatim', async () => {
     const { api } = scriptedFace({
-      discover: vi.fn((_settingsNs: string, request: { baseURL?: string }) => request.baseURL === 'http://127.0.0.1:1'
-        ? Promise.resolve(fail('no model discovery is registered for "llm-dynamic-provider"', 'model-discovery-failed'))
-        : Promise.resolve(fail('无法连接到 127.0.0.1:11434，请检查服务是否已启动', 'model-discovery-failed'))),
+      discover: vi.fn(() => Promise.resolve(fail('无法连接到 127.0.0.1:11434，请检查服务是否已启动', 'model-discovery-failed'))),
     })
     await renderLoaded(api)
     await probeWith()
@@ -435,7 +529,7 @@ describe('adoption', () => {
       'qwen2.5:7b': ['off', 'high'],
       'llama3.2:1b': ['high'],
     })
-    const { api, mutate } = scriptedFace()
+    const { api, mutate } = scriptedFace({ dynamicLoaded: true })
     await renderLoaded(api)
     await probeWith()
     // The catalog defaults preselect each model's levels (`off: null` means

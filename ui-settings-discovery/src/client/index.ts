@@ -1,9 +1,10 @@
 /**
  * Model-discovery settings section plugin, browser half. It registers the
  * 模型发现 section into the settings panel and consumes the public
- * settings/credentials/llm Remote faces through `ctx.remote`; the host
- * discovery offer (namespace `llm-discovery`) is a separate plugin this
- * package never mounts. Export discipline: packages/client/AGENTS.md.
+ * settings, credentials, llm, and pluginInventory Remote faces through
+ * `ctx.remote`; the host discovery offers are separate plugins this package
+ * never mounts.
+ * Export discipline: packages/client/AGENTS.md.
  */
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 // Type-only: pulls the cordis Context augmentation carrying `remote` and the
@@ -26,9 +27,11 @@ const SECTION_LABEL = '模型发现'
 
 /**
  * Required services (cordis fiber inject), matching the alpha.4 settings
- * sections: `remote` is the typed Remote client this page calls, while
- * `locale`/`settingsScope` are runtime ordering requirements only (this
- * section renders static copy and no scoped value, so it never reads them).
+ * sections: `remote` and its generated faces (`remote.llm`,
+ * `remote.settings`, `remote.credentials`, and `remote.pluginInventory`) are
+ * the typed Remote clients this page calls, while `locale`/`settingsScope` are
+ * runtime ordering requirements only (this section renders static copy and no
+ * scoped value, so it never reads them).
  * The target slot is declared by ui-settings' apply, whose activation order
  * relative to this one is NOT constrained; registration depends on each slot
  * through `slots.inject()`.
@@ -41,6 +44,7 @@ export const inject = [
   'remote.llm',
   'remote.settings',
   'remote.credentials',
+  'remote.pluginInventory',
   'settingsScope',
 ]
 
