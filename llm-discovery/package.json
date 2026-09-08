@@ -53,9 +53,9 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",
-    "@deepseek-ai/dsh-llm": "^0.1.2-alpha.4",
+    "@deepseek-ai/dsh-llm": "^0.1.2-alpha.4 || ^0.1.5-rc.1",
     "@deepseek-ai/schemastery": "^3.18.2",
-    "@earendil-works/pi-ai": "*"
+    "@earendil-works/pi-ai": "^0.85.1"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis": {
@@ -73,10 +73,10 @@
     "@deepseek-ai/cordis": "^4.0.2",
     "@deepseek-ai/cordis-plugin-include": "^1.0.7",
     "@deepseek-ai/cordis-plugin-loader": "^1.0.3",
-    "@deepseek-ai/dsh-invariants": "^0.1.2-alpha.4",
-    "@deepseek-ai/dsh-llm": "^0.1.2-alpha.4",
+    "@deepseek-ai/dsh-invariants": "^0.1.5-rc.2",
+    "@deepseek-ai/dsh-llm": "^0.1.5-rc.2",
     "@deepseek-ai/schemastery": "^3.18.2",
-    "@earendil-works/pi-ai": "^0.82.1",
+    "@earendil-works/pi-ai": "^0.85.1",
     "dsh-llm-endpoint-base": "workspace:*",
     "tsdown": "^0.22.2"
   }

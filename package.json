@@ -4,7 +4,14 @@
   "type": "module",
   "scripts": {
     "build": "pnpm -r run build",
-    "test": "pnpm -r run test"
+    "test": "pnpm -r run test",
+    "check": "node scripts/compat/check.mjs",
+    "check:types": "node scripts/compat/check.mjs --only types",
+    "check:host": "node scripts/compat/check.mjs --only surface,host-types",
+    "check:deps": "node scripts/compat/check.mjs --only deps",
+    "check:pi-ai": "node scripts/compat/check.mjs --only pi-ai",
+    "check:manifest": "node scripts/compat/check.mjs --only manifest",
+    "sync:pi-ai": "node scripts/compat/sync-pi-ai.mjs"
   },
   "devDependencies": {
     "@testing-library/dom": "^10.4.1",
