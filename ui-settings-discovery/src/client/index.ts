@@ -1,13 +1,14 @@
 /**
- * Model-discovery settings section plugin, browser half. It registers the
- * 模型发现 section into the settings panel and consumes the public
- * settings, credentials, llm, and pluginInventory Remote faces through
- * `ctx.remote`; the host discovery offers are separate plugins this package
- * never mounts.
- * Export discipline: packages/client/AGENTS.md.
+ * Model-discovery settings section plugin, browser half: registers the
+ * 模型发现 section into the settings panel and drives it through the public
+ * settings, credentials, llm, and pluginInventory Remote faces.
  */
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-// Type-only: pulls the cordis Context augmentation carrying `remote` and the
+// The browser half is an ordinary cordis plugin: its context type is cordis's
+// own (0.1.5 deleted the dsh-client-runtime facade that used to alias it).
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+// Type-only: pulls the renderer's Context augmentation carrying `slots`.
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+// Type-only: pulls the Context augmentation carrying `remote` and the
 // re-exported wire vocabulary (LlmDiscoveredModel, RpcResponse, …).
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 // Type-only: pulls the shell's SlotMap merge (the 'settings.section' entry).
@@ -19,22 +20,18 @@ import type { DiscoveryApi } from './discovery.ts'
 export type { DiscoverySectionInjected, DiscoverySectionProps } from './DiscoverySection.tsx'
 export type { DiscoveryApi } from './discovery.ts'
 
-/** Settings nav id of this section (drives `only` filtering). */
+/** Settings nav id of this section; it drives `only` filtering. */
 export const SECTION_ID = 'model-discovery'
 
-/** Settings nav label; static Chinese product copy, so no locale lookup. */
+/** Static Chinese product copy, so no locale lookup. */
 const SECTION_LABEL = '模型发现'
 
 /**
- * Required services (cordis fiber inject), matching the alpha.4 settings
- * sections: `remote` and its generated faces (`remote.llm`,
- * `remote.settings`, `remote.credentials`, and `remote.pluginInventory`) are
- * the typed Remote clients this page calls, while `locale`/`settingsScope` are
- * runtime ordering requirements only (this section renders static copy and no
- * scoped value, so it never reads them).
- * The target slot is declared by ui-settings' apply, whose activation order
- * relative to this one is NOT constrained; registration depends on each slot
- * through `slots.inject()`.
+ * Required services. `remote` and its generated faces are the typed Remote
+ * clients this page calls; `locale` and `settingsScope` are runtime ordering
+ * requirements only, since the section renders static copy and no scoped value.
+ * The target slot is injected through `slots.inject()`, so the activation order
+ * against the ui-settings plugin is not constrained.
  */
 export const inject = [
   'slots',
@@ -49,9 +46,8 @@ export const inject = [
 ]
 
 /**
- * Register the discovery section once the `settings.section` declaration is
- * on the ledger.
- * @param ctx - client root context.
+ * Register the discovery section once the `settings.section` declaration is on
+ * the ledger.
  */
 export function apply(ctx: ClientContext): void {
   // The published ClientRemote interface carries only the stream/host seats;

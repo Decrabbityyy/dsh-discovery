@@ -1,12 +1,5 @@
-/**
- * Deployment configuration for `dsh-llm-discovery`. Every field is
- * optional; the resolve step below is the one place defaults are applied.
- * @module dsh-llm-discovery/config
- */
-
 import z from '@deepseek-ai/schemastery'
 
-/** Which endpoint engines the discovery ladder may try. */
 export interface EngineSwitches {
   /** Ollama native API (`/api/tags` + per-model `/api/show`). Default true. */
   ollama?: boolean
@@ -16,28 +9,24 @@ export interface EngineSwitches {
   openaiModels?: boolean
 }
 
-/** Tunables of the endpoint-discovery plugin. */
+/** Tunables of the endpoint-discovery plugin; every field is optional. */
 export interface Config {
   /** Per-request probe timeout in milliseconds (default 10,000). */
   timeoutMs?: number
   /** Maximum reply size in bytes before a probe is refused (default 4 MiB). */
   maxResponseBytes?: number
   /**
-   * Fill fields an endpoint leaves undisclosed from the bundled pi-ai model
-   * catalog, matched by exact model id (default true). Endpoint-reported facts
-   * always win; unknown ids stay undisclosed.
+   * Fill fields an endpoint leaves undisclosed from the bundled pi-ai catalog,
+   * matched by exact model id (default true). Endpoint-reported facts always
+   * win, and unknown ids stay undisclosed.
    */
   enrichment?: boolean
-  /**
-   * Context window reported for an Ollama model whose `/api/show` metadata
-   * carries no `*.context_length` (default 128,000).
-   */
+  /** Context window for an Ollama model whose `/api/show` metadata carries no `*.context_length` (default 128,000). */
   ollamaDefaultContextWindow?: number
   /** Per-engine kill switches; an engine omitted from the map stays enabled. */
   engines?: EngineSwitches
 }
 
-/** Schemastery configuration for the endpoint-discovery plugin. */
 export const Config: z<Config> = z.object({
   timeoutMs: z.number().step(1).min(1),
   maxResponseBytes: z.number().step(1).min(1024),
@@ -52,22 +41,16 @@ export const Config: z<Config> = z.object({
 
 /** The configuration with every default applied. */
 export interface ResolvedDiscoveryConfig {
-  /** See {@link Config.timeoutMs}. */
   timeoutMs: number
-  /** See {@link Config.maxResponseBytes}. */
   maxResponseBytes: number
-  /** See {@link Config.enrichment}. */
   enrichment: boolean
-  /** See {@link Config.ollamaDefaultContextWindow}. */
   ollamaDefaultContextWindow: number
-  /** See {@link Config.engines}. */
   engines: Required<EngineSwitches>
 }
 
 /**
- * Resolve the deployment config into its fully-defaulted form.
- * @param config - the raw cordis.yml entry config, already schema-validated.
- * @returns the resolved discovery configuration.
+ * Resolve the deployment config into its fully-defaulted form. This is the one
+ * place the defaults live.
  */
 export function resolveDiscoveryConfig(config: Config | undefined): ResolvedDiscoveryConfig {
   return {

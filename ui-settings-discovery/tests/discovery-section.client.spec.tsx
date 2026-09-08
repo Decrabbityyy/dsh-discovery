@@ -164,7 +164,7 @@ describe('DiscoverySection rendering', () => {
   })
 
   it('uses the inventory for availability and makes no discovery call on mount', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve({
+    const fetchMock = vi.fn((_input: unknown) => Promise.resolve({
       ok: true,
       status: 200,
       json: () => Promise.resolve({ catalog: {}, routes: {} }),

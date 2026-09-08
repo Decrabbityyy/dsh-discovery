@@ -1,16 +1,8 @@
 /**
- * The 动态路由 (Dynamic Routes) block: manage the routes declared in the
- * `llm-dynamic-provider` namespace. Each route is an endpoint the dynamic
- * provider reprobes at startup, registering the discovered catalog into the
- * in-memory LLM registry. This block lists the declared routes and adds,
- * edits, and removes them through the same `settings.describe` /
- * `settings.mutate` wire the discovery block uses — the writes land in the
- * namespace the host plugin watches, so a hot edit reprobes without a
- * restart.
- *
- * The block renders only when the Host Loader inventory reports the plugin
- * active (the merged Models panel gates on that); an inactive plugin means
- * there is nothing to manage.
+ * The 动态路由 block: manage the routes declared in the `llm-dynamic-provider`
+ * namespace. Writes land in the namespace the host plugin watches, so a hot
+ * edit reprobes without a restart. The block renders only when the Host Loader
+ * inventory reports that plugin active.
  */
 
 import { useEffect, useState } from 'react'
@@ -20,10 +12,9 @@ import { deriveKeyRef, messageOf, ROUTE_PATTERN } from './discovery.ts'
 import type { DiscoveryApi, DynamicRoute } from './discovery.ts'
 import styles from './DiscoverySection.module.css'
 
-/** The four wire protocols a dynamic route may speak. */
 const DYNAMIC_PROTOCOLS = ['openai-completions', 'openai-responses', 'anthropic-messages', 'google-generative-ai'] as const
 
-/** The editable draft of one route (key is the route id, edited separately). */
+/** One route's editable draft; the route id is edited separately. */
 interface RouteDraft {
   id: string
   baseURL: string
@@ -32,14 +23,8 @@ interface RouteDraft {
   displayName: string
 }
 
-/** An empty draft for the add form. */
 const EMPTY_DRAFT: RouteDraft = { id: '', baseURL: '', api: 'openai-completions', apiKey: '', displayName: '' }
 
-/**
- * Render the dynamic-routes block.
- * @param props.api - wire faces the block reads and writes through.
- * @returns the block.
- */
 export function DynamicRoutes({ api }: { api: DiscoveryApi }): ReactNode {
   const [routes, setRoutes] = useState<Record<string, DynamicRoute> | undefined>(undefined)
   const [loadError, setLoadError] = useState<string | undefined>(undefined)
@@ -48,7 +33,7 @@ export function DynamicRoutes({ api }: { api: DiscoveryApi }): ReactNode {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | undefined>(undefined)
 
-  /** Re-read the routes from the plugin's own endpoint (not the gated settings RPC). */
+  /** Re-read the routes, bypassing the settings RPC the host exposes only once a route exists. */
   const reload = async (): Promise<void> => {
     try {
       const response = await fetch('/llm-dynamic-provider/routes')
@@ -69,7 +54,7 @@ export function DynamicRoutes({ api }: { api: DiscoveryApi }): ReactNode {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one read on mount; writes re-read.
   }, [])
 
-  /** Write one route set/unset through the plugin's own endpoint, then re-read. */
+  /** Write one route set/unset through the same endpoint, then re-read. */
   const write = async (op: 'set' | 'unset', routeId: string, route?: DynamicRoute): Promise<string | undefined> => {
     try {
       const response = await fetch('/llm-dynamic-provider/routes', {
@@ -137,7 +122,6 @@ export function DynamicRoutes({ api }: { api: DiscoveryApi }): ReactNode {
     }
   }
 
-  /** Load one route into the draft for editing. */
   const beginEdit = (routeId: string, route: DynamicRoute): void => {
     setEditing(routeId)
     setDraft({

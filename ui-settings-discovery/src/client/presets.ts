@@ -1,25 +1,13 @@
-/**
- * Local-engine presets and the wire-protocol list of the discovery section.
- * The protocol list, the thinking-level vocabulary, and the reasoning-effort
- * spelling all come from `dsh-llm-endpoint-base` so the panel, the discovery
- * host, and the dynamic provider agree on the one definition. Presets only
- * prefill the probe form — every field stays editable — and derive the
- * default route id of the adoption write.
- */
-
 import { ROUTE_PROTOCOLS, THINKING_LEVELS, reasoningEffortsOf } from 'dsh-llm-endpoint-base/vocabulary'
 
 export { ROUTE_PROTOCOLS as PROTOCOLS, THINKING_LEVELS, reasoningEffortsOf }
 
-/** One selectable engine card. */
 export interface EnginePreset {
-  /** Route id derived when the card is chosen (also keys the card). */
+  /** Route id derived when the card is chosen; also the card key. */
   key: string
-  /** Card title. */
   label: string
-  /** Endpoint the engine listens on, prefilled into the baseURL field. */
   baseURL: string
-  /** Wire protocol the engine speaks, prefilled into the protocol select. */
+  /** Prefilled into the protocol select. */
   api: string
 }
 

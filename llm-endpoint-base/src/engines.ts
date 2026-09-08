@@ -1,22 +1,14 @@
-/**
- * The endpoint engines of the discovery ladder. Each engine answers "is this
- * endpoint mine, and if so which models does it advertise?": it returns the
- * model list on a recognized answer, `skip` when the endpoint does not speak
- * its protocol, and `fail` for a failure worth surfacing to the user (an auth
- * refusal on a real endpoint beats a later rung's blander error).
- *
- * Engine order is load-bearing: Ollama hosts also serve an OpenAI-compatible
- * `/v1/models` listing but without capacities, and LiteLLM's `/models` listing
- * is bare where its management endpoints are rich — the specific engines run
- * before the generic floor.
- * @module dsh-llm-discovery/engines
- */
-
 import { LlmError } from '@deepseek-ai/dsh-llm'
 import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-llm'
 import type { ResolvedDiscoveryConfig } from './config.ts'
 import { fetchJson } from './http.ts'
 import type { JsonFetchFailure } from './http.ts'
+
+/**
+ * The engines of the discovery ladder, in probe order: the endpoint-specific
+ * ones run before the generic listing floor, because an endpoint that answers
+ * both would otherwise be read through the poorer listing.
+ */
 
 /** One engine rung's verdict. */
 export type EngineVerdict =
@@ -26,15 +18,12 @@ export type EngineVerdict =
 
 /** Everything an engine needs for one probe. */
 export interface ProbeFacts {
-  /** Endpoint base URL exactly as the draft carries it. */
   readonly baseURL: string
-  /** Validated probe credential, when the draft supplied one. */
+  /** Validated probe credential, absent when the caller probed unauthenticated. */
   readonly apiKey: string | undefined
-  /** Wire protocol the draft names, when it does — selects the listing dialect. */
+  /** Selects the listing dialect. */
   readonly api: string | undefined
-  /** Caller cancellation. */
   readonly signal: AbortSignal | undefined
-  /** Resolved deployment configuration. */
   readonly config: ResolvedDiscoveryConfig
 }
 
@@ -87,11 +76,9 @@ function bareHost(baseURL: string): string {
 
 /**
  * Ollama native discovery: `GET /api/tags` for the model list, then one
- * `POST /api/show` per model for its `*.context_length` — the listing carries
- * no capacities. A model whose show metadata has no context length reports the
- * configured engine default.
- * @param facts - the probe facts.
- * @returns the verdict for this rung.
+ * `POST /api/show` per model for its `*.context_length`, since the listing
+ * carries no capacities. A model whose show metadata has no context length
+ * reports the configured engine default.
  */
 async function probeOllama(facts: ProbeFacts): Promise<EngineVerdict> {
   const base = bareHost(facts.baseURL)
@@ -148,10 +135,8 @@ const LITELLM_METADATA_ROUTES = ['/model_group/info', '/v2/model/info', '/model/
 /**
  * LiteLLM discovery: the management metadata endpoints carry per-model
  * capacities the OpenAI listing does not. Routes are probed in order and the
- * first parseable answer wins; when every route is absent the rung skips so
+ * first parseable answer wins; when every route is absent the rung skips, so
  * the generic listing floor still runs.
- * @param facts - the probe facts.
- * @returns the verdict for this rung.
  */
 async function probeLitellm(facts: ProbeFacts): Promise<EngineVerdict> {
   const base = bareHost(facts.baseURL)
@@ -196,11 +181,9 @@ async function probeLitellm(facts: ProbeFacts): Promise<EngineVerdict> {
 }
 
 /**
- * Anthropic's Models API is the same `data`-array listing with its own dialect:
- * the API key travels as `x-api-key` (Bearer is for OAuth tokens),
- * `anthropic-version` is required, the context window is `max_input_tokens`,
- * and pages default to 20 entries — `limit=1000` is the documented ceiling and
- * keeps one request enough in practice.
+ * Anthropic's Models API is the same `data`-array listing in its own dialect:
+ * the key travels as `x-api-key`, `anthropic-version` is required, and pages
+ * default to 20 entries, so `limit=1000` keeps one request enough.
  */
 const ANTHROPIC_LISTING_HEADERS = { 'anthropic-version': '2023-06-01' } as const
 

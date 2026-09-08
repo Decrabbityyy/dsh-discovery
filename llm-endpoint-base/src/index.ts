@@ -1,16 +1,3 @@
-/**
- * `dsh-llm-endpoint-base`: the shared pure primitives behind endpoint model
- * discovery. This package owns the engine ladder (`discoverEndpoint`), the
- * bundled-catalog enrichment, the protocol / thinking-level / namespace
- * vocabulary, and the models.dev catalog parser — every fact the discovery
- * offer plugin, the dynamic-provider plugin, and the settings-panel client
- * must agree on. It is pure logic with no Cordis and no environment-specific
- * I/O, so the host plugins and the browser client consume the one definition
- * and the three stay mutually independent: each depends on this base, none on
- * a sibling.
- * @module dsh-llm-endpoint-base
- */
-
 export { Config, resolveDiscoveryConfig } from './config.ts'
 export type { EngineSwitches, ResolvedDiscoveryConfig } from './config.ts'
 export { DISCOVERY_NAMESPACE, discoverEndpoint } from './discover.ts'

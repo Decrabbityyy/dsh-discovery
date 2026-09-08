@@ -1,20 +1,3 @@
-/**
- * `dsh-llm-dynamic-provider`: OMP-style runtime model discovery on a
- * self-hosted pi-ai adapter. Each declared route is reprobed against its
- * endpoint at startup, assembled into a resolved pi-ai profile (endpoint
- * facts, bundled-catalog enrichment, catalog-derived `reasoningEfforts`),
- * and registered on `ctx.llm` through a self-constructed `PiAiAdapter` — the
- * discovered catalog lives in the in-memory LLM registry and is rebuilt on
- * every boot, never written to any settings document (the plugin's namespace
- * persists only the route declarations). With `cache: true` the last
- * discovered catalog persists under `$DSH_HOME` so a cold boot registers
- * routes immediately and refreshes them in the background once the probe
- * answers. Four wire protocols are served (openai-completions,
- * openai-responses, anthropic-messages, google-generative-ai). Named exports
- * preserve loader injection metadata.
- * @module dsh-llm-dynamic-provider
- */
-
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
@@ -23,10 +6,7 @@ import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import { assertUsableApiKey, LlmError } from '@deepseek-ai/dsh-llm'
 import type { AdapterRegistrationHandle, LlmDiscoveredModel } from '@deepseek-ai/dsh-llm'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
-// The adapter's auth injectables are built from the cordis context the same
-// way the llm-pi-ai host composes them; the helpers live behind ./src/*.
 import { authContextFrom, credentialStoreFrom } from './auth.ts'
-import type { ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-settings/types'
 import type { LlmConfigurableProvider } from '@deepseek-ai/dsh-llm'
@@ -34,6 +14,7 @@ import type { DirectoryRegistrationHandle } from '@deepseek-ai/dsh-llm'
 import type { Config, DynamicSection } from './config.ts'
 import { NamespaceConfig } from './config.ts'
 import { assembleProfile, discoverDynamicProviders, toModel } from './provider.ts'
+import type { DynamicProviderProfile } from './provider.ts'
 import { openModelCatalog, refreshModelCatalog } from 'dsh-llm-endpoint-base/store'
 import { catalogInputModalities, catalogReasoningEfforts, discoverEndpoint, enrichModels, MODELS_DEV_URL, normalizeModelName, parseModelFacts, resolveDiscoveryConfig } from 'dsh-llm-endpoint-base'
 import type { ModelFacts } from 'dsh-llm-endpoint-base'
@@ -43,7 +24,7 @@ export type { DynamicSection, RouteProfile } from './config.ts'
 export { catalogReasoningEfforts } from 'dsh-llm-endpoint-base'
 export type { ReasoningEfforts } from 'dsh-llm-endpoint-base'
 export { assembleProfile, discoverDynamicProviders, toModel } from './provider.ts'
-export type { DiscoveryDeps, DiscoveryOutcome } from './provider.ts'
+export type { DiscoveryDeps, DiscoveryOutcome, DynamicProviderProfile } from './provider.ts'
 
 /** The minimal webServer face this plugin reads: named exact-path route registration. */
 interface WebServerFace {
@@ -54,12 +35,11 @@ interface WebServerFace {
   }): () => void
 }
 
-/** Cordis plugin name. */
 export const name = 'llm-dynamic-provider'
 /** The llm seam owns the registry; the settings seam owns the route namespace. */
 export const inject = ['llm', 'settings']
 
-/** This plugin's settings namespace: the webui-editable dynamic route declarations. */
+/** This plugin's settings namespace, holding the route declarations. */
 // alpha.4 dropped the settingsNamespace() factory; a namespace is a branded
 // string validated by SettingsNamespaceInput at registration time.
 export const DYNAMIC_NS = 'llm-dynamic-provider' as SettingsNamespace
@@ -72,7 +52,7 @@ interface DynamicCache {
   readonly routes: Record<string, { readonly models: readonly LlmDiscoveredModel[] }>
 }
 
-/** Read the persisted cache, tolerating absence and corruption as empty. */
+/** Read the persisted cache; absence and corruption both read as empty. */
 async function readCache(home: string): Promise<DynamicCache> {
   try {
     const raw = JSON.parse(await readFile(join(home, CACHE_FILE), 'utf8')) as DynamicCache
@@ -83,7 +63,7 @@ async function readCache(home: string): Promise<DynamicCache> {
 }
 
 /** Persist the discovered model facts behind the resolved profiles. */
-async function writeCache(home: string, profiles: ReadonlyMap<string, ResolvedPiAiProviderProfile>): Promise<void> {
+async function writeCache(home: string, profiles: ReadonlyMap<string, DynamicProviderProfile>): Promise<void> {
   const routes: DynamicCache['routes'] = {}
   for (const [route, profile] of profiles) {
     routes[route] = {
@@ -103,27 +83,15 @@ async function writeCache(home: string, profiles: ReadonlyMap<string, ResolvedPi
  * Mount the dynamic-provider adapter. Declared routes register on first
  * successful probe; with `cache` on, a cold boot registers from the persisted
  * catalog synchronously and lets the live probe refresh the registration.
- * @param ctx - registrant context carrying the llm seam.
- * @param config - the cordis.yml entry config; `routes` is the route set.
  */
 export function apply(ctx: Context, config?: Config): void {
   ctx.settings.register(DYNAMIC_NS, NamespaceConfig, { base: { routes: config?.routes ?? {} } })
   const home = config?.cache === true ? resolveDshHome() : undefined
 
-  // The models.dev catalog (thinking levels + input/output modalities +
-  // capacities), keyed by bare model name. When the composition mounts the
-  // storage seam it is persisted there (cold boot skips the network, an ETag
-  // refresh upserts only changed rows); otherwise it is an in-memory snapshot
-  // refreshed from models.dev on boot. Served over an HTTP route when a web
-  // server is mounted, so the settings panel preselects each discovered
-  // model's levels and modality. Headless compositions (no webServer) skip the
-  // route. The in-memory map is the synchronous read path for enrichment and
-  // modality lookups; the domain is the durable layer.
-  // The in-memory read path. Values may come from the storage domain (zod
-  // optional fields) or the in-memory fallback, so the map is read loosely.
+  // models.dev facts by bare model name: the synchronous read path for
+  // enrichment and modality lookups, backed by the storage domain when the
+  // composition mounts it and by a plain fetch otherwise.
   const facts = new Map<string, ModelFacts>()
-  // The modality read path: the models.dev facts first (fresh, prefixed or
-  // not), then the bundled pi-ai catalog for ids models.dev does not list.
   const modalitiesOf = (modelId: string): readonly string[] | undefined => {
     const fact = facts.get(normalizeModelName(modelId))
     if (fact?.inputModalities !== undefined && fact.inputModalities.length > 0) return fact.inputModalities
@@ -132,17 +100,14 @@ export function apply(ctx: Context, config?: Config): void {
   void (async () => {
     const opened = await openModelCatalog(ctx).catch(() => undefined)
     if (opened !== undefined) {
-      // Durable path: load persisted rows, then refresh incrementally. The
-      // domain row and ModelFacts are structurally the same record; the cast
-      // only bridges zod's `| undefined` optionals to exact-optional types.
+      // The domain row and ModelFacts are structurally the same record; the
+      // cast only bridges zod's `| undefined` optionals to exact-optional types.
       for (const [name, row] of opened.models.entries()) facts.set(name, row as ModelFacts)
       await refreshModelCatalog(opened)
-      // Re-read after refresh so the map carries the upserted rows.
       facts.clear()
       for (const [name, row] of opened.models.entries()) facts.set(name, row as ModelFacts)
       return
     }
-    // In-memory path: a full fetch into the map (no durability).
     try {
       const response = await fetch(MODELS_DEV_URL, { signal: AbortSignal.timeout(15_000) })
       if (response.ok) {
@@ -183,11 +148,10 @@ export function apply(ctx: Context, config?: Config): void {
   }
 
   // The route read/write endpoint. The settings RPC refuses this namespace
-  // until the configurable-provider directory names it, and the directory
-  // needs ≥1 route — so the very write that adds the first route can never
-  // pass through the proxy. The panel therefore talks to the plugin's own
-  // endpoint, which writes through the settings seam directly (same process,
-  // no proxy exposure gate). Served only where a web server is mounted.
+  // until the configurable-provider directory names it, and the directory needs
+  // at least one route, so the write that adds the first route can never pass
+  // through the proxy. The panel therefore talks to this endpoint, which writes
+  // through the settings seam directly. Served only where a web server is mounted.
   const readBody = (req: unknown): Promise<unknown> => new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
     // The web server passes a Node IncomingMessage; only its stream events are read.
@@ -254,17 +218,12 @@ export function apply(ctx: Context, config?: Config): void {
   }
 
   // The discovery offer doubles as the loaded-signal the settings panel
-  // probes: `llm.discoverModels` against this namespace answers only while
-  // this plugin is mounted, so the panel shows its block exactly then. The
-  // reply enriches each model with the catalog's reasoning levels, which the
-  // panel preselects — the wire passes the extra field through.
+  // probes: it answers only while this plugin is mounted. The reply carries the
+  // catalog's reasoning levels, which the panel preselects.
   const discovery = resolveDiscoveryConfig(config)
   ctx.llm.registerModelDiscovery(DYNAMIC_NS, async (request) => {
     const raw = await discoverEndpoint(request, discovery)
     const enriched = discovery.enrichment ? enrichModels(raw) : [...raw]
-    // A model the bundled pi-ai catalog has not caught up with (e.g. a fresh
-    // grok) still enriches from the models.dev facts: endpoint-reported facts
-    // always win, then pi-ai, then models.dev fills what is still missing.
     return enriched.map((model) => {
       const fact = facts.get(normalizeModelName(model.id))
       return {
@@ -277,9 +236,9 @@ export function apply(ctx: Context, config?: Config): void {
     })
   })
 
-  // Live profiles the adapter reads per request. Rebuilt on each reprobe;
-  // starts from the cache (when enabled) so a cold boot has routes to serve.
-  let current = new Map<string, ResolvedPiAiProviderProfile>()
+  // Live profiles the adapter reads per request; rebuilt on each reprobe, and
+  // seeded from the cache when enabled.
+  let current = new Map<string, DynamicProviderProfile>()
   let registration: AdapterRegistrationHandle | undefined
 
   const adapter = new PiAiAdapter({
@@ -287,12 +246,10 @@ export function apply(ctx: Context, config?: Config): void {
     profiles: () => current,
     resolveApiKey: async (provider, profile) => {
       const ref = profile.apiKeyEnv
-      // A route naming no credential is an unauthenticated endpoint (a local
-      // engine, a free gateway). pi-ai's dialects require SOME apiKey string
-      // to construct their client, so an inert placeholder satisfies the
-      // check; on the openai-completions dialect the profile's empty
-      // Authorization header then erases the Bearer line the SDK builds from
-      // it, so the request carries no credential value at all.
+      // A route naming no credential is an unauthenticated endpoint. pi-ai's
+      // dialects require some apiKey string to build their client, so an inert
+      // placeholder satisfies the check and the profile's empty Authorization
+      // header keeps the value off the wire.
       if (ref === undefined) return 'dsh-no-key'
       const credentials = ctx.get('credentials')
       const hit = credentials !== undefined
@@ -307,8 +264,8 @@ export function apply(ctx: Context, config?: Config): void {
     },
   })
 
-  /** Swap the served profile set, registering on first use and replacing after. */
-  const serve = (next: Map<string, ResolvedPiAiProviderProfile>): void => {
+  /** Swap the served profile set: register on first use, replace after that. */
+  const serve = (next: Map<string, DynamicProviderProfile>): void => {
     current = next
     const names = [...next.keys()]
     if (registration === undefined) {
@@ -327,13 +284,10 @@ export function apply(ctx: Context, config?: Config): void {
 
   /**
    * Mirror the declared routes into the LLM configurable-provider directory.
-   * Registration is what places the `llm-dynamic-provider` namespace inside
-   * the host proxy's exposed set (`modelProviderNamespaces()`), so the Web
-   * settings client can read and edit the routes — without it the namespace
-   * is filtered out of `settings.describe` and every write is refused as
-   * `settings-not-exposed`. The directory follows the DECLARED routes (not
-   * only the successfully probed ones) so the namespace stays editable even
-   * while every endpoint is down.
+   * Registration is what places the namespace inside the host proxy's exposed
+   * set, so the Web settings client can read and edit the routes. The directory
+   * follows the declared routes rather than only the successfully probed ones,
+   * so the namespace stays editable while every endpoint is down.
    */
   let directory: DirectoryRegistrationHandle | undefined
   const syncDirectory = (): void => {
@@ -357,14 +311,14 @@ export function apply(ctx: Context, config?: Config): void {
     if (home === undefined) return
     const cache = await readCache(home)
     const routes = declaredRoutes()
-    const cached = new Map<string, ResolvedPiAiProviderProfile>()
+    const cached = new Map<string, DynamicProviderProfile>()
     for (const [routeName, entry] of Object.entries(cache.routes)) {
       const route = routes[routeName]
       if (route === undefined) continue
       try {
         cached.set(routeName, assembleProfile(routeName, route, entry.models.map(model => toModel(routeName, route, model, modalitiesOf(model.id)))))
       } catch {
-        // A stale cache entry that no longer assembles is dropped, not fatal.
+        // A stale cache entry that no longer assembles is dropped.
       }
     }
     if (cached.size > 0) serve(cached)
@@ -384,9 +338,9 @@ export function apply(ctx: Context, config?: Config): void {
     for (const { route, message } of outcome.failed) {
       ctx.logger.warn(`dynamic provider "${route}" probe failed: ${message}`)
     }
-    // A route removed from the namespace must leave the registry; a route
-    // whose probe now fails keeps its last served profile (it may be live).
-    const next = new Map<string, ResolvedPiAiProviderProfile>()
+    // A route removed from the namespace leaves the registry; a route whose
+    // probe now fails keeps its last served profile.
+    const next = new Map<string, DynamicProviderProfile>()
     for (const [name, profile] of current) {
       if (name in routes && !outcome.discovered.has(name)) next.set(name, profile)
     }
@@ -400,17 +354,15 @@ export function apply(ctx: Context, config?: Config): void {
     }
   }
 
-  // Hot-edit: adding or editing a route in the settings namespace reprobes
-  // without a restart; removing one withdraws its route on the same pass. The
-  // directory re-syncs so the namespace's exposure and the Models page follow.
+  // Hot-edit: adding or editing a route reprobes without a restart, and removing
+  // one withdraws its route on the same pass. The directory re-syncs with it.
   ctx.on('settings/updated', (ns) => {
     if (ns !== DYNAMIC_NS) return
     syncDirectory()
     void reprobe()
   })
-  // Publish the namespace's exposure first (the directory is what admits it
-  // to the proxy's exposed set), then cold-boot: serve the cache immediately
-  // and let the live probe replace it.
+  // Publish the namespace's exposure before serving: the directory is what
+  // admits it to the proxy's exposed set.
   syncDirectory()
   void serveFromCache().then(() => reprobe())
 }

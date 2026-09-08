@@ -1,11 +1,3 @@
-/**
- * Self-contained pi-ai auth adapters for the dynamic provider, mirroring the
- * harness's llm-pi-ai `auth.ts`. The npm package bundles these as private
- * functions (lib/index.js defines but does not export `credentialStoreFrom` /
- * `authContextFrom`), so this package carries its own copy over the same
- * public seams: `ctx.credentials` records and the launch environment.
- */
-
 import { homedir } from 'node:os'
 import { access } from 'node:fs/promises'
 import { resolve as resolvePath } from 'node:path'
@@ -77,11 +69,7 @@ function writableStore(ctx: Context): CredentialProvider {
   return credentials
 }
 
-/**
- * A pi-ai `CredentialStore` over the harness credential records.
- * @param ctx - the plugin context carrying the optional `ctx.credentials`.
- * @returns the store to hand `createModels()`.
- */
+/** A pi-ai `CredentialStore` over the harness credential records, scoped to this plugin. */
 export function credentialStoreFrom(ctx: Context): CredentialStore {
   return {
     async read(providerId) {
@@ -124,12 +112,7 @@ export function credentialStoreFrom(ctx: Context): CredentialStore {
   }
 }
 
-/**
- * A pi-ai `AuthContext` over the harness credential plane and the host
- * filesystem.
- * @param ctx - the plugin context carrying the optional `ctx.credentials`.
- * @returns the auth context to hand `createModels()`.
- */
+/** A pi-ai `AuthContext` over the harness credential plane and the host filesystem. */
 export function authContextFrom(ctx: Context): AuthContext {
   return {
     async env(name) {

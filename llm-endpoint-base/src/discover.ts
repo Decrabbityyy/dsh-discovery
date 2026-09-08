@@ -1,29 +1,16 @@
-/**
- * The discovery orchestration: validate the draft, walk the engine ladder, and
- * enrich the winning answer. This module owns the namespace key and the error
- * taxonomy; engines own endpoint knowledge.
- * @module dsh-llm-discovery/discover
- */
-
 import { INVALID_CREDENTIAL_CODE, LlmError, normalizeApiKey } from '@deepseek-ai/dsh-llm'
 import type { LlmDiscoveredModel, LlmModelDiscoveryOperation } from '@deepseek-ai/dsh-llm'
 import type { ResolvedDiscoveryConfig } from './config.ts'
 import { discoveryEngines } from './engines.ts'
 import { enrichModels } from './enrich.ts'
 
-/**
- * The discovery-offer namespace this plugin registers. Unlike an adapter's
- * namespace it owns no settings section and no routes: every request must
- * carry the endpoint to interrogate.
- */
+/** The namespace this plugin registers. It owns no settings section and no routes. */
 export const DISCOVERY_NAMESPACE = 'llm-discovery'
 
 /**
  * Validate the draft credential before any header is built from it. A draft
- * with no key probes unauthenticated, matching the local-engine posture; a
- * malformed key fails before the network is touched.
- * @param raw - the key exactly as typed, or absent.
- * @returns the validated key, or `undefined` for an unauthenticated probe.
+ * with no key probes unauthenticated; a malformed key fails before the network
+ * is touched.
  */
 function probeKey(raw: string | undefined): string | undefined {
   if (raw === undefined) return undefined
@@ -39,14 +26,10 @@ function probeKey(raw: string | undefined): string | undefined {
 
 /**
  * Interrogate one draft endpoint through the engine ladder and enrich the
- * answer. The first engine that recognizes the endpoint wins; when no engine
- * does, the most reportable failure (an auth refusal over a bare miss) is
- * thrown, and a ladder of pure misses reports the engines tried.
- * @param request - the discovery draft: endpoint, optional credential, caller
- *   cancellation. `provider` is accepted for seam parity but unused — this
- *   namespace has no route knowledge to short-circuit with.
- * @param config - the resolved deployment configuration.
- * @returns the discovered models, enriched when configured.
+ * answer. The first engine that recognizes the endpoint wins; when none does,
+ * the most reportable failure (an auth refusal over a bare miss) is thrown.
+ * `request.provider` is accepted for seam parity but unused: this namespace has
+ * no route knowledge to short-circuit with.
  */
 export async function discoverEndpoint(
   request: LlmModelDiscoveryOperation,

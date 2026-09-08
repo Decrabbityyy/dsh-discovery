@@ -1,16 +1,5 @@
-/**
- * Bounded JSON fetching for endpoint probes. Every failure is a value, so an
- * engine can classify it as "not my endpoint" (skip the ladder rung) or a real
- * failure worth reporting, instead of catching untyped rejections.
- * @module dsh-llm-discovery/http
- */
-
 import { attributionHeaders, errorChain } from '@deepseek-ai/dsh-llm'
 
-/**
- * The outcome of one bounded JSON fetch. `ok` carries the parsed body; every
- * other variant names exactly one failure mode.
- */
 export type JsonFetch =
   | { readonly kind: 'ok'; readonly body: unknown }
   | { readonly kind: 'http'; readonly status: number }
@@ -20,22 +9,19 @@ export type JsonFetch =
   | { readonly kind: 'aborted' }
   | { readonly kind: 'timeout' }
 
-/** A {@link JsonFetch} that did not produce a parsed body. */
 export type JsonFetchFailure = Exclude<JsonFetch, { readonly kind: 'ok' }>
 
-/** One bounded JSON request. */
 export interface FetchJsonOptions {
-  /** Absolute URL to request. */
   readonly url: string
-  /** HTTP method; defaults to GET. */
+  /** Defaults to GET. */
   readonly method?: 'GET' | 'POST'
-  /** JSON body for POST requests. */
+  /** JSON body, sent only for POST. */
   readonly body?: unknown
-  /** Probe credential, already validated; sent as a Bearer header. */
+  /** Already validated; sent as a Bearer header. */
   readonly apiKey: string | undefined
-  /** Extra headers merged after the auth header (a dialect's own auth/version pair). */
+  /** Merged after the auth header — a dialect's own auth/version pair. */
   readonly extraHeaders?: Record<string, string>
-  /** Timeout budget for the whole request including the body read. */
+  /** Budget for the whole request, including the body read. */
   readonly timeoutMs: number
   /** Reply-size ceiling; a reply past it is refused, never truncated. */
   readonly maxBytes: number
@@ -44,11 +30,9 @@ export interface FetchJsonOptions {
 }
 
 /**
- * Read a reply body with a hard byte ceiling. A declared content-length past
- * the ceiling refuses before transfer; accumulated bytes are capped again
- * during the read because endpoints lie about length.
- * @param response - the fetch response to drain.
- * @param maxBytes - the byte ceiling.
+ * Read a reply body under a hard byte ceiling: refuse before transfer when a
+ * declared content-length exceeds it, and cap accumulated bytes during the
+ * read as well, because endpoints lie about length.
  * @returns the body text, or `undefined` when the ceiling was exceeded.
  */
 async function readBounded(response: Response, maxBytes: number): Promise<string | undefined> {
@@ -85,12 +69,7 @@ async function readBounded(response: Response, maxBytes: number): Promise<string
 }
 
 /**
- * Classify a fetch or body-read rejection. Caller cancellation outranks the
- * own timeout; anything else is an unreachable endpoint, with the cause chain
- * rendered for diagnosis.
- * @param error - the rejected value.
- * @param caller - the caller's signal, when supplied.
- * @param timeout - this request's own timeout signal.
+ * Caller cancellation outranks this request's own timeout.
  * @returns the typed failure.
  */
 function classifyFailure(error: unknown, caller: AbortSignal | undefined, timeout: AbortSignal): JsonFetchFailure {
@@ -101,10 +80,7 @@ function classifyFailure(error: unknown, caller: AbortSignal | undefined, timeou
 
 /**
  * Fetch one URL and parse its reply as JSON, with timeout, caller
- * cancellation, Bearer auth, and a reply-size ceiling.
- * @param options - the request description.
- * @returns the typed outcome; this function never throws for transport or
- *   payload failures.
+ * cancellation, Bearer auth, and a reply-size ceiling. Never throws.
  */
 export async function fetchJson(options: FetchJsonOptions): Promise<JsonFetch> {
   const timeout = AbortSignal.timeout(options.timeoutMs)

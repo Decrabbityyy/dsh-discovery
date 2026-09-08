@@ -1,21 +1,11 @@
-/**
- * The models.dev thinking-level parser: turn the public `api.json` body into
- * a modelId → levels index. Pure — no fetch, no disk — so the host plugin
- * wraps it with its cache and the browser client could parse an inline
- * snapshot the same way. The disk cache and the network fetch stay with the
- * host plugin that owns them.
- * @module dsh-llm-endpoint-base/models-dev
- */
-
 import { catalogInputModalities } from './catalog.ts'
 import { normalizeModelName } from './vocabulary.ts'
 
 export { normalizeModelName }
 
-/** The models.dev catalog endpoint. */
 export const MODELS_DEV_URL = 'https://models.dev/api.json'
 
-/** One models.dev model entry's reasoning shape this index reads. */
+/** The fields of one models.dev entry this module reads. */
 interface ModelsDevModel {
   readonly name?: string
   readonly reasoning?: boolean
@@ -24,54 +14,41 @@ interface ModelsDevModel {
   readonly limit?: { readonly context?: number; readonly input?: number; readonly output?: number }
 }
 
-/** One model's full fact set parsed from models.dev, keyed by bare model name. */
+/** One model's fact set parsed from models.dev, keyed by bare model name. */
 export interface ModelFacts {
-  /** Display name (`Grok 4.6`), when models.dev records one. */
   readonly displayName?: string
-  /** Accepted thinking levels (normalized; `none` → `off`). */
+  /** Normalized; models.dev's `none` becomes `off`. */
   readonly levels?: readonly string[]
-  /** Accepted input modalities (text/image only). */
+  /** Accepted input modalities, filtered to what the pi-ai wire carries. */
   readonly inputModalities?: readonly ModelModality[]
-  /** Produced output modalities (text/image only). */
+  /** Produced output modalities, filtered the same way. */
   readonly outputModalities?: readonly ModelModality[]
-  /** Combined context capacity in tokens. */
   readonly contextWindow?: number
-  /** Per-request output cap in tokens. */
   readonly maxTokens?: number
 }
 
-/** The harness-supported modalities; models.dev also lists pdf/audio/video, which the pi-ai wire cannot carry. */
+/** models.dev also lists pdf/audio/video, which the pi-ai wire cannot carry. */
 export type ModelModality = 'text' | 'image'
 
-/** One model's accepted input and produced output modalities (text/image only). */
 export interface ModelModalities {
   readonly input: readonly ModelModality[]
   readonly output: readonly ModelModality[]
 }
 
-/** Keep only the modalities the pi-ai wire carries; pdf/audio/video are dropped. */
 function keepSupported(values: readonly string[] | undefined): ModelModality[] {
   return (values ?? []).filter((value): value is ModelModality => value === 'text' || value === 'image')
 }
 
-/**
- * Normalize one models.dev effort value to the harness thinking-level
- * vocabulary: `none` spells `off` (supported, send nothing); the rest pass
- * through unchanged.
- * @param value - the models.dev effort spelling.
- * @returns the harness thinking level.
- */
+/** models.dev's `none` spells the harness level `off`; every other value passes through. */
 export function normalizeLevel(value: string): string {
   return value === 'none' ? 'off' : value
 }
 
 /**
  * Parse the models.dev api.json body into a modelId → levels index. The file
- * is keyed by provider, then model id; a model's `reasoning_options` effort
- * entry carries the accepted values. Models without an effort entry (toggle-
- * only or non-reasoning) record an empty list so the picker shows no levels.
- * @param body - the parsed api.json body.
- * @returns the modelId → accepted-levels index.
+ * is keyed by provider, then model id, and a model's `reasoning_options`
+ * effort entry carries the accepted values; a reasoning model without one
+ * records an empty list, which the picker renders as no levels.
  */
 export function parseCatalog(body: unknown): Map<string, readonly string[]> {
   const index = new Map<string, readonly string[]>()
@@ -94,10 +71,8 @@ export function parseCatalog(body: unknown): Map<string, readonly string[]> {
 
 /**
  * Parse the models.dev api.json body into a modelId → modalities index, with
- * the same first-provider-wins rule as {@link parseCatalog}. A model without
- * a modalities block is absent (unknown, not text-only); the caller defaults.
- * @param body - the parsed api.json body.
- * @returns the modelId → input/output modalities index.
+ * the same first-provider-wins rule as {@link parseCatalog}. A model with no
+ * modalities block stays absent, which reads as unknown rather than text-only.
  */
 export function parseModalities(body: unknown): Map<string, ModelModalities> {
   const index = new Map<string, ModelModalities>()
@@ -119,10 +94,7 @@ export function parseModalities(body: unknown): Map<string, ModelModalities> {
 /**
  * Resolve one model's accepted input modalities: the models.dev index first,
  * then the bundled pi-ai catalog. A model neither source knows returns
- * `undefined` — the caller defaults (pi-ai's own default is text-only).
- * @param index - the models.dev modalities index (from {@link parseModalities}).
- * @param modelId - the model id exactly as the endpoint accepts it.
- * @returns the accepted input modalities, or `undefined` when unknown.
+ * `undefined`, leaving the default to the caller.
  */
 export function inputModalitiesOf(index: ReadonlyMap<string, ModelModalities>, modelId: string): readonly ModelModality[] | undefined {
   const listed = index.get(modelId)
@@ -132,11 +104,8 @@ export function inputModalitiesOf(index: ReadonlyMap<string, ModelModalities>, m
 
 /**
  * Parse the models.dev api.json body into a bare-model-name → facts index,
- * collapsing every provider-prefixed duplicate onto its canonical name (the
- * first provider in file order wins on a collision). This is the persistence
- * shape: one row per unique model, not one per provider listing.
- * @param body - the parsed api.json body.
- * @returns the bare-name → facts index.
+ * collapsing every provider-prefixed duplicate onto its canonical name; the
+ * first provider in file order wins on a collision.
  */
 export function parseModelFacts(body: unknown): Map<string, ModelFacts> {
   const index = new Map<string, ModelFacts>()

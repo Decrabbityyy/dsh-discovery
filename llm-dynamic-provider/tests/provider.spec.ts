@@ -64,24 +64,26 @@ describe('discoverDynamicProviders', () => {
   })
 
   it('enriches a model the bundled catalog misses from the models.dev facts', async () => {
-    // grok-4.6 is not in the bundled pi-ai catalog, so without the models.dev
-    // fallback it would register with the generic default capacities.
+    // The fixture id is deliberately fictional: a real vendor id drifts into
+    // the bundled pi-ai catalog over time (grok-4.6 did, once 0.85 shipped),
+    // and a catalog-known id stops exercising the models.dev fallback this
+    // test is about — the catalog would fill capacities and win.
     const context = await boot()
-    server = await startProbeServer({ '/models': { body: JSON.stringify({ data: [{ id: 'grok-4.6' }] }) } })
+    server = await startProbeServer({ '/models': { body: JSON.stringify({ data: [{ id: 'acme-future-1' }] }) } })
     const outcome = await discoverDynamicProviders(context, {
       xai: { baseURL: server.url, api: 'openai-completions' },
     }, undefined, { signal: undefined }, {
       inputModalitiesOf: () => ['text', 'image'],
-      factsOf: (id) => id === 'grok-4.6'
-        ? { displayName: 'Grok 4.6', contextWindow: 500000, maxTokens: 500000 }
+      factsOf: (id) => id === 'acme-future-1'
+        ? { displayName: 'Acme Future 1', contextWindow: 500000, maxTokens: 500000 }
         : undefined,
     })
     expect(outcome.failed).toEqual([])
-    const grok = outcome.discovered.get('xai')?.piProvider.getModels()[0]
-    expect(grok?.name).toBe('Grok 4.6')
-    expect(grok?.contextWindow).toBe(500000)
-    expect(grok?.maxTokens).toBe(500000)
-    expect(grok?.input).toEqual(['text', 'image'])
+    const model = outcome.discovered.get('xai')?.piProvider.getModels()[0]
+    expect(model?.name).toBe('Acme Future 1')
+    expect(model?.contextWindow).toBe(500000)
+    expect(model?.maxTokens).toBe(500000)
+    expect(model?.input).toEqual(['text', 'image'])
   })
 
   it('supports every OpenAI/Anthropic wire protocol a route may name', async () => {

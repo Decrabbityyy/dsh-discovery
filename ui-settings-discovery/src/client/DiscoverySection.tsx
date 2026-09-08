@@ -1,22 +1,13 @@
 /**
- * The 模型发现 (Model Discovery) settings section: probe a local-engine preset
- * or custom endpoint through the host's `llm.discoverModels` offer under the
- * fixed `llm-discovery` namespace, inspect the advertised metadata, and adopt
- * a selection into a NEW pi-ai provider profile.
+ * The 模型发现 settings section: probe a preset or custom endpoint through the
+ * host's `llm.discoverModels` offer and adopt a selection into a new pi-ai
+ * provider profile.
  *
- * The host half (namespace `llm-discovery`) is a separate plugin; this page
- * only consumes its public RPC. Adoption writes through the same public wire
- * the Models page uses: one `settings.mutate` creating `providers.<route>`
- * with the protocol, endpoint, optional derived key reference, and the
- * selected models — or no `models` key at all when the user selected nothing,
- * which serves the route's whole catalog. A typed key is stored FIRST through
- * `credentials.set` under the derived `<ROUTE>_API_KEY` reference, and the
- * profile records `apiKeyEnv` only when a key was entered. Optional host-backed
- * blocks are selected from the Host Loader inventory; no model request is used
- * merely to determine whether an optional plugin is present.
- *
- * Probe state is component-local: nothing here is shared across entries or
- * needs to survive remounts, so there is no store to declare.
+ * Adoption writes through the same public wire the Models page uses, with two
+ * ordering constraints: a typed key is stored FIRST through `credentials.set`
+ * under the derived `<ROUTE>_API_KEY` reference and the profile records
+ * `apiKeyEnv` only when a key was entered, and a selection of nothing writes no
+ * `models` key at all, which serves the route's whole catalog.
  */
 
 import { useEffect, useState } from 'react'
@@ -35,27 +26,22 @@ import styles from './DiscoverySection.module.css'
 
 /** Injected dependencies of {@link DiscoverySection} (slot `inject`). */
 export interface DiscoverySectionInjected {
-  /** Wire faces the section probes and writes through. */
   api: DiscoveryApi
 }
 
 /**
- * Props delivered by the slot outlet: the inject face spread flat (the
- * renderer erases the share boundary at the render call).
+ * Props delivered by the slot outlet: the inject face spread flat (the renderer
+ * erases the share boundary at the render call).
  */
 export type DiscoverySectionProps = Partial<DiscoverySectionInjected>
 
-/** A compact modality marker: 文 for text, 图 for image, joined; a dash when unknown. */
+/** A compact modality marker: 文 for text, 图 for image, joined. */
 function modalityLabel(input: readonly string[] | undefined): string {
   if (input === undefined || input.length === 0) return '—'
   return input.map(value => (value === 'image' ? '图' : '文')).join('·')
 }
 
-/**
- * Render the discovery section content column.
- * @param props - slot-delivered injected dependencies.
- * @returns the section, or null while the shell has not injected yet.
- */
+/** Renders the section, or null while the shell has not injected yet. */
 export function DiscoverySection(props: DiscoverySectionProps): ReactNode {
   const { api } = props
   if (api === undefined) return null
@@ -63,51 +49,40 @@ export function DiscoverySection(props: DiscoverySectionProps): ReactNode {
 }
 
 function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
-  // The preset whose card prefilled the form (route derivation only follows
-  // while the id still holds a card-derived default).
   const [presetKey, setPresetKey] = useState<string | undefined>(undefined)
   const [baseURL, setBaseURL] = useState('')
   const [protocol, setProtocol] = useState<string>(PROTOCOLS[0])
-  // Write-only draft; it never renders back and only travels inside probe
-  // payloads and the credential write.
+  // Write-only draft: it never renders back.
   const [apiKey, setApiKey] = useState('')
   const [probing, setProbing] = useState(false)
   const [probeError, setProbeError] = useState<string | undefined>(undefined)
-  // `undefined` until the first probe settles; the results area renders only
-  // from a settle, and an empty list is its own row-less state.
   const [candidates, setCandidates] = useState<readonly LlmDiscoveredModel[] | undefined>(undefined)
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set())
-  // Case-insensitive name/id filter over the results table. Purely a view
-  // concern: hidden rows keep their picks, and a fresh probe resets it.
+  // Case-insensitive id/name filter over the results table; hidden rows keep
+  // their picks.
   const [query, setQuery] = useState('')
   const [route, setRoute] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [adopting, setAdopting] = useState(false)
   const [adoptError, setAdoptError] = useState<string | undefined>(undefined)
   const [adoptedRoute, setAdoptedRoute] = useState<string | undefined>(undefined)
-  // Thinking levels picked per adopted model id; a model absent from the map
-  // carries no reasoningEfforts (catalog routes inherit, hand-declared routes
-  // get a non-reasoning model). Defaults come from the catalog: each probed
-  // model starts with the levels the upstream records for it.
+  // Thinking levels picked per adopted model id. A model absent from the map
+  // carries no reasoningEfforts, which lets a catalog route inherit while a
+  // hand-declared route stays non-reasoning.
   const [modelLevels, setModelLevels] = useState<Readonly<Record<string, ReadonlySet<string>>>>({})
-  // The modelId → thinking-levels catalog served by the dynamic provider's
-  // own HTTP route; empty while unfetched or when the plugin is absent.
+  // Served by the dynamic provider's own HTTP route; empty while unfetched or
+  // when that plugin is absent.
   const [catalog, setCatalog] = useState<Readonly<Record<string, readonly string[]>>>({})
-  // The modelId → input/output modalities from the same endpoint; empty while
-  // unfetched. Drives the modality markers in the results table.
   const [modalities, setModalities] = useState<Readonly<Record<string, { input?: readonly string[]; output?: readonly string[] }>>>({})
-  // The bare-name → display facts (name/context/max) from the same endpoint.
-  // The host discovery seam only enriches from the bundled pi-ai catalog, so a
-  // fresh model it has not catalogued yet arrives undisclosed; these facts fill
-  // the gap at render time without touching the probe path.
+  // The bare-name facts from that same endpoint. The host discovery seam
+  // enriches from the bundled pi-ai catalog only, so these fill in a model it
+  // has not catalogued yet.
   const [facts, setFacts] = useState<Readonly<Record<string, { name?: string; contextWindow?: number; maxTokens?: number }>>>({})
-  // Whether the route id names an installed-catalog pi-ai provider; such
-  // a route inherits each known model's reasoning from the catalog, so the
-  // picker disables itself. Derived on route edits, not at render time.
+  // Whether the route id names an installed-catalog pi-ai provider; such a
+  // route inherits each known model's reasoning, so the picker disables itself.
   const [isCatalogRoute, setIsCatalogRoute] = useState(false)
-  // Optional host blocks are gated by the Host Loader inventory. A plugin is
-  // usable only after its root fiber is active; pending and failed entries stay
-  // hidden rather than turning an unavailable operation into a visible form.
+  // A host plugin is usable only once its root fiber is active; pending and
+  // failed entries stay hidden.
   const [dynamicLoaded, setDynamicLoaded] = useState(false)
   const [discoveryLoaded, setDiscoveryLoaded] = useState(false)
 
@@ -124,8 +99,7 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
       setDiscoveryLoaded(isActivePlugin(response.value, DISCOVERY_PLUGIN))
     }).catch(() => {
       if (cancelled) return
-      // A transport failure must not leave a previous snapshot's visibility
-      // behind when the API service is replaced or reconnects.
+      // A transport failure must not leave a previous snapshot's visibility behind.
       setDynamicLoaded(false)
       setDiscoveryLoaded(false)
     })
@@ -134,9 +108,8 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
     }
   }, [api])
 
-  // Fetch the thinking-level catalog only after inventory confirms the
-  // dynamic provider is active. This metadata route is optional feature data,
-  // not a plugin-presence probe.
+  // Fetched only after inventory confirms the dynamic provider is active; this
+  // is optional feature data, not a plugin-presence probe.
   useEffect(() => {
     let cancelled = false
     if (!dynamicLoaded) {
@@ -157,16 +130,15 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
       setModalities(body.modalities ?? {})
       setFacts(body.facts ?? {})
     }).catch(() => {
-      // No catalog: pickers simply offer no defaults.
+      // No catalog: the pickers simply offer no defaults.
     })
     return () => {
       cancelled = true
     }
   }, [dynamicLoaded])
 
-  // When the catalog lands after a probe, backfill defaults for models the
-  // probe initialized empty; a model with any pick already (user or catalog)
-  // keeps it.
+  // Backfills defaults for models the probe initialized empty once the catalog
+  // lands; a model with any pick already keeps it.
   const probedIds = candidates === undefined ? undefined : candidates.map(model => model.id).join('\0')
   useEffect(() => {
     if (probedIds === undefined) return
@@ -191,8 +163,7 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
   const adoptReady = !adopting && candidates !== undefined && candidates.length > 0
     && routeId.length > 0 && !routeInvalid
 
-  // The rows the table shows: candidates matching the filter by id or by
-  // disclosed name (probe metadata or the models.dev facts).
+  // The rows the table shows: candidates matching the filter by id or disclosed name.
   const needle = query.trim().toLowerCase()
   const visible = candidates === undefined
     ? []
@@ -274,7 +245,7 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
     setPicked(new Set())
   }
 
-  /** Flip every discovered model's membership in the selection. */
+  /** Select every candidate that is not picked yet; ids outside the candidate set drop out. */
   const invertSelection = (): void => {
     setPicked((current) => {
       const next = new Set<string>()
@@ -306,23 +277,19 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
         ...keyValue.length === 0 ? {} : { apiKey: keyValue },
       })
       if (!response.ok) {
-        // A `model-discovery-failed` rejection names the engine's own answer;
-        // the page shows it verbatim.
         setProbeError(response.error.message)
         return
       }
       const found = response.value
       setCandidates(found)
-      // A fresh result set resets the filter so nothing starts hidden.
       setQuery('')
-      // Everything found starts checked: adoption copies the whole listing.
+      // Everything found starts checked.
       setPicked(new Set(found.map(model => model.id)))
-      // Each model starts at the levels the catalog records for it; an
-      // unknown id gets no default (a non-reasoning model writes nothing).
+      // Each model starts at the levels the catalog records for it; an unknown
+      // id gets no default.
       setModelLevels(Object.fromEntries(found.map(model => [model.id, new Set(catalog[model.id] ?? [])])))
     } catch (error) {
-      // The transport rejected rather than answering; without this the button
-      // would stay busy with nothing shown.
+      // The transport rejected instead of answering.
       setProbeError(messageOf(error))
     } finally {
       setProbing(false)
@@ -339,9 +306,8 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
     if (!described.ok) return described.error.message
     const namespace = described.value.namespaces.find(candidate => candidate.ns === PI_AI_NS)
     if (namespace === undefined) return '缺少 llm-pi-ai 设置命名空间，无法写入提供方配置'
-    // A set at providers.<route> replaces that profile wholesale, so an
-    // existing route belongs to the Models page's editor, not this create
-    // flow — refuse the clobber.
+    // A set at providers.<route> replaces that profile wholesale, so an existing
+    // route belongs to the Models page's editor; refuse the clobber.
     const existing = (namespace.value as { providers?: Record<string, unknown> }).providers ?? {}
     if (Object.keys(existing).includes(routeId)) {
       return `路由「${routeId}」已存在，请到「模型」设置页编辑该提供方`
@@ -355,15 +321,14 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
     }
     /* v8 ignore next -- the adopt button only renders above a non-empty candidate list */
     const selected = candidates === undefined ? [] : candidates.filter(model => picked.has(model.id))
-    // Each adopted model carries its own picked levels; a catalog route
-    // inherits reasoning from the catalog instead, so its models write none.
+    // A catalog route inherits reasoning from the catalog, so its models write none.
     const profile = {
       ...displayName.trim().length === 0 ? {} : { displayName: displayName.trim() },
       ...storesKey ? { apiKeyEnv: keyRef } : {},
       api: protocol,
       baseURL: baseURL.trim(),
       // An absent models list serves the route's whole catalog, so a cleared
-      // selection writes no key rather than an empty array.
+      // selection writes no key at all.
       ...selected.length === 0
         ? {}
         : {
@@ -379,9 +344,8 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
     const response = await api.settings.mutate(
       PI_AI_NS,
       [{ op: 'set', path: ['providers', routeId], value: profile }],
-      // The write is judged against the revision read just now; a concurrent
-      // change makes the host refuse with `settings-conflict` and the page
-      // reports that message verbatim — retry is the user's call, not a loop.
+      // Judged against the revision just read; a concurrent change makes the host
+      // refuse with `settings-conflict`, and retry is the user's call.
       namespace.revision,
     )
     if (!response.ok) return response.error.message
@@ -535,13 +499,10 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
                     </thead>
                     <tbody>
                       {visible.map((model) => {
-                        // The levels this model accepts per the catalog; an
-                        // unknown id offers none (a non-reasoning model).
+                        // An unknown id offers no levels.
                         const available = catalog[model.id] ?? []
                         const chosen = modelLevels[model.id] ?? new Set<string>()
-                        // A model the host's bundled catalog has not catalogued
-                        // yet arrives undisclosed; the models.dev facts fill
-                        // name and capacities at render time.
+                        // The models.dev facts fill what the host's bundled catalog left undisclosed.
                         const fact = facts[normalizeModelName(model.id)]
                         const displayName = model.name ?? fact?.name
                         const contextWindow = model.contextWindow ?? fact?.contextWindow

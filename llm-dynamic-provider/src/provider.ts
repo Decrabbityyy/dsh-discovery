@@ -1,21 +1,3 @@
-/**
- * Assembly of a self-hosted pi-ai adapter's resolved profiles from runtime
- * discovery. Each declared route is reprobed against its endpoint, translated
- * into pi-ai `Model`s (endpoint facts, bundled-catalog enrichment,
- * catalog-derived `reasoningEfforts`), and materialized into a
- * `ResolvedPiAiProviderProfile` through pi-ai's public `createProvider` — no
- * settings document is read or written; the catalog lives in the in-memory
- * LLM registry behind `ctx.llm.registerAdapter`.
- *
- * pi-ai's own `resolveProfiles`/`buildProvider` are not reachable from the
- * published entry point, so the resolved profile is assembled here from the
- * same public building blocks (`createProvider`, the per-protocol lazy API
- * factories, `credentialRef`, `resolveRetryPolicy`). The adapter consumes a
- * documented subset of profile fields (see {@link assembleProfile}); the
- * per-request credential flows through `resolveApiKey`, not `piProvider.auth`.
- * @module dsh-llm-dynamic-provider/provider
- */
-
 import { createProvider } from '@earendil-works/pi-ai'
 import { anthropicMessagesApi } from '@earendil-works/pi-ai/api/anthropic-messages.lazy'
 import { googleGenerativeAIApi } from '@earendil-works/pi-ai/api/google-generative-ai.lazy'
@@ -43,24 +25,32 @@ const PROTOCOLS: Readonly<Record<string, () => ProviderStreams>> = {
 const DEFAULT_CONTEXT_WINDOW = 262_144
 const DEFAULT_MAX_TOKENS = 32_768
 
+/**
+ * A profile this plugin assembled, with two invariants the harness contract
+ * does not state: `piProvider` is always built here (a route that could not be
+ * constructed never becomes a profile, it is reported as a probe failure), and
+ * `modelErrors` is always empty (discovery drops a model before a route is
+ * assembled). Readers rely on both and never re-check them.
+ */
+export interface DynamicProviderProfile extends ResolvedPiAiProviderProfile {
+  readonly piProvider: Provider
+  readonly modelErrors: ReadonlyMap<string, string>
+}
+
 /** The per-route outcome of one discovery pass. */
 export interface DiscoveryOutcome {
-  /** Routes that probed successfully and assembled to a serviceable profile. */
-  readonly discovered: ReadonlyMap<string, ResolvedPiAiProviderProfile>
-  /** Routes whose probe failed or answered empty before assembling. */
+  readonly discovered: ReadonlyMap<string, DynamicProviderProfile>
   readonly failed: readonly { readonly route: string; readonly message: string }[]
 }
 
 /** Everything a discovery pass reads for cancellation. */
 export interface DiscoveryDeps {
-  /** Caller cancellation for the whole pass. */
   readonly signal: AbortSignal | undefined
 }
 
 /**
- * Resolve one route's probe credential: credential seam first, launch
- * environment as the fallback layer. Mirrors pi-ai's own resolution so a
- * dynamic route authenticates its probe exactly as it would a request.
+ * Resolve one route's probe credential: the credential seam first, the launch
+ * environment as the fallback layer.
  */
 async function resolveKey(ctx: Context, ref: string | undefined): Promise<string | undefined> {
   if (ref === undefined) return undefined
@@ -73,11 +63,10 @@ async function resolveKey(ctx: Context, ref: string | undefined): Promise<string
 
 /**
  * Translate one discovered model into a pi-ai `Model`. Endpoint-disclosed
- * capacities win; the bundled catalog fills the display name and, for ids it
- * records as reasoning-capable, the thinking levels; the route's declared
- * defaults (then pi-ai's own) size whatever both leave undisclosed. Every
- * model on a route carries the route's protocol, matching pi-ai's explicit
- * `api` posture for a non-catalog route.
+ * capacities win; the bundled catalog fills the display name and, for
+ * reasoning-capable ids, the thinking levels; the route's declared defaults
+ * (then pi-ai's own) size whatever both leave undisclosed. Every model carries
+ * the route's protocol, matching pi-ai's explicit `api` posture.
  */
 export function toModel(routeName: string, route: RouteProfile, discovered: LlmDiscoveredModel, inputModalities?: readonly string[]): Model<Api> {
   const reasoningEfforts = catalogReasoningEfforts(discovered.id)
@@ -103,17 +92,15 @@ export function toModel(routeName: string, route: RouteProfile, discovered: LlmD
 }
 
 /**
- * Assemble one route's resolved profile from its probe answer. The adapter
- * reads a documented subset of fields — `provider`, `displayName`,
+ * Assemble one route's resolved profile from its probe answer. The assembly
+ * materializes exactly the fields the adapter reads: `provider`, `displayName`,
  * `retryPolicy`, `streamIdleTimeoutMs`, `configuredMaxTokens`, `piProvider`,
  * plus the optional streaming knobs (`reasoning`, `headers`, `transport`,
  * `timeoutMs`, `websocketConnectTimeoutMs`, `thinkingBudgets`,
- * `cacheRetention`) — so the assembly materializes exactly those. The
- * credential does not flow through `piProvider.auth`: the adapter resolves it
- * per request through `resolveApiKey` and passes it as the `apiKey` stream
- * option, so the provider's auth is an ambient placeholder.
+ * `cacheRetention`), and `modelErrors`, which the harness reads on every
+ * prepared call (0.1.5-rc) and which is empty by construction here.
  */
-export function assembleProfile(routeName: string, route: RouteProfile, models: readonly Model<Api>[]): ResolvedPiAiProviderProfile {
+export function assembleProfile(routeName: string, route: RouteProfile, models: readonly Model<Api>[]): DynamicProviderProfile {
   const factory = PROTOCOLS[route.api]
   if (factory === undefined) {
     throw new LlmError(
@@ -128,9 +115,8 @@ export function assembleProfile(routeName: string, route: RouteProfile, models: 
     name: displayName,
     baseUrl: route.baseURL,
     // Ambient-only auth: the harness resolves the credential per request and
-    // passes it as the stream's apiKey option, so the provider never resolves
-    // a key of its own. This placeholder resolves to nothing and the request
-    // option wins.
+    // passes it as the stream's apiKey option, so this placeholder resolves to
+    // nothing and the request option wins.
     auth: { apiKey: { name: displayName, resolve: () => Promise.resolve({ auth: {}, source: displayName }) } },
     models,
     api: factory(),
@@ -140,35 +126,29 @@ export function assembleProfile(routeName: string, route: RouteProfile, models: 
     displayName,
     ...(route.apiKeyEnv === undefined ? {} : { apiKeyEnv: credentialRef(route.apiKeyEnv) }),
     // A credential-less route streams with the placeholder key (see the
-    // adapter's resolveApiKey); the empty Authorization header erases the
-    // Bearer line the OpenAI SDK builds from it — keyless gateways refuse a
-    // malformed bearer outright, so the request must carry no bearer value.
-    // Only openai-completions takes this posture: the other dialects' SDKs
-    // would send the placeholder as a real credential (x-api-key and kin).
+    // adapter's resolveApiKey), so the empty Authorization header erases the
+    // Bearer line the OpenAI SDK builds from it: keyless gateways refuse a
+    // malformed bearer outright. Only openai-completions takes this posture;
+    // the other dialects' SDKs would send the placeholder as a real credential.
     ...(route.apiKeyEnv === undefined && route.api === 'openai-completions' ? { headers: { authorization: '' } } : {}),
     streamIdleTimeoutMs: 300_000,
-    // Image-payload budgets mirror the llm-pi-ai defaults (its DEFAULT_* are
-    // declared in config.d.ts but not re-exported from the package root):
-    // 20 MiB base64 payload, a 2048x2048 pixel budget, and a 1 MiB raw target.
+    // Image-payload budgets mirror the llm-pi-ai defaults: 20 MiB base64
+    // payload, a 2048x2048 pixel budget, and a 1 MiB raw target.
     maxRequestImageBytes: 20 * 1024 * 1024,
     requestImagePixelBudget: 2048 * 2048,
     requestImageMaxBytes: 1024 * 1024,
     retryPolicy: resolveRetryPolicy(undefined, `llm-dynamic-provider: route "${routeName}" retryPolicy`),
     configuredMaxTokens: new Map(),
+    modelErrors: new Map(),
     piProvider,
-  } as ResolvedPiAiProviderProfile
+  }
 }
 
 /**
  * Run one discovery pass over the declared dynamic routes. Each route is
- * probed, enriched, and assembled independently; a route that throws is
- * reported under `failed` and absent from `discovered`, so one bad endpoint
- * never blocks the others.
- * @param ctx - the host context (credential seam + launch environment).
- * @param routes - the declared dynamic routes.
- * @param config - the plugin's probe configuration.
- * @param deps - caller cancellation.
- * @returns the per-route outcome; expected probe failures are reported, not thrown.
+ * probed, enriched, and assembled independently; expected probe failures are
+ * reported under `failed` rather than thrown, so one bad endpoint never blocks
+ * the others.
  */
 export async function discoverDynamicProviders(
   ctx: Context,
@@ -181,7 +161,7 @@ export async function discoverDynamicProviders(
     factsOf(modelId: string): { displayName?: string; contextWindow?: number; maxTokens?: number } | undefined
   },
 ): Promise<DiscoveryOutcome> {
-  const discovered = new Map<string, ResolvedPiAiProviderProfile>()
+  const discovered = new Map<string, DynamicProviderProfile>()
   const failed: { route: string; message: string }[] = []
   const discovery = resolveDiscoveryConfig(config)
   for (const [routeName, route] of Object.entries(routes)) {
@@ -198,9 +178,8 @@ export async function discoverDynamicProviders(
       )
       if (raw.length === 0) throw new LlmError(`endpoint "${route.baseURL}" advertises no models`, 'DISCOVERY_EMPTY')
       const piEnriched = discovery.enrichment ? enrichModels(raw) : [...raw]
-      // Fill whatever the bundled pi-ai catalog still leaves undisclosed from
-      // the models.dev facts — a fresh model pi-ai has not catalogued yet
-      // (a new grok) still gets its real name and capacities.
+      // Anything the bundled pi-ai catalog still leaves undisclosed comes from
+      // the models.dev facts.
       const enriched = piEnriched.map((model) => {
         const fact = catalog?.factsOf(model.id)
         if (fact === undefined) return model

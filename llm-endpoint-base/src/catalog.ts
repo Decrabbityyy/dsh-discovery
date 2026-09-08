@@ -1,26 +1,15 @@
-/**
- * The catalog reasoning index: exact model id → the `reasoningEfforts`
- * declaration the pi-ai profile contract accepts. The translation copies the
- * catalog model's own `thinkingLevelMap` spellings through
- * `getSupportedThinkingLevels`: mapped levels keep their wire value, an
- * unmapped base level spells its canonical name, and `off` writes `null`
- * ("supported, send nothing"). Nothing is guessed.
- * @module dsh-llm-endpoint-base/catalog
- */
-
 import { getSupportedThinkingLevels } from '@earendil-works/pi-ai'
 import { getBuiltinModels, getBuiltinProviders } from '@earendil-works/pi-ai/providers/all'
 import type { ModelModality } from './models-dev.ts'
 
-/** One `reasoningEfforts` declaration: level → wire spelling (null only for `off`). */
+/** A level → wire spelling map; only `off` may map to `null`. */
 export type ReasoningEfforts = Record<string, string | null>
 
 let cachedIndex: ReadonlyMap<string, ReasoningEfforts> | undefined
 
 /**
- * Build the exact-id index once per process. Only reasoning models get an
- * entry; a shared id resolves to the first provider in catalog order.
- * @returns the memoized index.
+ * The exact-id index, built once per process. Only reasoning models get an
+ * entry, and a shared id resolves to the first provider in catalog order.
  */
 function reasoningIndex(): ReadonlyMap<string, ReasoningEfforts> {
   if (cachedIndex !== undefined) return cachedIndex
@@ -41,10 +30,8 @@ function reasoningIndex(): ReadonlyMap<string, ReasoningEfforts> {
 }
 
 /**
- * The catalog's reasoning declaration for one model id.
- * @param id - the model id exactly as the endpoint accepts it.
- * @returns the `reasoningEfforts` to write, or `undefined` when the catalog
- *   records no reasoning capability for the id.
+ * The catalog's `reasoningEfforts` for one model id, or `undefined` when the
+ * catalog records no reasoning capability for it.
  */
 export function catalogReasoningEfforts(id: string): ReasoningEfforts | undefined {
   const efforts = reasoningIndex().get(id)
@@ -54,9 +41,8 @@ export function catalogReasoningEfforts(id: string): ReasoningEfforts | undefine
 let cachedModalityIndex: ReadonlyMap<string, readonly ModelModality[]> | undefined
 
 /**
- * Build the exact-id input-modality index once per process. A shared id
+ * The exact-id input-modality index, built once per process. A shared id
  * resolves to the first provider in catalog order, matching the reasoning index.
- * @returns the memoized index.
  */
 function modalityIndex(): ReadonlyMap<string, readonly ModelModality[]> {
   if (cachedModalityIndex !== undefined) return cachedModalityIndex
@@ -72,10 +58,8 @@ function modalityIndex(): ReadonlyMap<string, readonly ModelModality[]> {
 }
 
 /**
- * The catalog's accepted input modalities for one model id.
- * @param id - the model id exactly as the endpoint accepts it.
- * @returns the accepted input modalities, or `undefined` when the catalog
- *   does not know the id.
+ * The catalog's accepted input modalities for one model id, or `undefined`
+ * when the catalog does not know the id.
  */
 export function catalogInputModalities(id: string): readonly ModelModality[] | undefined {
   return modalityIndex().get(id)

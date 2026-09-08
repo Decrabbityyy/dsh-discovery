@@ -1,0 +1,29 @@
+{
+  // Type-check-only project for the host-side packages: src AND specs, no emit.
+  // The build's "tsc -b" covers src alone and tsdown transpiles without checking,
+  // so without this gate a type error in a spec file stays invisible until
+  // vitest happens to execute it. Sibling workspace packages map to their
+  // sources so the gate works on a clean checkout, mirroring the vitest aliases.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "incremental": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "noEmit": true,
+    "paths": {
+      "dsh-llm-endpoint-base": ["./llm-endpoint-base/src/index.ts"],
+      "dsh-llm-endpoint-base/store": ["./llm-endpoint-base/src/store.ts"],
+      "dsh-llm-endpoint-base/vocabulary": ["./llm-endpoint-base/src/vocabulary.ts"]
+    }
+  },
+  "include": [
+    "llm-endpoint-base/src",
+    "llm-endpoint-base/tests",
+    "llm-discovery/src",
+    "llm-discovery/tests",
+    "llm-dynamic-provider/src",
+    "llm-dynamic-provider/tests"
+  ]
+}

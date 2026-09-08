@@ -1,16 +1,3 @@
-/**
- * OMP-style endpoint model discovery for the DeepSeek Harness LLM seam: one
- * plugin registering the `llm-discovery` discovery offer on `ctx.llm`. The
- * engine ladder and shared catalog parsers live in
- * `dsh-llm-endpoint-base`; this plugin is the thin Cordis shell that mounts
- * that engine as the `llm-discovery` offer and enriches undisclosed fields
- * from the online `models.dev` catalog. Configuration surfaces reach it
- * through the existing `llm.discoverModels` RPC with
- * `settingsNs: 'llm-discovery'`; no adapter or gateway changes are involved.
- * Named exports preserve loader injection metadata.
- * @module dsh-llm-discovery
- */
-
 import type { Context } from '@deepseek-ai/cordis'
 import { DISCOVERY_NAMESPACE, discoverEndpoint, enrichModels, MODELS_DEV_URL, normalizeModelName, parseModelFacts, resolveDiscoveryConfig } from 'dsh-llm-endpoint-base'
 import type { Config, ModelFacts } from 'dsh-llm-endpoint-base'
@@ -20,15 +7,13 @@ export { Config, resolveDiscoveryConfig } from 'dsh-llm-endpoint-base'
 export type { EngineSwitches, ResolvedDiscoveryConfig } from 'dsh-llm-endpoint-base'
 export { DISCOVERY_NAMESPACE, discoverEndpoint, enrichModels } from 'dsh-llm-endpoint-base'
 
-/** Cordis plugin name. */
 export const name = 'llm-discovery'
 /** Service dependency: the LLM registry the discovery offer registers on. */
 export const inject = ['llm']
 
 /**
- * Fetch the current models.dev fact index. Network failure is deliberately
- * non-fatal: endpoint-provided fields and the bundled pi-ai catalog remain
- * usable when the online catalog is unavailable.
+ * Fetch the current models.dev fact index. A failed fetch yields an empty index
+ * rather than throwing, leaving the endpoint and bundled-catalog fields usable.
  */
 async function loadOnlineFacts(): Promise<ReadonlyMap<string, ModelFacts>> {
   const facts = new Map<string, ModelFacts>()
@@ -44,8 +29,8 @@ async function loadOnlineFacts(): Promise<ReadonlyMap<string, ModelFacts>> {
 
 /**
  * Fill fields omitted by an endpoint from the current models.dev snapshot.
- * Endpoint values are authoritative; model ids are normalized so providers
- * returning `provider/model` can use the same online fact as a bare id.
+ * Endpoint values win, and ids are normalized so `provider/model` resolves to
+ * the same fact as a bare id.
  */
 export function enrichModelsFromOnline(
   models: readonly LlmDiscoveredModel[],

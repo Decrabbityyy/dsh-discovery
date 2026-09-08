@@ -28,6 +28,12 @@ jobs:
           package-manager-cache: false
       - name: Install plugin dependencies
         run: pnpm install --frozen-lockfile
+      # Pre-runtime gate: peer ranges vs the lockfile, the pi-ai line the
+      # harness adapter pins, harness specifiers that must resolve at runtime,
+      # src+tests type check, dsh manifest contract. The host-facing checks skip
+      # themselves when no harness install is present. See scripts/compat/README.md.
+      - name: Compatibility gate
+        run: pnpm run check
       - name: Test plugin workspace
         run: pnpm -r run test
       - name: Build plugin workspace

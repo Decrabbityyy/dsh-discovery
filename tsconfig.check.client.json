@@ -1,0 +1,21 @@
+{
+  // Type-check-only project for the browser half (settings section): src AND
+  // specs, no emit, React JSX + DOM on top of the client base shape.
+  "extends": "./tsconfig.base.client.json",
+  "compilerOptions": {
+    "composite": false,
+    "incremental": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "noEmit": true,
+    "paths": {
+      "dsh-llm-endpoint-base": ["./llm-endpoint-base/src/index.ts"],
+      "dsh-llm-endpoint-base/vocabulary": ["./llm-endpoint-base/src/vocabulary.ts"]
+    }
+  },
+  "include": [
+    "ui-settings-discovery/src",
+    "ui-settings-discovery/tests"
+  ]
+}
