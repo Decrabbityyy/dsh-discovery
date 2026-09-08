@@ -27,7 +27,7 @@ import {
   deriveKeyRef, DISCOVERY_NS, DISCOVERY_PLUGIN, DYNAMIC_PLUGIN, isActivePlugin,
   messageOf, normalizeModelName, PI_AI_NS, ROUTE_PATTERN,
 } from './discovery.ts'
-import type { DiscoveryApi } from './discovery.ts'
+import type { DiscoveryApi, DiscoveryResponse } from './discovery.ts'
 import { DynamicRoutes } from './DynamicRoutes.tsx'
 import { CUSTOM_PRESET, ENGINE_PRESETS, PROTOCOLS, reasoningEffortsOf } from './presets.ts'
 import type { EnginePreset } from './presets.ts'
@@ -213,13 +213,37 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
 
   /** The installed-catalog pi-ai provider routes, empty on a wire failure. */
   const catalogRoutes = async (): Promise<ReadonlySet<string>> => {
-    const listed = await api.llm.providers()
-    if (!listed.ok) return new Set()
-    return new Set(
-      listed.value.providers
-        .filter(entry => entry.settingsNs === PI_AI_NS && entry.declared === false)
-        .map(entry => entry.provider),
-    )
+    try {
+      const llm = api.llm as DiscoveryApi['llm'] & {
+        providers?: () => Promise<DiscoveryResponse<{ readonly providers: readonly { readonly provider: string; readonly settingsNs: string; readonly declared?: boolean }[] }>>
+      }
+      if (typeof llm.listConfigurableProviders === 'function') {
+        const listed = await llm.listConfigurableProviders()
+        if (!listed.ok) return new Set()
+        // The host answers a bare array; tolerate a legacy `{ providers }` envelope.
+        const entries = Array.isArray(listed.value)
+          ? listed.value
+          : (listed.value as unknown as { providers?: readonly { readonly provider: string; readonly settingsNs: string; readonly declared?: boolean }[] }).providers ?? []
+        return new Set(
+          entries
+            .filter(entry => entry.settingsNs === PI_AI_NS && entry.declared === false)
+            .map(entry => entry.provider),
+        )
+      }
+      // Legacy fallback: very old hosts exposed `llm.providers()` with the same envelope.
+      if (typeof llm.providers === 'function') {
+        const listed = await llm.providers()
+        if (!listed.ok) return new Set()
+        return new Set(
+          listed.value.providers
+            .filter(entry => entry.settingsNs === PI_AI_NS && entry.declared === false)
+            .map(entry => entry.provider),
+        )
+      }
+      return new Set()
+    } catch {
+      return new Set()
+    }
   }
 
   /** Prefill every editable field from one card. */

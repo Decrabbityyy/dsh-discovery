@@ -70,7 +70,7 @@ function faceWith(overrides: {
   const describe = overrides.describe ?? describeWith([{ ns: 'llm-pi-ai' }])
   const mutate = overrides.mutate ?? vi.fn(() => Promise.resolve(ok({ ns: 'llm-dynamic-provider', revision: 2 })))
   const set = overrides.set ?? vi.fn(() => Promise.resolve(ok({})))
-  const providers = overrides.providers ?? vi.fn(() => Promise.resolve(ok({ providers: [] })))
+  const providers = overrides.providers ?? vi.fn(() => Promise.resolve(ok([])))
   const discover = overrides.discover ?? vi.fn(() => Promise.resolve(ok([])))
   const dynamicLoaded = overrides.dynamicLoaded !== false
   const pluginInventory = overrides.pluginInventory ?? vi.fn(() => Promise.resolve(ok({
@@ -82,7 +82,7 @@ function faceWith(overrides: {
     ],
   })))
   const api = {
-    llm: { discoverModels: discover, providers },
+    llm: { discoverModels: discover, listConfigurableProviders: providers },
     pluginInventory: { list: pluginInventory },
     settings: { describe, mutate },
     credentials: { set },

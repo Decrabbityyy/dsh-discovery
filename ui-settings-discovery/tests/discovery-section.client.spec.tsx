@@ -100,7 +100,7 @@ function scriptedFace(options: ScriptedFaceOptions = {}): {
     options.set === undefined ? vi.fn(() => Promise.resolve(ok({}))) : options.set
   ) as Mock
   const providers = (
-    options.providers === undefined ? vi.fn(() => Promise.resolve(ok({ providers: [] }))) : options.providers
+    options.providers === undefined ? vi.fn(() => Promise.resolve(ok([]))) : options.providers
   ) as Mock
   const pluginInventory = (
     options.pluginInventory === undefined
@@ -110,7 +110,7 @@ function scriptedFace(options: ScriptedFaceOptions = {}): {
       : options.pluginInventory
   ) as Mock
   const api = {
-    llm: { discoverModels: discover, providers },
+    llm: { discoverModels: discover, listConfigurableProviders: providers },
     pluginInventory: { list: pluginInventory },
     settings: { describe, mutate },
     credentials: { set },
@@ -563,13 +563,15 @@ describe('adoption', () => {
 
   it('lets a catalog route inherit reasoning and ignores the picked levels', async () => {
     const { api, mutate } = scriptedFace({
-      providers: vi.fn(() => Promise.resolve(ok({
-        providers: [{
+      providers: vi.fn(() => Promise.resolve(ok([
+        {
           provider: 'anthropic',
+          displayName: 'Anthropic',
           settingsNs: 'llm-pi-ai',
+          settingsPath: ['providers', 'anthropic'],
           declared: false,
-        }],
-      }))),
+        },
+      ]))),
     })
     await renderLoaded(api)
     await probeWith()

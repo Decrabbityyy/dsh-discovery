@@ -88,10 +88,12 @@ export type SettingsWireOp =
   | { readonly op: 'set'; readonly path: readonly string[]; readonly value: unknown }
   | { readonly op: 'unset'; readonly path: readonly string[] }
 
-/** One listed provider entry of the llm.providers wire answer. */
+/** One listed provider entry of the llm.listConfigurableProviders wire answer. */
 export interface ProviderWireEntry {
   readonly provider: string
+  readonly displayName: string
   readonly settingsNs: string
+  readonly settingsPath: readonly string[]
   readonly declared?: boolean
 }
 
@@ -107,8 +109,8 @@ export interface DiscoveryApi {
   readonly llm: {
     /** Interrogate one endpoint through a host discovery offer. */
     discoverModels(settingsNs: string, request: LlmModelDiscoveryRequest): Promise<DiscoveryResponse<readonly LlmDiscoveredModel[]>>
-    /** List the registered provider routes. */
-    providers(): Promise<DiscoveryResponse<{ readonly providers: readonly ProviderWireEntry[] }>>
+    /** List the configurable provider routes. */
+    listConfigurableProviders(): Promise<DiscoveryResponse<readonly ProviderWireEntry[]>>
   }
   readonly pluginInventory: {
     /** Read the current Host Loader entries for optional-feature gating. */
