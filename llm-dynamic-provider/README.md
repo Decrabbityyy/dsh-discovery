@@ -50,7 +50,7 @@ UPSTREAM_API_KEY=你的密钥
 | `defaultContextWindow` | 否 | 端点没有返回上下文窗口时使用的值 |
 | `defaultMaxTokens` | 否 | 端点没有返回最大输出时使用的值 |
 
-路由 ID（示例中的 `upstream`）只能使用小写字母、数字和连字符。
+路由 ID（示例中的 `upstream`）只能使用小写字母、数字和连字符。环境变量名不能以数字开头，所以以数字开头的路由 ID 无法声明 `apiKeyEnv`；这类路由只能指向无认证端点。
 
 ## 插件配置
 

@@ -8,7 +8,7 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
-import { deriveKeyRef, messageOf, ROUTE_PATTERN } from './discovery.ts'
+import { CREDENTIAL_REF_PATTERN, deriveKeyRef, messageOf, ROUTE_PATTERN } from './discovery.ts'
 import type { DiscoveryApi, DynamicRoute } from './discovery.ts'
 import styles from './DiscoverySection.module.css'
 
@@ -74,11 +74,11 @@ export function DynamicRoutes({ api }: { api: DiscoveryApi }): ReactNode {
 
   /** Store the typed key, then set the route. Returns a failure message or undefined. */
   const save = async (): Promise<string | undefined> => {
-    const routeId = draft.id.trim()
-    const keyValue = draft.apiKey.trim()
+    /* v8 ignore next -- the save button is disabled while the derived reference is illegal */
+    if (keyRefProblem !== undefined) return keyRefProblem
     let apiKeyEnv: string | undefined
     if (keyValue.length > 0) {
-      apiKeyEnv = deriveKeyRef(routeId)
+      apiKeyEnv = keyRef
       const stored = await api.credentials.set(apiKeyEnv, keyValue)
       if (!stored.ok) return stored.error.message
     }
@@ -134,9 +134,17 @@ export function DynamicRoutes({ api }: { api: DiscoveryApi }): ReactNode {
   }
 
   const routeId = draft.id.trim()
+  const keyValue = draft.apiKey.trim()
+  const keyRef = deriveKeyRef(routeId)
   const idInvalid = routeId.length > 0 && !ROUTE_PATTERN.test(routeId)
   const editingExisting = editing !== undefined
+  // The credential namespace brands a reference as an environment-variable
+  // name, so a route id starting with a digit can carry no stored key.
+  const keyRefProblem = keyValue.length === 0 || CREDENTIAL_REF_PATTERN.test(keyRef)
+    ? undefined
+    : `路由 ID「${routeId}」的凭证引用「${keyRef}」不是合法的环境变量名（必须以字母或下划线开头）；请改用字母开头的路由 ID，或清空 API 密钥。`
   const canSubmit = !busy && routeId.length > 0 && !idInvalid && draft.baseURL.trim().length > 0
+    && keyRefProblem === undefined
   const entries = Object.entries(routes ?? {})
 
   return (
@@ -245,6 +253,7 @@ export function DynamicRoutes({ api }: { api: DiscoveryApi }): ReactNode {
             onChange={(event) => { setDraft({ ...draft, apiKey: event.target.value }) }}
           />
         </div>
+        {keyRefProblem !== undefined ? <p className={styles['error']}>{keyRefProblem}</p> : null}
         <div className={styles['actions']}>
           <button type="button" className={styles['primaryButton']} disabled={!canSubmit} onClick={() => { void submit() }}>
             {busy ? '保存中…' : editingExisting ? '保存路由' : '添加路由'}

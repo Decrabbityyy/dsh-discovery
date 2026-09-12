@@ -1,9 +1,9 @@
 import type { LlmDiscoveredModel, LlmModelDiscoveryRequest, RpcResponse } from '@deepseek-ai/dsh-api-remotes/client'
 import {
-  DISCOVERY_NS, DYNAMIC_NS, normalizeModelName, PI_AI_NS, ROUTE_PATTERN, deriveKeyRef, messageOf,
+  CREDENTIAL_REF_PATTERN, DISCOVERY_NS, DYNAMIC_NS, normalizeModelName, PI_AI_NS, ROUTE_PATTERN, deriveKeyRef, messageOf,
 } from 'dsh-llm-endpoint-base/vocabulary'
 
-export { DISCOVERY_NS, DYNAMIC_NS, normalizeModelName, PI_AI_NS, ROUTE_PATTERN, deriveKeyRef, messageOf }
+export { CREDENTIAL_REF_PATTERN, DISCOVERY_NS, DYNAMIC_NS, normalizeModelName, PI_AI_NS, ROUTE_PATTERN, deriveKeyRef, messageOf }
 
 /** Exact Loader module names (`moduleName`, not the Cordis plugin name). */
 export const DISCOVERY_PLUGIN = 'dsh-llm-discovery'

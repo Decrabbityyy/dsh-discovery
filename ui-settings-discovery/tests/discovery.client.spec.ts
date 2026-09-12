@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { CUSTOM_PRESET, ENGINE_PRESETS, PROTOCOLS } from '../src/client/presets.ts'
 import {
-  deriveKeyRef, DISCOVERY_NS, DISCOVERY_PLUGIN, DYNAMIC_PLUGIN, isActivePlugin,
+  CREDENTIAL_REF_PATTERN, deriveKeyRef, DISCOVERY_NS, DISCOVERY_PLUGIN, DYNAMIC_PLUGIN, isActivePlugin,
   messageOf, PI_AI_NS, ROUTE_PATTERN,
 } from '../src/client/discovery.ts'
 
@@ -67,5 +67,21 @@ describe('ROUTE_PATTERN', () => {
     expect('Bad_Route'.match(ROUTE_PATTERN)).toBeNull()
     expect('has space'.match(ROUTE_PATTERN)).toBeNull()
     expect(''.match(ROUTE_PATTERN)).toBeNull()
+  })
+})
+
+describe('CREDENTIAL_REF_PATTERN', () => {
+  it('accepts the references deriveKeyRef produces for letter-leading route ids', () => {
+    expect('LOCAL_OLLAMA_API_KEY'.match(CREDENTIAL_REF_PATTERN)).not.toBeNull()
+    expect('_API_KEY'.match(CREDENTIAL_REF_PATTERN)).not.toBeNull()
+  })
+
+  it('rejects a reference derived from a digit-leading route id', () => {
+    // The route id is a legal settings key, but the host brands a credential
+    // reference as an environment-variable name and refuses this one.
+    expect(ROUTE_PATTERN.test('9router')).toBe(true)
+    expect('9ROUTER_API_KEY'.match(CREDENTIAL_REF_PATTERN)).toBeNull()
+    expect(deriveKeyRef('9router').match(CREDENTIAL_REF_PATTERN)).toBeNull()
+    expect(deriveKeyRef('router-9').match(CREDENTIAL_REF_PATTERN)).not.toBeNull()
   })
 })

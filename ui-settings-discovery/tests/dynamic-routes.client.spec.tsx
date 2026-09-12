@@ -192,4 +192,27 @@ describe('dynamic-routes management', () => {
       })])
     })
   })
+
+  it('refuses a key the derived reference cannot name', async () => {
+    const { writes } = stubRoutesEndpoint()
+    const set = vi.fn(() => Promise.resolve(ok({})))
+    const { api } = faceWith({
+      describe: describeWith([{ ns: 'llm-pi-ai' }, { ns: 'llm-dynamic-provider', routes: {} }]),
+      set,
+    })
+    render(<DiscoverySection api={api} />)
+    await waitFor(() => { expect(screen.getByText('动态路由')).toBeTruthy() })
+    const block = dynamicBlock()
+
+    // `9router` is a legal route id, but `9ROUTER_API_KEY` is not a legal
+    // credential reference, so the host would refuse the store.
+    fireEvent.change(within(block).getByLabelText('路由 ID'), { target: { value: '9router' } })
+    fireEvent.change(within(block).getByLabelText('端点地址'), { target: { value: 'http://x.internal/v1' } })
+    fireEvent.change(within(block).getByLabelText('API 密钥（可选）'), { target: { value: 'sk' } })
+    expect(within(block).getByRole<HTMLButtonElement>('button', { name: '添加路由' }).disabled).toBe(true)
+    expect(within(block).getByText('路由 ID「9router」的凭证引用「9ROUTER_API_KEY」不是合法的环境变量名（必须以字母或下划线开头）；请改用字母开头的路由 ID，或清空 API 密钥。')).toBeTruthy()
+    fireEvent.click(within(block).getByRole('button', { name: '添加路由' }))
+    expect(set).not.toHaveBeenCalled()
+    expect(writes).toEqual([])
+  })
 })

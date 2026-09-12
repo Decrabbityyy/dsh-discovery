@@ -60,6 +60,15 @@ export function normalizeModelName(id: string): string {
 export const ROUTE_PATTERN = /^[a-z0-9-]+$/
 
 /**
+ * The grammar a credential reference must satisfy: the host brands one as a
+ * POSIX-style environment-variable name and `credentials.set` refuses anything
+ * else as `gateway/bad-request`. A route id is free to start with a digit, so
+ * `deriveKeyRef` can produce a reference this rejects — a surface that stores a
+ * typed key has to check the derived reference before calling.
+ */
+export const CREDENTIAL_REF_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
+
+/**
  * Human text for a rejected call. A rejection need not be an Error, so
  * anything else is stringified rather than dropped.
  */

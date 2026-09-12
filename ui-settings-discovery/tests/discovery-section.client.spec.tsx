@@ -710,6 +710,35 @@ describe('adoption', () => {
     expect(mutate.mock.calls).toHaveLength(0)
   })
 
+  it('refuses a key the derived reference cannot name', async () => {
+    const { api, set, mutate } = scriptedFace()
+    await renderLoaded(api)
+    await probeWith()
+    // `9router` is a legal route id, but `9ROUTER_API_KEY` is not a legal
+    // credential reference, so the host would refuse the store.
+    typeRoute('9router')
+    fireEvent.change(screen.getByLabelText('API 密钥（可选）'), { target: { value: 'sk' } })
+    expect(adoptButton().disabled).toBe(true)
+    expect(screen.getByText('路由 ID「9router」的凭证引用「9ROUTER_API_KEY」不是合法的环境变量名（必须以字母或下划线开头）；请改用字母开头的路由 ID，或清空 API 密钥。')).toBeDefined()
+    fireEvent.click(adoptButton())
+    expect(set.mock.calls).toHaveLength(0)
+    expect(mutate.mock.calls).toHaveLength(0)
+  })
+
+  it('still adopts a digit-leading route id that carries no key', async () => {
+    const { api, set, mutate } = scriptedFace()
+    await renderLoaded(api)
+    await probeWith()
+    typeRoute('9router')
+    expect(adoptButton().disabled).toBe(false)
+    fireEvent.click(adoptButton())
+    await waitFor(() => { expect(mutate.mock.calls).toHaveLength(1) })
+    expect(set.mock.calls).toHaveLength(0)
+    const ops = mutate.mock.calls[0]?.[1] as readonly { readonly value: Record<string, unknown> }[]
+    expect(ops[0]?.value['apiKeyEnv']).toBeUndefined()
+    expect(ops[0]?.value['baseURL']).toBe('http://127.0.0.1:11434')
+  })
+
   it('shows the transport failure text when the adoption rejects', async () => {
     const { api } = scriptedFace({
       mutate: vi.fn(() => Promise.reject(new Error('连接已断开'))),

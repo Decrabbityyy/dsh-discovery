@@ -9,6 +9,7 @@ export type { ReasoningEfforts } from './catalog.ts'
 export { MODELS_DEV_URL, inputModalitiesOf, normalizeLevel, normalizeModelName, parseCatalog, parseModalities, parseModelFacts } from './models-dev.ts'
 export type { ModelFacts, ModelModalities, ModelModality } from './models-dev.ts'
 export {
+  CREDENTIAL_REF_PATTERN,
   DISCOVERY_NS,
   DYNAMIC_NS,
   PI_AI_NS,

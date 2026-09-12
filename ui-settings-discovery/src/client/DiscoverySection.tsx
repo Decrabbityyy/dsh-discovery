@@ -15,7 +15,7 @@ import type { ReactNode } from 'react'
 import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-api-remotes/client'
 import clsx from 'clsx'
 import {
-  deriveKeyRef, DISCOVERY_NS, DISCOVERY_PLUGIN, DYNAMIC_PLUGIN, isActivePlugin,
+  CREDENTIAL_REF_PATTERN, deriveKeyRef, DISCOVERY_NS, DISCOVERY_PLUGIN, DYNAMIC_PLUGIN, isActivePlugin,
   messageOf, normalizeModelName, PI_AI_NS, ROUTE_PATTERN,
 } from './discovery.ts'
 import type { DiscoveryApi, DiscoveryResponse } from './discovery.ts'
@@ -158,10 +158,16 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
 
   const keyValue = apiKey.trim()
   const routeId = route.trim()
+  const keyRef = deriveKeyRef(routeId)
   const routeInvalid = routeId.length > 0 && !ROUTE_PATTERN.test(routeId)
+  // The credential namespace brands a reference as an environment-variable
+  // name, so a route id starting with a digit can carry no stored key.
+  const keyRefProblem = keyValue.length === 0 || CREDENTIAL_REF_PATTERN.test(keyRef)
+    ? undefined
+    : `路由 ID「${routeId}」的凭证引用「${keyRef}」不是合法的环境变量名（必须以字母或下划线开头）；请改用字母开头的路由 ID，或清空 API 密钥。`
   const probeReady = baseURL.trim().length > 0 && !probing
   const adoptReady = !adopting && candidates !== undefined && candidates.length > 0
-    && routeId.length > 0 && !routeInvalid
+    && routeId.length > 0 && !routeInvalid && keyRefProblem === undefined
 
   // The rows the table shows: candidates matching the filter by id or disclosed name.
   const needle = query.trim().toLowerCase()
@@ -302,6 +308,8 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
    * an orphaned ref (mutate refused) is harmless.
    */
   const adoptOnce = async (): Promise<string | undefined> => {
+    /* v8 ignore next -- the adopt button is disabled while the derived reference is illegal */
+    if (keyRefProblem !== undefined) return keyRefProblem
     const described = await api.settings.describe()
     if (!described.ok) return described.error.message
     const namespace = described.value.namespaces.find(candidate => candidate.ns === PI_AI_NS)
@@ -313,7 +321,6 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
       return `路由「${routeId}」已存在，请到「模型」设置页编辑该提供方`
     }
     const isCatalogRoute = (await catalogRoutes()).has(routeId)
-    const keyRef = deriveKeyRef(routeId)
     const storesKey = keyValue.length > 0
     if (storesKey) {
       const stored = await api.credentials.set(keyRef, keyValue)
@@ -437,6 +444,7 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
           onChange={(event) => { setApiKey(event.target.value) }}
         />
       </div>
+      {keyRefProblem !== undefined ? <p className={styles['error']}>{keyRefProblem}</p> : null}
       <div className={styles['actions']}>
         <button
           type="button"
