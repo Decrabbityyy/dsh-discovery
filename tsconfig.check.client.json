@@ -11,7 +11,9 @@
     "noEmit": true,
     "paths": {
       "dsh-llm-endpoint-base": ["./llm-endpoint-base/src/index.ts"],
-      "dsh-llm-endpoint-base/vocabulary": ["./llm-endpoint-base/src/vocabulary.ts"]
+      "dsh-llm-endpoint-base/vocabulary": ["./llm-endpoint-base/src/vocabulary.ts"],
+      "dsh-client-ui-settings-discovery/client": ["./ui-settings-discovery/src/client/index.ts"],
+      "dsh-client-ui-settings-discovery/invariant": ["./ui-settings-discovery/src/invariant.ts"]
     }
   },
   "include": [
