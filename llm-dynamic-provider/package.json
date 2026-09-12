@@ -1,27 +1,28 @@
 {
   "name": "dsh-llm-dynamic-provider",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Runtime-discovered pi-ai provider routes: probe an endpoint at boot, register its models into the in-memory LLM registry — nothing written to settings",
   "keywords": [
     "deepseek-harness",
     "dsh",
+    "dynamic-provider",
     "llm",
-    "model-discovery",
-    "dynamic-provider"
+    "model-discovery"
   ],
-  "publishConfig": {
-    "access": "public",
-    "registry": "https://registry.npmjs.org/"
+  "homepage": "https://github.com/Decrabbityyy/dsh-discovery#readme",
+  "bugs": {
+    "url": "https://github.com/Decrabbityyy/dsh-discovery/issues"
   },
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Decrabbityyy/dsh-discovery.git",
     "directory": "llm-dynamic-provider"
   },
-  "homepage": "https://github.com/Decrabbityyy/dsh-discovery#readme",
-  "bugs": {
-    "url": "https://github.com/Decrabbityyy/dsh-discovery/issues"
-  },
+  "files": [
+    "lib",
+    "cordis.patch.yml"
+  ],
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -36,31 +37,42 @@
     },
     "./package.json": "./package.json"
   },
-  "files": [
-    "lib",
-    "cordis.patch.yml"
-  ],
-  "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "scripts": {
     "build": "tsc -b tsconfig.json && tsdown",
     "prepack": "tsdown",
     "test": "vitest run",
     "prepublishOnly": "pnpm run test && pnpm run build"
   },
-  "dsh": {
-    "bundle": {
-      "patch": "./cordis.patch.yml"
-    }
+  "dependencies": {},
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-credentials": "^0.1.5-rc.2",
+    "@deepseek-ai/dsh-home-paths": "^0.1.5-rc.2",
+    "@deepseek-ai/dsh-invariants": "^0.1.5-rc.2",
+    "@deepseek-ai/dsh-launch-environment": "^0.1.5-rc.2",
+    "@deepseek-ai/dsh-llm": "^0.1.5-rc.2",
+    "@deepseek-ai/dsh-llm-pi-ai": "^0.1.5-rc.2",
+    "@deepseek-ai/dsh-settings": "^0.1.5-rc.2",
+    "@deepseek-ai/dsh-storage-domain": "^0.1.5-rc.2",
+    "@deepseek-ai/schemastery": "^3.18.2",
+    "@earendil-works/pi-ai": "^0.85.1",
+    "dsh-llm-endpoint-base": "workspace:*",
+    "tsdown": "^0.22.2",
+    "zod": "^4.4.3"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",
-    "@deepseek-ai/dsh-credentials": "^0.1.2-alpha.4 || ^0.1.5-rc.1",
-    "@deepseek-ai/dsh-home-paths": "^0.1.2-alpha.4 || ^0.1.5-rc.1",
-    "@deepseek-ai/dsh-launch-environment": "^0.1.2-alpha.4 || ^0.1.5-rc.1",
-    "@deepseek-ai/dsh-llm": "^0.1.2-alpha.4 || ^0.1.5-rc.1",
-    "@deepseek-ai/dsh-llm-pi-ai": "^0.1.2-alpha.4 || ^0.1.5-rc.1",
-    "@deepseek-ai/dsh-settings": "^0.1.2-alpha.4 || ^0.1.5-rc.1",
-    "@deepseek-ai/dsh-storage-domain": "^0.1.2-alpha.4 || ^0.1.5-rc.1",
+    "@deepseek-ai/dsh-credentials": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-home-paths": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-launch-environment": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-llm": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-llm-pi-ai": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-settings": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-storage-domain": "^0.1.5-rc.1",
     "@deepseek-ai/schemastery": "^3.18.2",
     "@earendil-works/pi-ai": "^0.85.1",
     "zod": "^4.4.3"
@@ -94,21 +106,9 @@
       "optional": true
     }
   },
-  "devDependencies": {
-    "@deepseek-ai/cordis": "^4.0.2",
-    "@deepseek-ai/dsh-credentials": "^0.1.5-rc.2",
-    "@deepseek-ai/dsh-home-paths": "^0.1.5-rc.2",
-    "@deepseek-ai/dsh-invariants": "^0.1.5-rc.2",
-    "@deepseek-ai/dsh-launch-environment": "^0.1.5-rc.2",
-    "@deepseek-ai/dsh-llm": "^0.1.5-rc.2",
-    "@deepseek-ai/dsh-llm-pi-ai": "^0.1.5-rc.2",
-    "@deepseek-ai/dsh-settings": "^0.1.5-rc.2",
-    "@deepseek-ai/dsh-storage-domain": "^0.1.5-rc.2",
-    "@deepseek-ai/schemastery": "^3.18.2",
-    "@earendil-works/pi-ai": "^0.85.1",
-    "dsh-llm-endpoint-base": "workspace:*",
-    "tsdown": "^0.22.2",
-    "zod": "^4.4.3"
-  },
-  "dependencies": {}
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
 }

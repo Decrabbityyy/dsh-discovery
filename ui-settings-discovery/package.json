@@ -1,7 +1,7 @@
 {
   "name": "dsh-client-ui-settings-discovery",
+  "version": "0.1.2",
   "description": "Model discovery settings section: probe local-engine and custom endpoints and adopt their models into a pi-ai provider profile",
-  "version": "0.1.1",
   "keywords": [
     "deepseek-harness",
     "dsh",
@@ -9,19 +9,23 @@
     "model-discovery",
     "web-ui"
   ],
-  "publishConfig": {
-    "access": "public",
-    "registry": "https://registry.npmjs.org/"
+  "homepage": "https://github.com/Decrabbityyy/dsh-discovery#readme",
+  "bugs": {
+    "url": "https://github.com/Decrabbityyy/dsh-discovery/issues"
   },
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Decrabbityyy/dsh-discovery.git",
     "directory": "ui-settings-discovery"
   },
-  "homepage": "https://github.com/Decrabbityyy/dsh-discovery#readme",
-  "bugs": {
-    "url": "https://github.com/Decrabbityyy/dsh-discovery/issues"
-  },
+  "files": [
+    "lib/index.js",
+    "lib/invariant.js",
+    "lib/client.js",
+    "lib/types/**/*.d.ts",
+    "cordis.patch.yml"
+  ],
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -40,17 +44,9 @@
     },
     "./package.json": "./package.json"
   },
-  "dsh": {
-    "bundle": {
-      "patch": "./cordis.patch.yml"
-    },
-    "client": {
-      "inject": [
-        "@deepseek-ai/dsh-client-ui-settings",
-        "@deepseek-ai/dsh-api-remotes"
-      ],
-      "platform": "web"
-    }
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
     "build": "tsc -b tsconfig.json && tsdown",
@@ -58,7 +54,6 @@
     "test": "vitest run",
     "prepublishOnly": "pnpm run test && pnpm run build"
   },
-  "license": "MIT",
   "dependencies": {
     "clsx": "^2.0.0"
   },
@@ -76,13 +71,13 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",
-    "@deepseek-ai/dsh-api-remotes": "^0.1.2-alpha.4 || ^0.1.5-rc.1",
-    "@deepseek-ai/dsh-client-connection": "^0.1.2-alpha.4 || ^0.1.5-rc.1",
-    "@deepseek-ai/dsh-client-ui-settings": "^0.1.2-alpha.4 || ^0.1.5-rc.1",
-    "@deepseek-ai/dsh-client-ui-slots": "^0.1.2-alpha.4 || ^0.1.5-rc.1",
-    "@deepseek-ai/dsh-invariants": "^0.1.2-alpha.4 || ^0.1.5-rc.1",
-    "react": "^18.2.0",
-    "@deepseek-ai/dsh-client-ui-renderer": "^0.1.2-alpha.4 || ^0.1.5-rc.1"
+    "@deepseek-ai/dsh-api-remotes": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-client-connection": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-client-ui-renderer": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-client-ui-settings": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.1.5-rc.1",
+    "@deepseek-ai/dsh-invariants": "^0.1.5-rc.1",
+    "react": "^18.2.0"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis": {
@@ -107,11 +102,16 @@
       "optional": true
     }
   },
-  "files": [
-    "lib/index.js",
-    "lib/invariant.js",
-    "lib/client.js",
-    "lib/types/**/*.d.ts",
-    "cordis.patch.yml"
-  ]
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-api-remotes"
+      ],
+      "platform": "web"
+    }
+  }
 }

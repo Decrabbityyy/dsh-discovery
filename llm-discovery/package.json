@@ -1,7 +1,7 @@
 {
   "name": "dsh-llm-discovery",
   "description": "Engine-detecting endpoint model discovery with bundled-catalog enrichment for the DeepSeek Harness LLM seam",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "keywords": [
     "deepseek-harness",
     "dsh",
@@ -53,7 +53,7 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",
-    "@deepseek-ai/dsh-llm": "^0.1.2-alpha.4 || ^0.1.5-rc.1",
+    "@deepseek-ai/dsh-llm": "^0.1.5-rc.1",
     "@deepseek-ai/schemastery": "^3.18.2",
     "@earendil-works/pi-ai": "^0.85.1"
   },
