@@ -4,9 +4,9 @@ export { DISCOVERY_NAMESPACE, discoverEndpoint } from './discover.ts'
 export { enrichModels } from './enrich.ts'
 export { fetchJson } from './http.ts'
 export type { FetchJsonOptions, JsonFetch, JsonFetchFailure } from './http.ts'
-export { catalogInputModalities, catalogReasoningEfforts } from './catalog.ts'
+export { catalogInputModalities, catalogReasoningEfforts, inputModalitiesOf } from './catalog.ts'
 export type { ReasoningEfforts } from './catalog.ts'
-export { MODELS_DEV_URL, inputModalitiesOf, normalizeLevel, normalizeModelName, parseCatalog, parseModalities, parseModelFacts } from './models-dev.ts'
+export { MODELS_DEV_URL, normalizeLevel, normalizeModelName, parseCatalog, parseModalities, parseModelFacts } from './models-dev.ts'
 export type { ModelFacts, ModelModalities, ModelModality } from './models-dev.ts'
 export {
   CREDENTIAL_REF_PATTERN,

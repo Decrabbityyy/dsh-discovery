@@ -1,6 +1,6 @@
 import { getSupportedThinkingLevels } from '@earendil-works/pi-ai'
 import { getBuiltinModels, getBuiltinProviders } from '@earendil-works/pi-ai/providers/all'
-import type { ModelModality } from './models-dev.ts'
+import type { ModelModalities, ModelModality } from './models-dev.ts'
 
 /** A level → wire spelling map; only `off` may map to `null`. */
 export type ReasoningEfforts = Record<string, string | null>
@@ -63,4 +63,15 @@ function modalityIndex(): ReadonlyMap<string, readonly ModelModality[]> {
  */
 export function catalogInputModalities(id: string): readonly ModelModality[] | undefined {
   return modalityIndex().get(id)
+}
+
+/**
+ * Resolve one model's accepted input modalities: the models.dev index first,
+ * then the bundled pi-ai catalog. A model neither source knows returns
+ * `undefined`, leaving the default to the caller.
+ */
+export function inputModalitiesOf(index: ReadonlyMap<string, ModelModalities>, modelId: string): readonly ModelModality[] | undefined {
+  const listed = index.get(modelId)
+  if (listed !== undefined && listed.input.length > 0) return listed.input
+  return catalogInputModalities(modelId)
 }

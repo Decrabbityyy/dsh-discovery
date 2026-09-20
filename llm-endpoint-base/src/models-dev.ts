@@ -1,4 +1,3 @@
-import { catalogInputModalities } from './catalog.ts'
 import { normalizeModelName } from './vocabulary.ts'
 
 export { normalizeModelName }
@@ -89,17 +88,6 @@ export function parseModalities(body: unknown): Map<string, ModelModalities> {
     }
   }
   return index
-}
-
-/**
- * Resolve one model's accepted input modalities: the models.dev index first,
- * then the bundled pi-ai catalog. A model neither source knows returns
- * `undefined`, leaving the default to the caller.
- */
-export function inputModalitiesOf(index: ReadonlyMap<string, ModelModalities>, modelId: string): readonly ModelModality[] | undefined {
-  const listed = index.get(modelId)
-  if (listed !== undefined && listed.input.length > 0) return listed.input
-  return catalogInputModalities(modelId)
 }
 
 /**

@@ -7,7 +7,7 @@ import { defineConfig } from 'tsdown'
 // checkout. The library is pure logic (no Cordis), so both the host plugins
 // and the browser client bundle it the same way.
 export default defineConfig({
-  entry: ['src/index.ts', 'src/vocabulary.ts', 'src/store.ts'],
+  entry: ['src/index.ts', 'src/vocabulary.ts', 'src/models-dev.ts', 'src/store.ts'],
   outDir: 'lib',
   format: ['esm'],
   deps: { neverBundle: [/^@deepseek-ai\//, /^@earendil-works\//, 'zod'] },

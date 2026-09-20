@@ -2,7 +2,7 @@
   "name": "dsh-llm-endpoint-base",
   "version": "0.1.2",
   "private": true,
-  "description": "Shared primitives for endpoint model discovery: the engine ladder, catalog enrichment, protocol and thinking-level vocabularies, and the models.dev catalog. The pure parsers and vocabularies are browser-safe (`.`/`./vocabulary`); `./store` is the host-only storage-domain persistence for the models.dev catalog",
+  "description": "Shared primitives for endpoint model discovery: the engine ladder, catalog enrichment, protocol and thinking-level vocabularies, and the models.dev catalog. The pure parsers and vocabularies are browser-safe (`.`/`./vocabulary`/`./models-dev`); `./store` is the host-only storage-domain persistence for the models.dev catalog",
   "license": "MIT",
   "files": [
     "lib"
@@ -18,6 +18,10 @@
     "./vocabulary": {
       "types": "./lib/types/vocabulary.d.ts",
       "default": "./lib/vocabulary.js"
+    },
+    "./models-dev": {
+      "types": "./lib/types/models-dev.d.ts",
+      "default": "./lib/models-dev.js"
     },
     "./store": {
       "types": "./lib/types/store.d.ts",
