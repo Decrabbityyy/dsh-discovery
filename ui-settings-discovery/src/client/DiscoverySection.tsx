@@ -20,9 +20,10 @@ import {
 } from './discovery.ts'
 import type { DiscoveryApi, DiscoveryResponse } from './discovery.ts'
 import { DynamicRoutes } from './DynamicRoutes.tsx'
+import { ModelResultsTable } from './ModelResultsTable.tsx'
 import { CUSTOM_PRESET, ENGINE_PRESETS, PROTOCOLS, reasoningEffortsOf } from './presets.ts'
 import type { EnginePreset } from './presets.ts'
-import styles from './DiscoverySection.module.css'
+import styles from './DiscoveryStyles.module.css'
 
 /** Injected dependencies of {@link DiscoverySection} (slot `inject`). */
 export interface DiscoverySectionInjected {
@@ -34,12 +35,6 @@ export interface DiscoverySectionInjected {
  * erases the share boundary at the render call).
  */
 export type DiscoverySectionProps = Partial<DiscoverySectionInjected>
-
-/** A compact modality marker: 文 for text, 图 for image, joined. */
-function modalityLabel(input: readonly string[] | undefined): string {
-  if (input === undefined || input.length === 0) return '—'
-  return input.map(value => (value === 'image' ? '图' : '文')).join('·')
-}
 
 /** Renders the section, or null while the shell has not injected yet. */
 export function DiscoverySection(props: DiscoverySectionProps): ReactNode {
@@ -58,9 +53,8 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
   const [probeError, setProbeError] = useState<string | undefined>(undefined)
   const [candidates, setCandidates] = useState<readonly LlmDiscoveredModel[] | undefined>(undefined)
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set())
-  // Case-insensitive id/name filter over the results table; hidden rows keep
-  // their picks.
-  const [query, setQuery] = useState('')
+  // Bumped on every probe so the results table drops a stale filter.
+  const [probeToken, setProbeToken] = useState(0)
   const [route, setRoute] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [adopting, setAdopting] = useState(false)
@@ -161,16 +155,6 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
   const probeReady = baseURL.trim().length > 0 && !probing
   const adoptReady = !adopting && candidates !== undefined && candidates.length > 0
     && routeId.length > 0 && !routeInvalid && keyRefProblem === undefined
-
-  // The rows the table shows: candidates matching the filter by id or disclosed name.
-  const needle = query.trim().toLowerCase()
-  const visible = candidates === undefined
-    ? []
-    : needle.length === 0
-      ? [...candidates]
-      : candidates.filter(model =>
-        model.id.toLowerCase().includes(needle)
-        || (model.name ?? facts[normalizeModelName(model.id)]?.name ?? '').toLowerCase().includes(needle))
 
   /** Whether the route id names an installed-catalog pi-ai provider. */
   const checkCatalogRoute = async (candidate: string): Promise<void> => {
@@ -281,7 +265,7 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
       }
       const found = response.value
       setCandidates(found)
-      setQuery('')
+      setProbeToken(token => token + 1)
       // Everything found starts checked.
       setPicked(new Set(found.map(model => model.id)))
       // Each model starts at the levels the catalog records for it; an unknown
@@ -459,166 +443,88 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
 
       {candidates !== undefined
         ? (
-          <section className={styles['resultsArea']} aria-label="发现的模型">
-            <div className={styles['resultsHeader']}>
-              <span className={styles['resultsTitle']}>发现的模型</span>
-              {candidates.length > 0
-                ? <span className={styles['resultsCount']}>已选 {picked.size} / 共 {candidates.length}</span>
-                : null}
-            </div>
-            {candidates.length === 0
-              ? <p className={styles['empty']}>未发现任何模型</p>
-              : (
-                <>
-                  <div className={styles['toolbar']}>
+          <>
+            <ModelResultsTable
+              title="发现的模型"
+              ariaLabel="发现的模型"
+              emptyText="未发现任何模型"
+              models={candidates}
+              picked={picked}
+              onToggle={toggle}
+              onSelectAll={selectAll}
+              onSelectNone={selectNone}
+              onInvert={invertSelection}
+              disabled={adopting}
+              catalog={catalog}
+              levels={modelLevels}
+              onToggleLevel={toggleModelLevel}
+              levelsDisabled={isCatalogRoute}
+              facts={facts}
+              modalities={modalities}
+              resetToken={probeToken}
+            />
+            {/* Nothing found means nothing to adopt, so the card stays away. */}
+            {candidates.length > 0
+              ? (
+                <div className={styles['adoptCard']}>
+                  <span className={styles['adoptTitle']}>采纳为 Provider</span>
+                  <div className={styles['field']}>
+                    <span className={styles['fieldLabel']}>路由 ID</span>
                     <input
-                      className={`${styles['input']} ${styles['searchInput']}`}
-                      type="search"
-                      value={query}
-                      placeholder="搜索模型 ID 或名称…"
-                      aria-label="搜索模型"
+                      className={styles['input']}
+                      type="text"
+                      value={route}
+                      placeholder="local-engine"
+                      aria-label="路由 ID"
                       disabled={adopting}
-                      onChange={(event) => { setQuery(event.target.value) }}
+                      onChange={(event) => {
+                        setRoute(event.target.value)
+                        void checkCatalogRoute(event.target.value.trim())
+                      }}
                     />
-                    <button type="button" className={styles['toolButton']} disabled={adopting} onClick={selectAll}>
-                      全选
-                    </button>
-                    <button type="button" className={styles['toolButton']} disabled={adopting} onClick={selectNone}>
-                      全不选
-                    </button>
-                    <button type="button" className={styles['toolButton']} disabled={adopting} onClick={invertSelection}>
-                      反选
+                  </div>
+                  {routeInvalid
+                    ? <p className={styles['error']}>路由 ID 只能包含小写字母、数字和连字符。</p>
+                    : null}
+                  <div className={styles['field']}>
+                    <span className={styles['fieldLabel']}>显示名称</span>
+                    <input
+                      className={styles['input']}
+                      type="text"
+                      value={displayName}
+                      placeholder={routeId}
+                      aria-label="显示名称"
+                      disabled={adopting}
+                      onChange={(event) => { setDisplayName(event.target.value) }}
+                    />
+                  </div>
+                  <p className={styles['hint']}>
+                    {isCatalogRoute
+                      ? '该路由是 catalog 提供方：已知模型的思考能力自动继承，无需勾选。'
+                      : '每个模型的思考档位已在表格中按目录默认勾选；勾选的写入该模型的 reasoningEfforts。'}
+                  </p>
+                  <div className={styles['actions']}>
+                    <button
+                      type="button"
+                      className={styles['primaryButton']}
+                      disabled={!adoptReady}
+                      onClick={() => { void adopt() }}
+                    >
+                      {adopting ? '采纳中…' : '采纳为 Provider'}
                     </button>
                   </div>
-                  {visible.length === 0
-                    ? <p className={styles['empty']}>没有匹配「{query.trim()}」的模型</p>
-                    : (
-                  <table className={styles['results']}>
-                    <thead>
-                      <tr>
-                        <th className={styles['resultHead']}><span className={styles['visuallyHidden']}>选择</span></th>
-                        <th className={styles['resultHead']}>模型 ID</th>
-                        <th className={styles['resultHead']}>名称</th>
-                        <th className={styles['resultHead']}>上下文窗口</th>
-                        <th className={styles['resultHead']}>最大输出</th>
-                        <th className={styles['resultHead']}>模态</th>
-                        <th className={styles['resultHead']}>思考档位</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {visible.map((model) => {
-                        // Both indexes key models by bare name, so a
-                        // provider-prefixed id resolves to the same entry.
-                        const bare = normalizeModelName(model.id)
-                        // An unknown id offers no levels.
-                        const available = catalog[bare] ?? []
-                        const chosen = modelLevels[model.id] ?? new Set<string>()
-                        // The models.dev facts fill what the host's bundled catalog left undisclosed.
-                        const fact = facts[bare]
-                        const displayName = model.name ?? fact?.name
-                        const contextWindow = model.contextWindow ?? fact?.contextWindow
-                        const maxTokens = model.maxTokens ?? fact?.maxTokens
-                        return (
-                        <tr key={model.id} className={styles['resultRow']}>
-                          <td className={styles['resultCell']}>
-                            <input
-                              type="checkbox"
-                              checked={picked.has(model.id)}
-                              aria-label={`选择 ${model.id}`}
-                              onChange={() => { toggle(model.id) }}
-                            />
-                          </td>
-                          <td className={`${styles['resultCell']} ${styles['resultId']}`}>{model.id}</td>
-                          <td className={styles['resultCell']}>{displayName ?? '—'}</td>
-                          <td className={styles['resultCell']}>{contextWindow ?? '—'}</td>
-                          <td className={styles['resultCell']}>{maxTokens ?? '—'}</td>
-                          <td className={styles['resultCell']}>{modalityLabel(modalities[bare]?.input)}</td>
-                          <td className={styles['resultCell']}>
-                            {available.length === 0
-                              ? '—'
-                              : (
-                                <div className={styles['levels']} role="group" aria-label={`${model.id} 思考档位`}>
-                                  {available.map(level => (
-                                    <label key={level} className={styles['levelItem']}>
-                                      <input
-                                        type="checkbox"
-                                        checked={chosen.has(level)}
-                                        aria-label={`${model.id} 档位 ${level}`}
-                                        disabled={adopting || isCatalogRoute}
-                                        onChange={() => { toggleModelLevel(model.id, level) }}
-                                      />
-                                      {level}
-                                    </label>
-                                  ))}
-                                </div>
-                              )}
-                          </td>
-                        </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                    )}
-
-                  <div className={styles['adoptCard']}>
-                    <span className={styles['adoptTitle']}>采纳为 Provider</span>
-                    <div className={styles['field']}>
-                      <span className={styles['fieldLabel']}>路由 ID</span>
-                      <input
-                        className={styles['input']}
-                        type="text"
-                        value={route}
-                        placeholder="local-engine"
-                        aria-label="路由 ID"
-                        disabled={adopting}
-                        onChange={(event) => {
-                          setRoute(event.target.value)
-                          void checkCatalogRoute(event.target.value.trim())
-                        }}
-                      />
-                    </div>
-                    {routeInvalid
-                      ? <p className={styles['error']}>路由 ID 只能包含小写字母、数字和连字符。</p>
-                      : null}
-                    <div className={styles['field']}>
-                      <span className={styles['fieldLabel']}>显示名称</span>
-                      <input
-                        className={styles['input']}
-                        type="text"
-                        value={displayName}
-                        placeholder={routeId}
-                        aria-label="显示名称"
-                        disabled={adopting}
-                        onChange={(event) => { setDisplayName(event.target.value) }}
-                      />
-                    </div>
-                    <p className={styles['hint']}>
-                      {isCatalogRoute
-                        ? '该路由是 catalog 提供方：已知模型的思考能力自动继承，无需勾选。'
-                        : '每个模型的思考档位已在表格中按目录默认勾选；勾选的写入该模型的 reasoningEfforts。'}
-                    </p>
-                    <div className={styles['actions']}>
-                      <button
-                        type="button"
-                        className={styles['primaryButton']}
-                        disabled={!adoptReady}
-                        onClick={() => { void adopt() }}
-                      >
-                        {adopting ? '采纳中…' : '采纳为 Provider'}
-                      </button>
-                    </div>
-                    {adoptError !== undefined ? <p className={styles['error']}>{adoptError}</p> : null}
-                    {adoptedRoute !== undefined
-                      ? (
-                        <p className={styles['savedNotice']} role="status" aria-live="polite">
-                          已采纳「{adoptedRoute}」，请在「模型」设置页查看该提供方。
-                        </p>
-                      )
-                      : null}
-                  </div>
-                </>
-              )}
-          </section>
+                  {adoptError !== undefined ? <p className={styles['error']}>{adoptError}</p> : null}
+                  {adoptedRoute !== undefined
+                    ? (
+                      <p className={styles['savedNotice']} role="status" aria-live="polite">
+                        已采纳「{adoptedRoute}」，请在「模型」设置页查看该提供方。
+                      </p>
+                    )
+                    : null}
+                </div>
+              )
+              : null}
+          </>
         )
         : null}
           </>
