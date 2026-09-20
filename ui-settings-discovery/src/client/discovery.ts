@@ -4,6 +4,7 @@ import {
   UI_CATALOG_PATH, deriveKeyRef, messageOf,
 } from 'dsh-llm-endpoint-base/vocabulary'
 import type { CatalogEnvelope } from 'dsh-llm-endpoint-base/vocabulary'
+import { reasoningEffortsOf } from './presets.ts'
 
 export {
   CREDENTIAL_REF_PATTERN, DISCOVERY_NS, DYNAMIC_NS, mergeCatalogEnvelopes, normalizeModelName, PI_AI_NS, ROUTE_PATTERN,
@@ -13,6 +14,134 @@ export type { CatalogEnvelope }
 
 /** Modalities one model's catalog entry records, keyed by bare model name. */
 export type ModelModalities = CatalogEnvelope['modalities'][string]
+
+/**
+ * The per-model `input` declaration to write for one adopted model, or
+ * undefined when the catalog records nothing for it or no image support.
+ *
+ * Only a positive image claim is written. `input` has no settings-surface
+ * editor, so writing `['text']` for a model the catalog still lists without
+ * modalities would freeze it as text-only with no way back when the catalog
+ * learns it accepts images; an unwritten field stays inheritable.
+ */
+export function declaredInputOf(
+  modalities: Readonly<Record<string, { readonly input?: readonly string[] }>>,
+  modelId: string,
+): readonly string[] | undefined {
+  const recorded = modalities[normalizeModelName(modelId)]?.input ?? []
+  const accepted = [...new Set(recorded.filter(value => value === 'text' || value === 'image'))]
+  return accepted.includes('image') ? accepted : undefined
+}
+
+/** One model read back out of a stored profile, plus the options it already declares. */
+export interface ProfileModel {
+  readonly id: string
+  readonly name?: string
+  readonly contextWindow?: number
+  readonly maxTokens?: number
+  /** Inputs the profile declares; kept when the catalog claims nothing. */
+  readonly input?: readonly string[]
+  /** Levels the profile declares; kept when none are picked. */
+  readonly reasoningEfforts?: Readonly<Record<string, string | null>>
+}
+
+/** What the provider dialog reads out of one described pi-ai profile. */
+export interface ProviderProfileDraft {
+  readonly baseURL?: string
+  readonly api?: string
+  /** The models the profile lists explicitly; a catalog-served route lists none. */
+  readonly models: readonly ProfileModel[]
+}
+
+/** One plain-object view of an unknown value, or undefined for anything else. */
+function recordOf(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined
+}
+
+function stringOf(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+function positiveIntegerOf(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined
+}
+
+function stringsOf(value: unknown): readonly string[] | undefined {
+  return Array.isArray(value) ? value.filter((member): member is string => typeof member === 'string') : undefined
+}
+
+/** The level → wire-spelling record of one stored declaration, when it carries one. */
+function levelsOf(value: unknown): Readonly<Record<string, string | null>> | undefined {
+  const record = recordOf(value)
+  if (record === undefined) return undefined
+  const levels: Record<string, string | null> = {}
+  for (const [level, spelling] of Object.entries(record)) {
+    if (spelling === null || typeof spelling === 'string') levels[level] = spelling
+  }
+  return levels
+}
+
+/**
+ * Read one provider profile out of a described namespace value. A shape this
+ * cannot read yields an empty draft rather than throwing: a hand-edited
+ * settings file must still open, and the dialog writes back only what it can
+ * describe.
+ */
+export function providerProfileOf(namespaceValue: unknown, routeId: string): ProviderProfileDraft {
+  const profile = recordOf(recordOf(recordOf(namespaceValue)?.['providers'])?.[routeId])
+  if (profile === undefined) return { models: [] }
+  const models: ProfileModel[] = []
+  for (const entry of Array.isArray(profile['models']) ? profile['models'] : []) {
+    const record = recordOf(entry)
+    if (record === undefined) continue
+    const id = stringOf(record['id'])
+    if (id === undefined) continue
+    const name = stringOf(record['name'])
+    const contextWindow = positiveIntegerOf(record['contextWindow'])
+    const maxTokens = positiveIntegerOf(record['maxTokens'])
+    const input = stringsOf(record['input'])
+    const reasoningEfforts = levelsOf(record['reasoningEfforts'])
+    models.push({
+      id,
+      ...name === undefined ? {} : { name },
+      ...contextWindow === undefined ? {} : { contextWindow },
+      ...maxTokens === undefined ? {} : { maxTokens },
+      ...input === undefined ? {} : { input },
+      ...reasoningEfforts === undefined ? {} : { reasoningEfforts },
+    })
+  }
+  const baseURL = stringOf(profile['baseURL'])
+  const api = stringOf(profile['api'])
+  return {
+    ...baseURL === undefined ? {} : { baseURL },
+    ...api === undefined ? {} : { api },
+    models,
+  }
+}
+
+/**
+ * One model entry to write back. The picked levels and the catalog's image
+ * claim win; a field neither supplies keeps what the stored profile already
+ * declared, so an edit that does not touch it cannot silently drop it.
+ */
+export function modelDeclaration(
+  row: ProfileModel,
+  levels: ReadonlySet<string>,
+  modalities: Readonly<Record<string, { readonly input?: readonly string[] }>>,
+): ProfileModel {
+  const reasoningEfforts = reasoningEffortsOf(levels) ?? row.reasoningEfforts
+  const input = declaredInputOf(modalities, row.id) ?? row.input
+  return {
+    id: row.id,
+    ...row.name === undefined ? {} : { name: row.name },
+    ...row.contextWindow === undefined ? {} : { contextWindow: row.contextWindow },
+    ...row.maxTokens === undefined ? {} : { maxTokens: row.maxTokens },
+    ...input === undefined ? {} : { input },
+    ...reasoningEfforts === undefined ? {} : { reasoningEfforts },
+  }
+}
 
 /** Exact Loader module names (`moduleName`, not the Cordis plugin name). */
 export const DISCOVERY_PLUGIN = 'dsh-llm-discovery'

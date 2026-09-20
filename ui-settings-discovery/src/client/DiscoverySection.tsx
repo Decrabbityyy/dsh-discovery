@@ -15,7 +15,7 @@ import type { ReactNode } from 'react'
 import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-api-remotes/client'
 import clsx from 'clsx'
 import {
-  CREDENTIAL_REF_PATTERN, deriveKeyRef, DISCOVERY_NS, DISCOVERY_PLUGIN, DYNAMIC_PLUGIN, isActivePlugin,
+  CREDENTIAL_REF_PATTERN, declaredInputOf, deriveKeyRef, DISCOVERY_NS, DISCOVERY_PLUGIN, DYNAMIC_PLUGIN, isActivePlugin,
   mergeCatalogEnvelopes, messageOf, normalizeModelName, PI_AI_NS, ROUTE_PATTERN, UI_CATALOG_PATH,
 } from './discovery.ts'
 import type { DiscoveryApi, DiscoveryResponse } from './discovery.ts'
@@ -335,9 +335,15 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
         : {
             models: selected.map(model => {
               const efforts = isCatalogRoute ? undefined : reasoningEffortsOf(modelLevels[model.id] ?? new Set())
+              // A catalog route inherits the installed catalog's modalities the
+              // way it inherits reasoning; a hand-declared route needs the
+              // per-model declaration written here, because nothing below it
+              // but the route-wide text-only default would answer.
+              const input = isCatalogRoute ? undefined : declaredInputOf(modalities, model.id)
               return {
                 ...model,
                 ...efforts === undefined ? {} : { reasoningEfforts: efforts },
+                ...input === undefined ? {} : { input },
               }
             }),
           },

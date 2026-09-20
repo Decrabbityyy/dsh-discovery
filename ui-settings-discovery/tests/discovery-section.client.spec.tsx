@@ -620,7 +620,49 @@ describe('adoption', () => {
     ])
   })
 
-  it('lets a catalog route inherit reasoning and ignores the picked levels', async () => {
+  it('writes the catalog image modalities onto each adopted model and leaves text-only ones alone', async () => {
+    stubCatalog({}, {
+      modalities: {
+        'qwen2.5:7b': { input: ['text', 'image'], output: ['text'] },
+        'llama3.2:1b': { input: ['text'], output: ['text'] },
+      },
+    })
+    const { api, mutate } = scriptedFace()
+    await renderLoaded(api)
+    await probeWith()
+    // The declaration is read from the loaded tables, so wait for them first.
+    const table = screen.getByRole('table')
+    await waitFor(() => { expect(within(table).getByText('文·图')).toBeDefined() })
+    typeRoute('local-qwen')
+    fireEvent.click(adoptButton())
+    await waitFor(() => { expect(mutate.mock.calls).toHaveLength(1) })
+    expect(mutate.mock.calls[0]).toEqual([
+      'llm-pi-ai',
+      [{
+        op: 'set',
+        path: ['providers', 'local-qwen'],
+        value: {
+          api: 'openai-completions',
+          baseURL: 'http://127.0.0.1:11434',
+          models: [
+            { id: 'qwen2.5:7b', name: 'Qwen 2.5 7B', contextWindow: 32768, maxTokens: 4096, input: ['text', 'image'] },
+            // A model the catalog records without images keeps the field unset:
+            // `input` has no other editor, so writing text-only would freeze it.
+            { id: 'llama3.2:1b' },
+          ],
+        },
+      }],
+      3,
+    ])
+  })
+
+  it('lets a catalog route inherit reasoning and modalities, ignoring the picked levels', async () => {
+    stubCatalog({}, {
+      modalities: {
+        'qwen2.5:7b': { input: ['text', 'image'], output: ['text'] },
+        'llama3.2:1b': { input: ['text', 'image'], output: ['text'] },
+      },
+    })
     const { api, mutate } = scriptedFace({
       providers: vi.fn(() => Promise.resolve(ok([
         {
@@ -634,6 +676,11 @@ describe('adoption', () => {
     })
     await renderLoaded(api)
     await probeWith()
+    // Both rows carry images in the catalog, so the empty `input` below is the
+    // route-level inheritance decision rather than unloaded tables.
+    await waitFor(() => {
+      expect(within(screen.getByRole('table')).getAllByText('文·图')).toHaveLength(2)
+    })
     typeRoute('anthropic')
     await waitFor(() => { expect(screen.getByText(/自动继承/)).toBeDefined() })
     fireEvent.click(adoptButton())
