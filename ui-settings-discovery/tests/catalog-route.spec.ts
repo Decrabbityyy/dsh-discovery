@@ -103,6 +103,7 @@ describe('section catalog endpoint', () => {
         'grok-4.6': { name: 'Grok 4.6', contextWindow: 500_000, maxTokens: 500_000 },
         'chat-only': { name: 'Chat Only' },
       },
+      sources: { 'grok-4.6': ['xai'], 'chat-only': ['xai'] },
     })
     await ctx.fiber.dispose()
   })

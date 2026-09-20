@@ -1,14 +1,14 @@
 import type { LlmDiscoveredModel, LlmModelDiscoveryRequest, RpcResponse } from '@deepseek-ai/dsh-api-remotes/client'
 import {
-  catalogKeyCandidates, catalogKeyIndexOf, CREDENTIAL_REF_PATTERN, DISCOVERY_NS, DYNAMIC_NS, mergeCatalogEnvelopes,
-  PI_AI_NS, ROUTE_PATTERN, resolveCatalogKey, UI_CATALOG_PATH, deriveKeyRef, messageOf,
+  catalogKeyCandidates, catalogKeyIndexOf, CREDENTIAL_REF_PATTERN, DISCOVERY_NS, DYNAMIC_CACHE_PATH, DYNAMIC_NS,
+  mergeCatalogEnvelopes, PI_AI_NS, ROUTE_PATTERN, resolveCatalogKey, UI_CATALOG_PATH, deriveKeyRef, messageOf,
 } from 'dsh-llm-endpoint-base/vocabulary'
 import type { CatalogEnvelope, CatalogKeyIndex } from 'dsh-llm-endpoint-base/vocabulary'
 import { reasoningEffortsOf } from './presets.ts'
 
 export {
-  catalogKeyCandidates, CREDENTIAL_REF_PATTERN, DISCOVERY_NS, DYNAMIC_NS, mergeCatalogEnvelopes, PI_AI_NS, ROUTE_PATTERN,
-  UI_CATALOG_PATH, deriveKeyRef, messageOf,
+  catalogKeyCandidates, CREDENTIAL_REF_PATTERN, DISCOVERY_NS, DYNAMIC_CACHE_PATH, DYNAMIC_NS, mergeCatalogEnvelopes,
+  PI_AI_NS, ROUTE_PATTERN, UI_CATALOG_PATH, deriveKeyRef, messageOf,
 }
 export type { CatalogEnvelope }
 
@@ -286,6 +286,37 @@ export interface DynamicRoute {
 
 export interface DynamicSection {
   readonly routes: Record<string, DynamicRoute>
+}
+
+/** One route's outcome in a cache refresh report. */
+export interface RouteProbe {
+  readonly route: string
+  /** Models the route now serves; absent when the probe failed. */
+  readonly models?: number
+  readonly error?: string
+}
+
+/** What the dynamic provider's cache endpoint reports, as the 模型缓存 tab reads it. */
+export interface DynamicCacheStatus {
+  /** Declared routes, whether or not their probe succeeded. */
+  readonly routes: number
+  readonly modelsDev: {
+    readonly entries: number
+    readonly refreshedAt: number | null
+    readonly source?: 'storage' | 'models.dev'
+    /** Why the facts are not storage-backed, when they are not. */
+    readonly storageError?: string
+    /** Why the last load failed; the facts of the previous one stay in place. */
+    readonly error?: string
+  }
+  /** The catalog cache file, present only where the deployment caches. */
+  readonly cacheFile?: {
+    readonly path: string
+    readonly writtenAt: number | null
+    readonly routes: number
+  }
+  /** Present only in the answer to a refresh. */
+  readonly probes?: readonly RouteProbe[]
 }
 
 /**

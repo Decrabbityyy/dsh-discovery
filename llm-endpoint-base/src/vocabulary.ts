@@ -142,6 +142,13 @@ export function messageOf(error: unknown): string {
 export const UI_CATALOG_PATH = '/ui-settings-discovery/catalog'
 
 /**
+ * The exact-path HTTP route the dynamic-provider plugin serves its catalog
+ * cache on: `GET` reports what is cached and what it was last built from, and
+ * `POST` re-reads the models.dev snapshot and re-probes every declared route.
+ */
+export const DYNAMIC_CACHE_PATH = '/llm-dynamic-provider/cache'
+
+/**
  * One model's models.dev fact set as the catalog envelope carries it. The host
  * parsers' `ModelFacts` is structurally assignable to this, so a browser
  * surface can read an envelope without importing the host-side parser (which

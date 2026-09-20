@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
 import { SettingsProvider } from '@deepseek-ai/dsh-settings'
+import { DYNAMIC_CACHE_PATH } from 'dsh-llm-endpoint-base'
 import * as dynamicProvider from '../src/index.ts'
 import { startProbeServer } from './server.ts'
 import type { ProbeServer } from './server.ts'
@@ -147,10 +148,10 @@ describe('plugin composition', () => {
     await fresh.fiber.dispose()
   })
 
-  it('recycles its web endpoint across an unload/reload cycle', async () => {
+  it('recycles its web endpoints across an unload/reload cycle', async () => {
     // A registry that mirrors the real webServer: duplicate paths throw, the
-    // disposer frees the path. The plugin must release the endpoint on dispose
-    // so the next mount registers it cleanly.
+    // disposer frees the path. The plugin must release its endpoints on dispose
+    // so the next mount registers them cleanly.
     const live = new Map<string, number>()
     const webServer = {
       register(route: { path: string }): () => void {
@@ -166,13 +167,14 @@ describe('plugin composition', () => {
 
     const first = await fresh.plugin(dynamicProvider)
     expect(live.has('/llm-dynamic-provider/routes')).toBe(true)
-    expect(live.size).toBe(1)
+    expect(live.has(DYNAMIC_CACHE_PATH)).toBe(true)
+    expect(live.size).toBe(2)
     await first.dispose()
     expect(live.size).toBe(0)
 
-    // A second mount re-registers the endpoint without a duplicate rejection.
+    // A second mount re-registers the endpoints without a duplicate rejection.
     const second = await fresh.plugin(dynamicProvider)
-    expect(live.size).toBe(1)
+    expect(live.size).toBe(2)
     await second.dispose()
     expect(live.size).toBe(0)
     await fresh.fiber.dispose()

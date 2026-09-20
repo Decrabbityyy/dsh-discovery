@@ -3,7 +3,7 @@ import type { ModelFacts } from 'dsh-llm-endpoint-base'
 import { enrichModelsFromOnline } from '../src/index.ts'
 
 describe('models.dev enrichment', () => {
-  it('fills undisclosed fields by normalized model id', () => {
+  it('fills undisclosed fields from the entry an id resolves to', () => {
     const facts = new Map<string, ModelFacts>([['grok-4.6', {
       displayName: 'Grok 4.6',
       contextWindow: 1_000_000,
@@ -14,6 +14,24 @@ describe('models.dev enrichment', () => {
       name: 'Grok 4.6',
       contextWindow: 1_000_000,
       maxTokens: 128_000,
+    }])
+  })
+
+  it('prefers the id the catalog records over the bare name it also records', () => {
+    const facts = new Map<string, ModelFacts>([
+      ['x-ai/grok-4.6', { displayName: 'xAI: Grok 4.6', contextWindow: 999 }],
+      ['grok-4.6', { displayName: 'Grok 4.6', contextWindow: 1_000_000 }],
+    ])
+    expect(enrichModelsFromOnline([{ id: 'x-ai/grok-4.6' }], facts)).toEqual([{
+      id: 'x-ai/grok-4.6',
+      name: 'xAI: Grok 4.6',
+      contextWindow: 999,
+    }])
+    // A third segment only ever prefixes, so the bare name is all that is left.
+    expect(enrichModelsFromOnline([{ id: 'vendor/x-ai/grok-4.6' }], facts)).toEqual([{
+      id: 'vendor/x-ai/grok-4.6',
+      name: 'Grok 4.6',
+      contextWindow: 1_000_000,
     }])
   })
 

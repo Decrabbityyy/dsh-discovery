@@ -15,8 +15,12 @@ import type { Config, DynamicSection } from './config.ts'
 import { NamespaceConfig } from './config.ts'
 import { assembleProfile, discoverDynamicProviders, toModel } from './provider.ts'
 import type { DynamicProviderProfile } from './provider.ts'
-import { openModelCatalog, refreshModelCatalog } from 'dsh-llm-endpoint-base/store'
-import { catalogInputModalities, catalogReasoningEfforts, discoverEndpoint, enrichModels, MODELS_DEV_URL, normalizeModelName, parseModelFacts, resolveDiscoveryConfig } from 'dsh-llm-endpoint-base'
+import { catalogEntries, factsOfRow, openModelCatalog, refreshModelCatalog } from 'dsh-llm-endpoint-base/store'
+import type { OpenedCatalog } from 'dsh-llm-endpoint-base/store'
+import {
+  catalogInputModalities, catalogKeyIndexOf, catalogReasoningEfforts, discoverEndpoint, DYNAMIC_CACHE_PATH,
+  enrichModels, MODELS_DEV_URL, parseModelFacts, resolveCatalogKey, resolveDiscoveryConfig,
+} from 'dsh-llm-endpoint-base'
 import type { ModelFacts } from 'dsh-llm-endpoint-base'
 
 export { Config, NamespaceConfig } from './config.ts'
@@ -50,6 +54,44 @@ const CACHE_FILE = 'llm-dynamic-provider-cache.json'
 /** The on-disk cache: the discovered model facts per route, keyed by route name. */
 interface DynamicCache {
   readonly routes: Record<string, { readonly models: readonly LlmDiscoveredModel[] }>
+  /** When this file was last written; absent in a cache written before this field existed. */
+  readonly writtenAt?: number
+}
+
+/** What the models.dev facts were last loaded from, and when. */
+interface ModelsDevStatus {
+  readonly entries: number
+  readonly refreshedAt: number | null
+  readonly source?: 'storage' | 'models.dev'
+  /**
+   * Why they are not coming from the storage domain, when they are not: the
+   * seam is absent, or opening it failed. The facts still load over the network,
+   * but the fallback is reported rather than looking like a deliberate choice.
+   */
+  readonly storageError?: string
+  /** Why the last load failed; the facts of the previous one stay in place. */
+  readonly error?: string
+}
+
+/** One route's outcome in a refresh report. */
+interface RouteProbeReport {
+  readonly route: string
+  /** Models the route now serves; absent when the probe failed. */
+  readonly models?: number
+  readonly error?: string
+}
+
+/** What the cache endpoint reports: the 模型缓存 tab renders exactly this. */
+export interface DynamicCacheStatus {
+  /** Declared routes, whether or not their probe succeeded. */
+  readonly routes: number
+  readonly modelsDev: ModelsDevStatus
+  /** The catalog cache file, present only where the deployment caches. */
+  readonly cacheFile?: {
+    readonly path: string
+    readonly writtenAt: number | null
+    readonly routes: number
+  }
 }
 
 /** Read the persisted cache; absence and corruption both read as empty. */
@@ -62,8 +104,11 @@ async function readCache(home: string): Promise<DynamicCache> {
   }
 }
 
-/** Persist the discovered model facts behind the resolved profiles. */
-async function writeCache(home: string, profiles: ReadonlyMap<string, DynamicProviderProfile>): Promise<void> {
+/**
+ * Persist the discovered model facts behind the resolved profiles.
+ * @returns the write timestamp the cache status reports.
+ */
+async function writeCache(home: string, profiles: ReadonlyMap<string, DynamicProviderProfile>): Promise<number> {
   const routes: DynamicCache['routes'] = {}
   for (const [route, profile] of profiles) {
     routes[route] = {
@@ -75,8 +120,10 @@ async function writeCache(home: string, profiles: ReadonlyMap<string, DynamicPro
       })),
     }
   }
+  const writtenAt = Date.now()
   await mkdir(home, { recursive: true })
-  await writeFile(join(home, CACHE_FILE), JSON.stringify({ routes }, null, 2), 'utf8')
+  await writeFile(join(home, CACHE_FILE), JSON.stringify({ routes, writtenAt }, null, 2), 'utf8')
+  return writtenAt
 }
 
 /**
@@ -88,35 +135,86 @@ export function apply(ctx: Context, config?: Config): void {
   ctx.settings.register(DYNAMIC_NS, NamespaceConfig, { base: { routes: config?.routes ?? {} } })
   const home = config?.cache === true ? resolveDshHome() : undefined
 
-  // models.dev facts by bare model name: the synchronous read path for
-  // enrichment and modality lookups, backed by the storage domain when the
-  // composition mounts it and by a plain fetch otherwise.
-  const facts = new Map<string, ModelFacts>()
+  // models.dev facts by catalog key: the synchronous read path for enrichment
+  // and modality lookups, backed by the storage domain when the composition
+  // mounts it and by a plain fetch otherwise. The key index is rebuilt with the
+  // map so every lookup resolves an id the same way the settings page does.
+  let facts = new Map<string, ModelFacts>()
+  let factKeys = catalogKeyIndexOf([])
+  // What the last load of those facts landed, for the cache tab's status.
+  let factsStatus: ModelsDevStatus = { entries: 0, refreshedAt: null }
+  let storageCatalog: OpenedCatalog | undefined
+  // Why the facts are not storage-backed, when they are not. Recomputed on every
+  // load rather than latched: the storage domain can be provided after this
+  // plugin's own apply, and a later refresh is then the one that finds it.
+  let storageError: string | undefined
+  let storageFailureLogged = false
+  const refillFacts = (entries: Iterable<readonly [string, ModelFacts]>): void => {
+    facts = new Map(entries)
+    factKeys = catalogKeyIndexOf(facts.keys())
+  }
+  /** Open the storage-backed catalog, recording (and once, logging) why not. */
+  const openStorageCatalog = async (): Promise<void> => {
+    try {
+      storageCatalog = await openModelCatalog(ctx)
+      storageError = storageCatalog === undefined ? 'no storage domain is mounted in this composition' : undefined
+    } catch (error) {
+      storageError = error instanceof Error ? error.message : String(error)
+      if (!storageFailureLogged) {
+        storageFailureLogged = true
+        ctx.logger.warn('llm-dynamic-provider: the stored models.dev catalog is unavailable, loading it over the network instead')
+        ctx.logger.warn(error)
+      }
+    }
+  }
+  /** The stored catalog as facts. */
+  const storedFacts = (opened: OpenedCatalog): [string, ModelFacts][] =>
+    Object.entries(catalogEntries(opened)).map(([name, row]) => [name, factsOfRow(row)])
+  const factsOf = (modelId: string): ModelFacts | undefined => {
+    const key = resolveCatalogKey(modelId, factKeys)
+    return key === undefined ? undefined : facts.get(key)
+  }
   const modalitiesOf = (modelId: string): readonly string[] | undefined => {
-    const fact = facts.get(normalizeModelName(modelId))
+    const fact = factsOf(modelId)
     if (fact?.inputModalities !== undefined && fact.inputModalities.length > 0) return fact.inputModalities
     return catalogInputModalities(modelId)
   }
-  void (async () => {
-    const opened = await openModelCatalog(ctx).catch(() => undefined)
-    if (opened !== undefined) {
-      // The domain row and ModelFacts are structurally the same record; the
-      // cast only bridges zod's `| undefined` optionals to exact-optional types.
-      for (const [name, row] of opened.models.entries()) facts.set(name, row as ModelFacts)
-      await refreshModelCatalog(opened)
-      facts.clear()
-      for (const [name, row] of opened.models.entries()) facts.set(name, row as ModelFacts)
-      return
-    }
+
+  /**
+   * Reload the models.dev facts once: the storage-backed catalog refreshes
+   * incrementally by ETag, and a deployment without that seam re-reads the file
+   * over the network. Never throws — a failure is reported in the status the
+   * cache tab reads.
+   */
+  const refreshFacts = async (): Promise<ModelsDevStatus> => {
+    if (storageCatalog === undefined) await openStorageCatalog()
     try {
-      const response = await fetch(MODELS_DEV_URL, { signal: AbortSignal.timeout(15_000) })
-      if (response.ok) {
-        for (const [name, fact] of parseModelFacts(await response.json())) facts.set(name, fact)
+      if (storageCatalog !== undefined) {
+        refillFacts(storedFacts(storageCatalog))
+        await refreshModelCatalog(storageCatalog)
+        refillFacts(storedFacts(storageCatalog))
+        factsStatus = { entries: facts.size, refreshedAt: Date.now(), source: 'storage' }
+      } else {
+        const response = await fetch(MODELS_DEV_URL, { signal: AbortSignal.timeout(15_000) })
+        if (!response.ok) throw new Error(`models.dev answered ${response.status}`)
+        refillFacts(parseModelFacts(await response.json()))
+        factsStatus = {
+          entries: facts.size,
+          refreshedAt: Date.now(),
+          source: 'models.dev',
+          ...storageError === undefined ? {} : { storageError },
+        }
       }
-    } catch {
-      // No network on boot: the map stays empty and enrichment falls back to pi-ai only.
+    } catch (error) {
+      factsStatus = {
+        ...factsStatus,
+        error: error instanceof Error ? error.message : String(error),
+        ...storageError === undefined ? {} : { storageError },
+      }
     }
-  })()
+    return factsStatus
+  }
+  void refreshFacts()
   const webServer = ctx.get('webServer') as WebServerFace | undefined
 
   // The route read/write endpoint. The settings RPC refuses this namespace
@@ -197,7 +295,7 @@ export function apply(ctx: Context, config?: Config): void {
     const raw = await discoverEndpoint(request, discovery)
     const enriched = discovery.enrichment ? enrichModels(raw) : [...raw]
     return enriched.map((model) => {
-      const fact = facts.get(normalizeModelName(model.id))
+      const fact = factsOf(model.id)
       return {
         ...model,
         ...model.name === undefined && fact?.displayName !== undefined ? { name: fact.displayName } : {},
@@ -212,6 +310,9 @@ export function apply(ctx: Context, config?: Config): void {
   // seeded from the cache when enabled.
   let current = new Map<string, DynamicProviderProfile>()
   let registration: AdapterRegistrationHandle | undefined
+  // The on-disk cache as this process last saw it, for the cache tab's status.
+  let cacheWrittenAt: number | null = null
+  let cacheRoutes = 0
 
   const adapter = new PiAiAdapter({
     auth: { credentials: credentialStoreFrom(ctx), authContext: authContextFrom(ctx) },
@@ -282,6 +383,8 @@ export function apply(ctx: Context, config?: Config): void {
   const serveFromCache = async (): Promise<void> => {
     if (home === undefined) return
     const cache = await readCache(home)
+    cacheWrittenAt = cache.writtenAt ?? null
+    cacheRoutes = Object.keys(cache.routes).length
     const routes = declaredRoutes()
     const cached = new Map<string, DynamicProviderProfile>()
     for (const [routeName, entry] of Object.entries(cache.routes)) {
@@ -296,17 +399,21 @@ export function apply(ctx: Context, config?: Config): void {
     if (cached.size > 0) serve(cached)
   }
 
-  /** Probe every declared route and swap in the freshly discovered profiles. */
-  const reprobe = async (): Promise<void> => {
+  /**
+   * Probe every declared route and swap in the freshly discovered profiles.
+   * @returns one report per declared route, for the refresh the cache tab asks
+   * for; the settings-update path ignores it.
+   */
+  const reprobe = async (): Promise<readonly RouteProbeReport[]> => {
     const routes = declaredRoutes()
     const outcome = await discoverDynamicProviders(ctx, routes, config, { signal: undefined }, {
       inputModalitiesOf: modalitiesOf,
-      factsOf: (modelId) => facts.get(normalizeModelName(modelId)),
+      factsOf,
     })
     // The probe may outlive the plugin: a disposed fiber's registration is
     // gone, so swapping routes now would throw REGISTRATION_DISPOSED. FiberState
     // is a const enum (no runtime binding); DISPOSED is its fifth member.
-    if ((ctx.fiber.state as number) === 4) return
+    if ((ctx.fiber.state as number) === 4) return []
     for (const { route, message } of outcome.failed) {
       ctx.logger.warn(`dynamic provider "${route}" probe failed: ${message}`)
     }
@@ -319,11 +426,52 @@ export function apply(ctx: Context, config?: Config): void {
     for (const [name, profile] of outcome.discovered) next.set(name, profile)
     serve(next)
     if (home !== undefined && outcome.discovered.size > 0) {
-      await writeCache(home, outcome.discovered).catch((error: unknown) => {
+      const writtenAt = await writeCache(home, outcome.discovered).catch((error: unknown) => {
         ctx.logger.warn('llm-dynamic-provider: failed to persist the model cache')
         ctx.logger.warn(error)
+        return undefined
       })
+      if (writtenAt !== undefined) {
+        cacheWrittenAt = writtenAt
+        cacheRoutes = outcome.discovered.size
+      }
     }
+    return [
+      ...[...outcome.discovered].map(([route, profile]) => ({ route, models: profile.piProvider.getModels().length })),
+      ...outcome.failed.map(({ route, message }) => ({ route, error: message })),
+    ]
+  }
+
+  // The cache endpoint behind the 模型缓存 tab: GET is the status, POST
+  // re-reads the models.dev facts and re-probes every route — the two inputs the
+  // served profiles and the on-disk catalog are built from. Everything else the
+  // plugin keeps (the directory, the adapter registration) follows those two.
+  const cacheStatus = (): DynamicCacheStatus => ({
+    routes: Object.keys(declaredRoutes()).length,
+    modelsDev: factsStatus,
+    ...home === undefined
+      ? {}
+      : { cacheFile: { path: join(home, CACHE_FILE), writtenAt: cacheWrittenAt, routes: cacheRoutes } },
+  })
+  if (webServer !== undefined) {
+    ctx.effect(() => webServer.register({
+      kind: 'exact',
+      path: DYNAMIC_CACHE_PATH,
+      handler: async (req, res) => {
+        const method = (req as { method?: string }).method ?? 'GET'
+        if (method === 'GET') {
+          sendJson(res, 200, cacheStatus())
+          return
+        }
+        if (method !== 'POST') {
+          sendJson(res, 405, { error: 'method not allowed' })
+          return
+        }
+        const modelsDev = await refreshFacts()
+        const probes = await reprobe()
+        sendJson(res, 200, { ...cacheStatus(), modelsDev, probes })
+      },
+    }), 'llm-dynamic-provider: cache endpoint')
   }
 
   // Hot-edit: adding or editing a route reprobes without a restart, and removing

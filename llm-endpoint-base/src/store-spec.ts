@@ -6,12 +6,34 @@ const modelRowSchema = z.object({
   levels: z.array(z.string()).optional(),
   inputModalities: z.array(z.string()).optional(),
   outputModalities: z.array(z.string()).optional(),
-  contextWindow: z.number().int().positive().optional(),
-  maxTokens: z.number().int().positive().optional(),
+  // `.catch(undefined)` carries rows whose capacity models.dev never stated:
+  // it says "unknown" as 0, and an earlier version of the parser stored that 0
+  // verbatim. Rejecting such a value would fail the record — and with the whole
+  // catalog in one record, one bad field would cost the entire catalog, which
+  // the plugin reads as "no local catalog" and works around by re-fetching every
+  // model over the network. Anything that is not a positive integer therefore
+  // reads back as unstated.
+  contextWindow: z.number().int().positive().optional().catch(undefined),
+  maxTokens: z.number().int().positive().optional().catch(undefined),
 })
 
-/** One catalog row as stored, keyed by bare model name. */
+/** One model's facts as stored, keyed by the id models.dev records. */
 export type ModelRow = z.infer<typeof modelRowSchema>
+
+/**
+ * The whole catalog as one record. models.dev hands over a complete snapshot per
+ * fetch, and the json backend's `single` layout republishes the entire unit on
+ * every write: a row-per-model table would therefore cost one whole-file write
+ * per model (measured at ~46 ms each, i.e. seven minutes for a full refresh, and
+ * the unit only grows). Kept as one record, a refresh is one write whatever the
+ * catalog's size.
+ */
+const catalogRowSchema = z.object({
+  /** Catalog key → the facts stored under it, exactly as parsed. */
+  entries: z.record(z.string(), modelRowSchema),
+})
+
+export type CatalogRow = z.infer<typeof catalogRowSchema>
 
 /** The fetch validators that make the refresh incremental. */
 const catalogMetaSchema = z.object({
@@ -27,8 +49,12 @@ export type CatalogMeta = z.infer<typeof catalogMetaSchema>
 export const modelCatalogDomainSpec = defineDomain({
   name: 'llm_dynamic_provider_models',
   version: 0,
+  // Insurance for drift this schema cannot foresee, on backends that can move a
+  // record aside (per-record and SQLite do; the json `single` layout has no
+  // backup, so there the domain still refuses rather than guessing).
+  invalidRecords: 'backup-and-skip',
   tables: {
-    models: domainTable<string, ModelRow>(modelRowSchema),
+    catalog: domainTable<string, CatalogRow>(catalogRowSchema),
   },
   global: {
     schema: catalogMetaSchema,

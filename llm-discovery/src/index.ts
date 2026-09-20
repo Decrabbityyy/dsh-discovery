@@ -1,5 +1,8 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { DISCOVERY_NAMESPACE, discoverEndpoint, enrichModels, MODELS_DEV_URL, normalizeModelName, parseModelFacts, resolveDiscoveryConfig } from 'dsh-llm-endpoint-base'
+import {
+  catalogKeyIndexOf, DISCOVERY_NAMESPACE, discoverEndpoint, enrichModels, MODELS_DEV_URL, parseModelFacts,
+  resolveCatalogKey, resolveDiscoveryConfig,
+} from 'dsh-llm-endpoint-base'
 import type { Config, ModelFacts } from 'dsh-llm-endpoint-base'
 import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-llm'
 
@@ -29,15 +32,18 @@ async function loadOnlineFacts(): Promise<ReadonlyMap<string, ModelFacts>> {
 
 /**
  * Fill fields omitted by an endpoint from the current models.dev snapshot.
- * Endpoint values win, and ids are normalized so `provider/model` resolves to
- * the same fact as a bare id.
+ * Endpoint values win, and an id resolves to its own entry when models.dev
+ * records it, else to the one its head or tail names — `x-ai/grok-4.6` keeps
+ * the id that provider records rather than collapsing onto another's.
  */
 export function enrichModelsFromOnline(
   models: readonly LlmDiscoveredModel[],
   facts: ReadonlyMap<string, ModelFacts>,
 ): LlmDiscoveredModel[] {
+  const index = catalogKeyIndexOf(facts.keys())
   return models.map((model) => {
-    const fact = facts.get(normalizeModelName(model.id))
+    const key = resolveCatalogKey(model.id, index)
+    const fact = key === undefined ? undefined : facts.get(key)
     if (fact === undefined) return { ...model }
     return {
       ...model,

@@ -485,6 +485,74 @@
   color: var(--dsw-alias-label-primary);
 }
 
+/* The 模型缓存 page of 设置 → 插件. The section's tab panel supplies the heading
+   and the tab strip; a tab page owns the rest, and this one follows the shape of
+   the 插件列表 tab beside it: a column of status text and a label/value grid. */
+.cacheSection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 760px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.cacheIntro {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* Label over value, one pair per line: the facts are longer than a 76px label. */
+.cacheFacts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
+.cacheFacts div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cacheFacts dt {
+  font-size: 11px;
+  line-height: 17px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.cacheFacts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.cacheNote {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.cacheError {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.cacheSaved {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--dsw-alias-state-success-primary);
+}
+
 .visuallyHidden {
   position: absolute;
   width: 1px;
