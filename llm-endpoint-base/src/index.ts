@@ -16,8 +16,11 @@ export {
   ROUTE_PATTERN,
   ROUTE_PROTOCOLS,
   THINKING_LEVELS,
+  UI_CATALOG_PATH,
+  catalogEnvelope,
   deriveKeyRef,
+  mergeCatalogEnvelopes,
   messageOf,
   reasoningEffortsOf,
 } from './vocabulary.ts'
-export type { RouteProtocol, ThinkingLevel } from './vocabulary.ts'
+export type { CatalogEnvelope, CatalogFact, RouteProtocol, ThinkingLevel } from './vocabulary.ts'

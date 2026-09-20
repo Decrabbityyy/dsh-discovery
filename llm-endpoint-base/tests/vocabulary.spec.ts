@@ -11,7 +11,10 @@ import {
   PI_AI_NS,
   ROUTE_PROTOCOLS,
   THINKING_LEVELS,
+  UI_CATALOG_PATH,
+  catalogEnvelope,
   deriveKeyRef,
+  mergeCatalogEnvelopes,
   messageOf,
   reasoningEffortsOf,
 } from '../src/vocabulary.ts'
@@ -163,5 +166,74 @@ describe('parseModelFacts', () => {
   it('omits absent fields and skips non-reasoning unknowns cleanly', () => {
     const index = parseModelFacts({ acme: { models: { 'plain': { name: 'Plain' } } } })
     expect(index.get('plain')).toEqual({ displayName: 'Plain' })
+  })
+})
+
+describe('catalog envelope', () => {
+  it('pins the section catalog path', () => {
+    expect(UI_CATALOG_PATH).toBe('/ui-settings-discovery/catalog')
+  })
+
+  it('omits a model that declares levels, modalities, and capacities for nothing', () => {
+    expect(catalogEnvelope([['bare', {}]])).toEqual({ catalog: {}, modalities: {}, facts: {} })
+  })
+
+  it('carries the levels, modalities, and capacities of a described model', () => {
+    expect(catalogEnvelope([['grok-4.6', {
+      displayName: 'Grok 4.6',
+      levels: ['low', 'high'],
+      inputModalities: ['text', 'image'],
+      outputModalities: ['text'],
+      contextWindow: 500_000,
+      maxTokens: 500_000,
+    }]])).toEqual({
+      catalog: { 'grok-4.6': ['low', 'high'] },
+      modalities: { 'grok-4.6': { input: ['text', 'image'], output: ['text'] } },
+      facts: { 'grok-4.6': { name: 'Grok 4.6', contextWindow: 500_000, maxTokens: 500_000 } },
+    })
+  })
+
+  it('records a one-sided modality fact as an empty list rather than dropping it', () => {
+    expect(catalogEnvelope([['vision-only', { inputModalities: ['image'] }]]).modalities)
+      .toEqual({ 'vision-only': { input: ['image'], output: [] } })
+  })
+})
+
+describe('mergeCatalogEnvelopes', () => {
+  it('keeps the key of the first body that carries it', () => {
+    const merged = mergeCatalogEnvelopes([
+      { catalog: { a: ['high'] }, modalities: { a: { input: ['text', 'image'], output: ['text'] } } },
+      { catalog: { a: ['low'], b: ['high'] }, modalities: { a: { input: ['text'], output: [] }, b: { input: ['text'], output: ['text'] } } },
+    ])
+    expect(merged.catalog).toEqual({ a: ['high'], b: ['high'] })
+    expect(merged.modalities).toEqual({
+      a: { input: ['text', 'image'], output: ['text'] },
+      b: { input: ['text'], output: ['text'] },
+    })
+  })
+
+  it('ignores a missing, malformed, or unrelated body', () => {
+    const merged = mergeCatalogEnvelopes([
+      undefined,
+      'nope',
+      7,
+      [],
+      { catalog: 'no' },
+      { facts: { m: { name: 'M', contextWindow: 8 } } },
+    ])
+    expect(merged).toEqual({ catalog: {}, modalities: {}, facts: { m: { name: 'M', contextWindow: 8 } } })
+  })
+
+  it('drops non-string members and non-numeric capacities instead of trusting the body', () => {
+    const merged = mergeCatalogEnvelopes([{
+      catalog: { a: ['high', 7] },
+      modalities: { b: { input: 'text' } },
+      facts: { c: { contextWindow: 'wide' } },
+    }])
+    expect(merged).toEqual({
+      catalog: { a: ['high'] },
+      modalities: { b: { input: [], output: [] } },
+      facts: { c: {} },
+    })
   })
 })

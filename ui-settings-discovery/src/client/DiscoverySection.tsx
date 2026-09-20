@@ -16,7 +16,7 @@ import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-api-remotes/client'
 import clsx from 'clsx'
 import {
   CREDENTIAL_REF_PATTERN, deriveKeyRef, DISCOVERY_NS, DISCOVERY_PLUGIN, DYNAMIC_PLUGIN, isActivePlugin,
-  messageOf, normalizeModelName, PI_AI_NS, ROUTE_PATTERN,
+  mergeCatalogEnvelopes, messageOf, normalizeModelName, PI_AI_NS, ROUTE_PATTERN, UI_CATALOG_PATH,
 } from './discovery.ts'
 import type { DiscoveryApi, DiscoveryResponse } from './discovery.ts'
 import { DynamicRoutes } from './DynamicRoutes.tsx'
@@ -70,13 +70,13 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
   // carries no reasoningEfforts, which lets a catalog route inherit while a
   // hand-declared route stays non-reasoning.
   const [modelLevels, setModelLevels] = useState<Readonly<Record<string, ReadonlySet<string>>>>({})
-  // Served by the dynamic provider's own HTTP route; empty while unfetched or
-  // when that plugin is absent.
+  // The three tables this section's own host half serves; empty while unfetched
+  // or when that endpoint answered nothing.
   const [catalog, setCatalog] = useState<Readonly<Record<string, readonly string[]>>>({})
   const [modalities, setModalities] = useState<Readonly<Record<string, { input?: readonly string[]; output?: readonly string[] }>>>({})
-  // The bare-name facts from that same endpoint. The host discovery seam
-  // enriches from the bundled pi-ai catalog only, so these fill in a model it
-  // has not catalogued yet.
+  // The bare-name facts beside them. The host discovery seam enriches from the
+  // bundled pi-ai catalog only, so these fill in a model it has not catalogued
+  // yet, and the modalities decide what an adopted model may accept.
   const [facts, setFacts] = useState<Readonly<Record<string, { name?: string; contextWindow?: number; maxTokens?: number }>>>({})
   // Whether the route id names an installed-catalog pi-ai provider; such a
   // route inherits each known model's reasoning, so the picker disables itself.
@@ -108,34 +108,26 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
     }
   }, [api])
 
-  // Fetched only after inventory confirms the dynamic provider is active; this
-  // is optional feature data, not a plugin-presence probe.
+  // The section's own host half serves the models.dev snapshot this page reads
+  // for thinking levels, modalities, and undisclosed capacities. One request on
+  // mount: a failed or malformed answer leaves the tables empty rather than
+  // blocking the page, and the pickers then offer no defaults.
   useEffect(() => {
     let cancelled = false
-    if (!dynamicLoaded) {
-      setCatalog({})
-      setModalities({})
-      setFacts({})
-      return () => {
-        cancelled = true
-      }
-    }
-    void fetch('/llm-dynamic-provider/catalog').then(response => response.json()).then((body: {
-      catalog?: Record<string, readonly string[]>
-      modalities?: Record<string, { input?: readonly string[]; output?: readonly string[] }>
-      facts?: Record<string, { name?: string; contextWindow?: number; maxTokens?: number }>
-    }) => {
-      if (cancelled) return
-      setCatalog(body.catalog ?? {})
-      setModalities(body.modalities ?? {})
-      setFacts(body.facts ?? {})
-    }).catch(() => {
-      // No catalog: the pickers simply offer no defaults.
-    })
+    void fetch(UI_CATALOG_PATH)
+      .then(response => response.json() as Promise<unknown>)
+      .catch(() => undefined)
+      .then((body) => {
+        if (cancelled) return
+        const merged = mergeCatalogEnvelopes([body])
+        setCatalog(merged.catalog)
+        setModalities(merged.modalities)
+        setFacts(merged.facts)
+      })
     return () => {
       cancelled = true
     }
-  }, [dynamicLoaded])
+  }, [])
 
   // Backfills defaults for models the probe initialized empty once the catalog
   // lands; a model with any pick already keeps it.
@@ -146,8 +138,9 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
       const next: Record<string, ReadonlySet<string>> = { ...current }
       let changed = false
       for (const id of probedIds.split('\0')) {
-        if ((next[id]?.size ?? 0) === 0 && (catalog[id]?.length ?? 0) > 0) {
-          next[id] = new Set(catalog[id])
+        const recorded = catalog[normalizeModelName(id)] ?? []
+        if ((next[id]?.size ?? 0) === 0 && recorded.length > 0) {
+          next[id] = new Set(recorded)
           changed = true
         }
       }
@@ -292,8 +285,9 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
       // Everything found starts checked.
       setPicked(new Set(found.map(model => model.id)))
       // Each model starts at the levels the catalog records for it; an unknown
-      // id gets no default.
-      setModelLevels(Object.fromEntries(found.map(model => [model.id, new Set(catalog[model.id] ?? [])])))
+      // id gets no default. The catalog keys bare names, so a provider-prefixed
+      // id resolves to the same entry the table shows.
+      setModelLevels(Object.fromEntries(found.map(model => [model.id, new Set(catalog[normalizeModelName(model.id)] ?? [])])))
     } catch (error) {
       // The transport rejected instead of answering.
       setProbeError(messageOf(error))
@@ -507,11 +501,14 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
                     </thead>
                     <tbody>
                       {visible.map((model) => {
+                        // Both indexes key models by bare name, so a
+                        // provider-prefixed id resolves to the same entry.
+                        const bare = normalizeModelName(model.id)
                         // An unknown id offers no levels.
-                        const available = catalog[model.id] ?? []
+                        const available = catalog[bare] ?? []
                         const chosen = modelLevels[model.id] ?? new Set<string>()
                         // The models.dev facts fill what the host's bundled catalog left undisclosed.
-                        const fact = facts[normalizeModelName(model.id)]
+                        const fact = facts[bare]
                         const displayName = model.name ?? fact?.name
                         const contextWindow = model.contextWindow ?? fact?.contextWindow
                         const maxTokens = model.maxTokens ?? fact?.maxTokens
@@ -529,7 +526,7 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
                           <td className={styles['resultCell']}>{displayName ?? '—'}</td>
                           <td className={styles['resultCell']}>{contextWindow ?? '—'}</td>
                           <td className={styles['resultCell']}>{maxTokens ?? '—'}</td>
-                          <td className={styles['resultCell']}>{modalityLabel(modalities[model.id]?.input)}</td>
+                          <td className={styles['resultCell']}>{modalityLabel(modalities[bare]?.input)}</td>
                           <td className={styles['resultCell']}>
                             {available.length === 0
                               ? '—'

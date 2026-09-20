@@ -147,10 +147,10 @@ describe('plugin composition', () => {
     await fresh.fiber.dispose()
   })
 
-  it('recycles its web endpoints across an unload/reload cycle', async () => {
+  it('recycles its web endpoint across an unload/reload cycle', async () => {
     // A registry that mirrors the real webServer: duplicate paths throw, the
-    // disposer frees the path. The plugin must release both endpoints on
-    // dispose so the next mount registers them cleanly.
+    // disposer frees the path. The plugin must release the endpoint on dispose
+    // so the next mount registers it cleanly.
     const live = new Map<string, number>()
     const webServer = {
       register(route: { path: string }): () => void {
@@ -165,14 +165,14 @@ describe('plugin composition', () => {
     fresh.provide('webServer', webServer)
 
     const first = await fresh.plugin(dynamicProvider)
-    expect(live.has('/llm-dynamic-provider/catalog')).toBe(true)
     expect(live.has('/llm-dynamic-provider/routes')).toBe(true)
+    expect(live.size).toBe(1)
     await first.dispose()
     expect(live.size).toBe(0)
 
-    // A second mount re-registers both endpoints without a duplicate rejection.
+    // A second mount re-registers the endpoint without a duplicate rejection.
     const second = await fresh.plugin(dynamicProvider)
-    expect(live.size).toBe(2)
+    expect(live.size).toBe(1)
     await second.dispose()
     expect(live.size).toBe(0)
     await fresh.fiber.dispose()

@@ -15,6 +15,7 @@
     "paths": {
       "dsh-llm-endpoint-base": ["./llm-endpoint-base/src/index.ts"],
       "dsh-llm-endpoint-base/store": ["./llm-endpoint-base/src/store.ts"],
+      "dsh-llm-endpoint-base/models-dev": ["./llm-endpoint-base/src/models-dev.ts"],
       "dsh-llm-endpoint-base/vocabulary": ["./llm-endpoint-base/src/vocabulary.ts"]
     }
   },

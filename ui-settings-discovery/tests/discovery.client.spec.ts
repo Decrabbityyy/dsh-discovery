@@ -1,5 +1,6 @@
 /** Wire constants, derivation helpers, and presets of the discovery section. */
 import { describe, expect, it } from 'vitest'
+import { UI_CATALOG_PATH } from 'dsh-llm-endpoint-base/vocabulary'
 import { CUSTOM_PRESET, ENGINE_PRESETS, PROTOCOLS } from '../src/client/presets.ts'
 import {
   CREDENTIAL_REF_PATTERN, deriveKeyRef, DISCOVERY_NS, DISCOVERY_PLUGIN, DYNAMIC_PLUGIN, isActivePlugin,
@@ -46,6 +47,12 @@ describe('messageOf', () => {
   it('stringifies any other rejection', () => {
     expect(messageOf('broken')).toBe('broken')
     expect(messageOf(42)).toBe('42')
+  })
+})
+
+describe('catalog path', () => {
+  it('pins the section endpoint', () => {
+    expect(UI_CATALOG_PATH).toBe('/ui-settings-discovery/catalog')
   })
 })
 

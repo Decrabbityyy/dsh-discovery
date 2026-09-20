@@ -1,9 +1,18 @@
 import type { LlmDiscoveredModel, LlmModelDiscoveryRequest, RpcResponse } from '@deepseek-ai/dsh-api-remotes/client'
 import {
-  CREDENTIAL_REF_PATTERN, DISCOVERY_NS, DYNAMIC_NS, normalizeModelName, PI_AI_NS, ROUTE_PATTERN, deriveKeyRef, messageOf,
+  CREDENTIAL_REF_PATTERN, DISCOVERY_NS, DYNAMIC_NS, mergeCatalogEnvelopes, normalizeModelName, PI_AI_NS, ROUTE_PATTERN,
+  UI_CATALOG_PATH, deriveKeyRef, messageOf,
 } from 'dsh-llm-endpoint-base/vocabulary'
+import type { CatalogEnvelope } from 'dsh-llm-endpoint-base/vocabulary'
 
-export { CREDENTIAL_REF_PATTERN, DISCOVERY_NS, DYNAMIC_NS, normalizeModelName, PI_AI_NS, ROUTE_PATTERN, deriveKeyRef, messageOf }
+export {
+  CREDENTIAL_REF_PATTERN, DISCOVERY_NS, DYNAMIC_NS, mergeCatalogEnvelopes, normalizeModelName, PI_AI_NS, ROUTE_PATTERN,
+  UI_CATALOG_PATH, deriveKeyRef, messageOf,
+}
+export type { CatalogEnvelope }
+
+/** Modalities one model's catalog entry records, keyed by bare model name. */
+export type ModelModalities = CatalogEnvelope['modalities'][string]
 
 /** Exact Loader module names (`moduleName`, not the Cordis plugin name). */
 export const DISCOVERY_PLUGIN = 'dsh-llm-discovery'

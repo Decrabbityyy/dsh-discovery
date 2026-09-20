@@ -118,34 +118,6 @@ export function apply(ctx: Context, config?: Config): void {
     }
   })()
   const webServer = ctx.get('webServer') as WebServerFace | undefined
-  // Route registrations are effects: an HMR reload or unload must withdraw both
-  // endpoints, or the next mount's register throws `duplicate exact route`.
-  if (webServer !== undefined) {
-    ctx.effect(() => webServer.register({
-      kind: 'exact',
-      path: '/llm-dynamic-provider/catalog',
-      handler: (_req, res) => {
-        const levels: Record<string, readonly string[]> = {}
-        const modalities: Record<string, { input: readonly string[]; output: readonly string[] }> = {}
-        const modelFacts: Record<string, { name?: string; contextWindow?: number; maxTokens?: number }> = {}
-        for (const [name, fact] of facts) {
-          if (fact.levels !== undefined) levels[name] = fact.levels
-          if (fact.inputModalities !== undefined || fact.outputModalities !== undefined) {
-            modalities[name] = { input: fact.inputModalities ?? [], output: fact.outputModalities ?? [] }
-          }
-          if (fact.displayName !== undefined || fact.contextWindow !== undefined || fact.maxTokens !== undefined) {
-            modelFacts[name] = {
-              ...fact.displayName === undefined ? {} : { name: fact.displayName },
-              ...fact.contextWindow === undefined ? {} : { contextWindow: fact.contextWindow },
-              ...fact.maxTokens === undefined ? {} : { maxTokens: fact.maxTokens },
-            }
-          }
-        }
-        res.setHeader('content-type', 'application/json')
-        res.end(JSON.stringify({ catalog: levels, modalities, facts: modelFacts }))
-      },
-    }), 'llm-dynamic-provider: catalog endpoint')
-  }
 
   // The route read/write endpoint. The settings RPC refuses this namespace
   // until the configurable-provider directory names it, and the directory needs

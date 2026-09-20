@@ -8,6 +8,10 @@ export default defineConfig({
   resolve: {
     alias: [
       {
+        find: 'dsh-llm-endpoint-base/models-dev',
+        replacement: fileURLToPath(new URL('../llm-endpoint-base/src/models-dev.ts', import.meta.url)),
+      },
+      {
         find: 'dsh-llm-endpoint-base/vocabulary',
         replacement: fileURLToPath(new URL('../llm-endpoint-base/src/vocabulary.ts', import.meta.url)),
       },

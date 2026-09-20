@@ -1,22 +1,44 @@
 // @vitest-environment jsdom
 /** Discovery section behavior over a scripted wire face. */
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Mock } from 'vitest'
 import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-api-remotes/client'
+import { UI_CATALOG_PATH } from '../src/client/discovery.ts'
 import type { DiscoveryApi, DiscoveryResponse } from '../src/client/discovery.ts'
 import { DiscoverySection } from '../src/client/DiscoverySection.tsx'
 import { CUSTOM_PRESET } from '../src/client/presets.ts'
 
 afterEach(cleanup)
 
-/** Stub the thinking-level catalog fetch (`/llm-dynamic-provider/catalog`) with the given table. */
-function stubCatalog(catalog: Record<string, readonly string[]>): void {
-  vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ json: () => Promise.resolve({ catalog }) })))
+/**
+ * Stub the section's own catalog endpoint with a levels table and the optional
+ * modality/capacity tables beside it.
+ */
+function stubCatalog(
+  catalog: Record<string, readonly string[]>,
+  extra: {
+    modalities?: Record<string, { readonly input: readonly string[]; readonly output: readonly string[] }>
+    facts?: Record<string, { readonly name?: string; readonly contextWindow?: number; readonly maxTokens?: number }>
+  } = {},
+): ReturnType<typeof vi.fn> {
+  const fetchMock = vi.fn(() => Promise.resolve({
+    ok: true,
+    status: 200,
+    json: () => Promise.resolve({ catalog, ...extra }),
+  }))
+  vi.stubGlobal('fetch', fetchMock)
+  return fetchMock
 }
 
 afterEach(() => {
   vi.unstubAllGlobals()
+})
+
+// Every case starts with an empty catalog so no spec depends on the ambient
+// jsdom network state; a spec that needs tables stubs its own.
+beforeEach(() => {
+  stubCatalog({})
 })
 
 function ok<T>(value: T): DiscoveryResponse<T> {
@@ -175,14 +197,33 @@ describe('DiscoverySection rendering', () => {
     expect(pluginInventory).toHaveBeenCalledTimes(1)
     expect(discover).not.toHaveBeenCalled()
     await waitFor(() => { expect(screen.getByText('动态路由')).toBeDefined() })
-    expect(fetchMock.mock.calls.some(([url]) => url === '/llm-dynamic-provider/catalog')).toBe(true)
+    expect(fetchMock.mock.calls.some(([url]) => url === UI_CATALOG_PATH)).toBe(true)
   })
 
-  it('does not request dynamic metadata when the dynamic plugin is absent', async () => {
-    const fetchMock = vi.fn()
-    vi.stubGlobal('fetch', fetchMock)
+  it('reads exactly its own catalog, with the dynamic plugin absent', async () => {
+    const fetchMock = stubCatalog({})
     await renderLoaded(scriptedFace().api)
-    expect(fetchMock).not.toHaveBeenCalled()
+    await waitFor(() => { expect(fetchMock).toHaveBeenCalled() })
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([UI_CATALOG_PATH])
+  })
+
+  it('renders the section when the catalog request rejects', async () => {
+    const rejecting = vi.fn(() => Promise.reject(new Error('offline')))
+    vi.stubGlobal('fetch', rejecting)
+    await renderLoaded(scriptedFace().api)
+    await waitFor(() => { expect(rejecting).toHaveBeenCalled() })
+    expect(probeButton().disabled).toBe(true)
+  })
+
+  it('contributes no table when the catalog body is not an envelope object', async () => {
+    const malformed = vi.fn(() => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve('nope') }))
+    vi.stubGlobal('fetch', malformed)
+    const { api } = scriptedFace()
+    await renderLoaded(api)
+    await probeWith()
+    // Only the bare row's own gaps show a dash: name, context, and output.
+    const table = screen.getByRole('table')
+    expect(within(table).getAllByText('—')).toHaveLength(7)
   })
 
   it('gates the two optional blocks independently', async () => {
@@ -320,6 +361,24 @@ describe('probe', () => {
     // Everything found starts checked.
     expect((screen.getByLabelText<HTMLInputElement>('选择 qwen2.5:7b')).checked).toBe(true)
     expect((screen.getByLabelText<HTMLInputElement>('选择 llama3.2:1b')).checked).toBe(true)
+  })
+
+  it('marks each row with the modalities the catalog records, bare-name keyed', async () => {
+    stubCatalog({}, {
+      modalities: {
+        'qwen2.5:7b': { input: ['text', 'image'], output: ['text'] },
+        'llama3.2:1b': { input: ['text'], output: ['text'] },
+      },
+    })
+    const { api } = scriptedFace({
+      // A provider-prefixed id still resolves to the bare-name catalog entry.
+      models: [{ id: 'acme/qwen2.5:7b' }, { id: 'llama3.2:1b' }],
+    })
+    await renderLoaded(api)
+    await probeWith()
+    const table = screen.getByRole('table')
+    expect(within(table).getByText('文·图')).toBeDefined()
+    expect(within(table).getByText('文')).toBeDefined()
   })
 
   it('omits the key from the payload when the field is blank', async () => {

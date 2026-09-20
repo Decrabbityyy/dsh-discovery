@@ -36,7 +36,7 @@ export default defineConfig([{
   entry: ['src/index.ts', 'src/invariant.ts'],
   outDir: 'lib',
   format: ['esm'],
-  deps: { neverBundle: [/^@deepseek-ai\//, 'react', 'react-dom'], alwaysBundle: ['dsh-llm-endpoint-base/vocabulary'] },
+  deps: { neverBundle: [/^@deepseek-ai\//, 'react', 'react-dom'], alwaysBundle: ['dsh-llm-endpoint-base/models-dev', 'dsh-llm-endpoint-base/vocabulary'] },
   dts: false,
   // tsc emits lib/types into the same tree in this package's build; tsdown's
   // default outDir cleanup would delete it.
