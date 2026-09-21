@@ -4,8 +4,9 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-api-remotes/client'
 import clsx from 'clsx'
-import { catalogIndexOf, catalogSearchSeed, matchCatalogEntry } from './discovery.ts'
+import { catalogIndexOf, catalogSearchSeed, matchCatalogEntry, matchesPickerQuery, parsePickerQuery } from './discovery.ts'
 import type { CatalogEntry, CatalogIndex, CatalogMatch } from './discovery.ts'
+import { formatCapacity, formatCapacityPair, levelMarks } from './format.ts'
 import styles from './styles.module.css'
 
 /** The facts column sources, keyed by bare model name. */
@@ -71,12 +72,28 @@ export function modalityLabel(input: readonly string[] | undefined): string {
   return input.map(value => (value === 'image' ? '图' : '文')).join('·')
 }
 
-/** What the picker shows beside one entry: its capacities, inputs, and levels. */
-function pickerMeta(entry: CatalogEntry): string {
+/** 选择器一行里的紧凑摘要：容量、模态、六个档位方块。 */
+function PickerMeta({ entry }: { readonly entry: CatalogEntry }): ReactNode {
+  return (
+    <span className={styles['pickerMeta']} title={pickerTitle(entry)}>
+      <span className={styles['pickerCapacity']}>{formatCapacityPair(entry.contextWindow, entry.maxTokens)}</span>
+      <span className={styles['pickerModality']}>{entry.input.length === 0 ? '' : modalityLabel(entry.input)}</span>
+      <span className={styles['pickerLevels']}>
+        {levelMarks(entry.levels).map((on, index) => (
+          // 每块等宽居中：■ 与 □ 的字形宽度不同，靠固定盒子把它们对在同一列上。
+          <span key={index} className={styles['levelMark']} aria-hidden="true">{on ? '■' : '□'}</span>
+        ))}
+      </span>
+    </span>
+  )
+}
+
+/** 悬停说明：精确容量与这一条记录的档位。 */
+function pickerTitle(entry: CatalogEntry): string {
   return [
-    entry.contextWindow === undefined ? undefined : String(entry.contextWindow),
-    entry.input.length === 0 ? undefined : modalityLabel(entry.input),
-    entry.levels.length === 0 ? undefined : `档位 ${entry.levels.join('/')}`,
+    entry.contextWindow === undefined ? undefined : `上下文窗口 ${entry.contextWindow}`,
+    entry.maxTokens === undefined ? undefined : `最大输出 ${entry.maxTokens}`,
+    entry.levels.length === 0 ? '未记录思考档位' : `思考档位 ${entry.levels.join('/')}`,
   ].filter(part => part !== undefined).join(' · ')
 }
 
@@ -85,6 +102,11 @@ function pickerSource(entry: CatalogEntry): string {
   const [first, ...rest] = entry.sources
   if (first === undefined) return ''
   return rest.length === 0 ? first : `${first} 等 ${entry.sources.length} 家`
+}
+
+/** 悬停那一格时把收录它的 provider 全列出来（格子里只写「首家 等 N 家」）。 */
+function sourceTitle(entry: CatalogEntry): string | undefined {
+  return entry.sources.length === 0 ? undefined : `收录它的 provider：${entry.sources.join('、')}`
 }
 
 /** The 名称 cell: the name it resolved plus the control that pins an entry. */
@@ -167,15 +189,11 @@ export function ModelResultsTable(props: ModelResultsTableProps): ReactNode {
       .filter((entry): entry is CatalogEntry => entry !== undefined),
     [index],
   )
+  const pickerQueryParsed = useMemo(() => parsePickerQuery(pickerQuery), [pickerQuery])
   const pickerOptions = useMemo(() => {
     if (pickerFor === undefined) return []
-    const search = pickerQuery.trim().toLowerCase()
-    if (search.length === 0) return catalogEntries
-    return catalogEntries.filter(entry =>
-      entry.key.toLowerCase().includes(search)
-      || (entry.name ?? '').toLowerCase().includes(search)
-      || entry.sources.some(source => source.toLowerCase().includes(search)))
-  }, [catalogEntries, pickerFor, pickerQuery])
+    return catalogEntries.filter(entry => matchesPickerQuery(entry, pickerQueryParsed))
+  }, [catalogEntries, pickerFor, pickerQueryParsed])
   const pickerRanked = useMemo(() => {
     const search = pickerQuery.trim().toLowerCase()
     return [...pickerOptions]
@@ -283,8 +301,8 @@ export function ModelResultsTable(props: ModelResultsTableProps): ReactNode {
                                   />
                                 )}
                             </td>
-                            <td className={styles['resultCell']}>{contextWindow ?? '—'}</td>
-                            <td className={styles['resultCell']}>{maxTokens ?? '—'}</td>
+                            <td className={styles['resultCell']} title={contextWindow === undefined ? undefined : String(contextWindow)}>{formatCapacity(contextWindow) ?? '—'}</td>
+                            <td className={styles['resultCell']} title={maxTokens === undefined ? undefined : String(maxTokens)}>{formatCapacity(maxTokens) ?? '—'}</td>
                             <td className={styles['resultCell']}>{modalityLabel(entry?.input)}</td>
                             <td className={styles['resultCell']}>
                               {available.length === 0
@@ -316,7 +334,7 @@ export function ModelResultsTable(props: ModelResultsTableProps): ReactNode {
                                       className={`${styles['input']} ${styles['searchInput']}`}
                                       type="search"
                                       value={pickerQuery}
-                                      placeholder="搜索目录条目 ID 或名称…"
+                                      placeholder="搜索 ID/名称，或用 @供应商 筛选…"
                                       aria-label={`搜索目录条目：${model.id}`}
                                       autoFocus
                                       onChange={(event) => { setPickerQuery(event.target.value) }}
@@ -328,7 +346,13 @@ export function ModelResultsTable(props: ModelResultsTableProps): ReactNode {
                                       }}
                                     />
                                     {pickerRanked.length === 0
-                                      ? <p className={styles['empty']}>目录里没有匹配「{pickerQuery.trim()}」的条目</p>
+                                      ? (
+                                        <p className={styles['empty']}>
+                                          {pickerQueryParsed.providers.length === 0
+                                            ? `目录里没有匹配「${pickerQuery.trim()}」的条目`
+                                            : `目录里没有 ${pickerQueryParsed.providers.map(name => `@${name}`).join(' 或 ')} 收录的条目`}
+                                        </p>
+                                      )
                                       : (
                                         <ul className={styles['pickerList']}>
                                           {pickerRanked.map(option => (
@@ -341,8 +365,8 @@ export function ModelResultsTable(props: ModelResultsTableProps): ReactNode {
                                               >
                                                 <span className={styles['pickerKey']}>{option.key}</span>
                                                 <span className={styles['pickerName']}>{option.name ?? '—'}</span>
-                                                <span className={styles['pickerSource']}>{pickerSource(option)}</span>
-                                                <span className={styles['pickerMeta']}>{pickerMeta(option)}</span>
+                                                <span className={styles['pickerSource']} title={sourceTitle(option)}>{pickerSource(option)}</span>
+                                                <PickerMeta entry={option} />
                                               </button>
                                             </li>
                                           ))}

@@ -4,11 +4,12 @@ import { UI_CATALOG_PATH } from 'dsh-llm-discovery/vocabulary'
 import { CUSTOM_PRESET, ENGINE_PRESETS, PROTOCOLS } from '../src/client/presets.ts'
 import {
   catalogKeyCandidates, catalogIndexOf, catalogSearchSeed, CREDENTIAL_REF_PATTERN, declaredInput, deriveKeyRef,
-  DISCOVERY_NS, DISCOVERY_PLUGIN, DYNAMIC_PLUGIN, isActivePlugin, matchCatalogEntry, messageOf, modelDeclaration,
-  boundLevels,
+  DISCOVERY_NS, DISCOVERY_PLUGIN, DYNAMIC_PLUGIN, isActivePlugin, matchCatalogEntry, matchesPickerQuery, messageOf,
+  modelDeclaration, parsePickerQuery, boundLevels,
   PI_AI_NS, providerProfileOf, ROUTE_PATTERN,
 } from '../src/client/discovery.ts'
 import type { CatalogEntry } from '../src/client/discovery.ts'
+import { formatCapacity, formatCapacityPair, levelMarks } from '../src/client/format.ts'
 
 describe('discovery wire constants', () => {
   it('pins the fixed namespaces of the OMP wire', () => {
@@ -285,6 +286,82 @@ describe('boundLevels', () => {
 
   it('keeps picks the user made by hand', () => {
     expect(boundLevels(new Set(['off']), plain, rich)).toBeUndefined()
+  })
+})
+
+describe('formatCapacity', () => {
+  it('abbreviates thousands and millions', () => {
+    expect(formatCapacity(272_000)).toBe('272k')
+    expect(formatCapacity(32_768)).toBe('33k')
+    expect(formatCapacity(4096)).toBe('4k')
+    expect(formatCapacity(1_000_000)).toBe('1m')
+    expect(formatCapacity(1_048_576)).toBe('1m')
+    expect(formatCapacity(1_500_000)).toBe('1.5m')
+  })
+
+  it('leaves small values alone and reads a non-positive one as unstated', () => {
+    expect(formatCapacity(999)).toBe('999')
+    expect(formatCapacity(0)).toBeUndefined()
+    expect(formatCapacity(undefined)).toBeUndefined()
+  })
+})
+
+describe('formatCapacityPair', () => {
+  it('joins the context and the output capacity', () => {
+    expect(formatCapacityPair(256_000, 32_768)).toBe('256k/33k')
+    expect(formatCapacityPair(1_000_000, 128_000)).toBe('1m/128k')
+  })
+
+  it('writes the one it has, and a dash when it has neither', () => {
+    expect(formatCapacityPair(256_000, undefined)).toBe('256k')
+    expect(formatCapacityPair(undefined, 32_768)).toBe('33k')
+    expect(formatCapacityPair(undefined, undefined)).toBe('—')
+  })
+})
+
+describe('levelMarks', () => {
+  it('marks the levels an entry records, left to right', () => {
+    expect(levelMarks(['minimal', 'low', 'medium', 'high', 'xhigh', 'max'])).toEqual([true, true, true, true, true, true])
+    expect(levelMarks(['minimal', 'low', 'medium', 'high', 'xhigh'])).toEqual([true, true, true, true, true, false])
+    expect(levelMarks(['high', 'max'])).toEqual([false, false, false, true, false, true])
+  })
+
+  it('leaves off out of the squares and shows six empty ones for nothing recorded', () => {
+    expect(levelMarks(['off'])).toEqual([false, false, false, false, false, false])
+    expect(levelMarks([])).toEqual([false, false, false, false, false, false])
+  })
+})
+
+describe('picker query', () => {
+  const entry = (key: string, name: string, sources: readonly string[]): CatalogEntry =>
+    ({ key, name, input: [], levels: [], sources })
+  const glm = entry('glm-5.2', 'GLM-5.2', ['zai-org', 'fireworks'])
+  const nano = entry('nano-gpt/glm-5.2', 'GLM 5.2', ['nano-gpt'])
+
+  it('reads @provider tokens apart from text words', () => {
+    expect(parsePickerQuery(' glm @zai ')).toEqual({ providers: ['zai'], words: ['glm'] })
+    expect(parsePickerQuery('@nano @zai')).toEqual({ providers: ['nano', 'zai'], words: [] })
+    expect(parsePickerQuery('   ')).toEqual({ providers: [], words: [] })
+  })
+
+  it('matches text against the key, the name, and the sources', () => {
+    expect(matchesPickerQuery(glm, parsePickerQuery('glm'))).toBe(true)
+    expect(matchesPickerQuery(glm, parsePickerQuery('fire'))).toBe(true)
+    expect(matchesPickerQuery(glm, parsePickerQuery('5.2'))).toBe(true)
+    expect(matchesPickerQuery(glm, parsePickerQuery('qwen'))).toBe(false)
+  })
+
+  it('matches @provider against the sources only, and treats several as alternatives', () => {
+    expect(matchesPickerQuery(glm, parsePickerQuery('@zai'))).toBe(true)
+    expect(matchesPickerQuery(nano, parsePickerQuery('@zai'))).toBe(false)
+    expect(matchesPickerQuery(nano, parsePickerQuery('@nano @zai'))).toBe(true)
+  })
+
+  it('needs every text word and the provider together', () => {
+    expect(matchesPickerQuery(glm, parsePickerQuery('glm @zai'))).toBe(true)
+    expect(matchesPickerQuery(glm, parsePickerQuery('glm @nano'))).toBe(false)
+    expect(matchesPickerQuery(glm, parsePickerQuery('glm 5.2'))).toBe(true)
+    expect(matchesPickerQuery(glm, parsePickerQuery('glm qwen'))).toBe(false)
   })
 })
 

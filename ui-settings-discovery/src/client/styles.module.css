@@ -448,12 +448,39 @@
   display: none;
 }
 
+/* 容量、模态、档位各占固定宽度，所以每一行的方块都落在同一列上。 */
 .pickerMeta {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-size: 12px;
   line-height: 18px;
   color: var(--dsw-alias-label-tertiary);
   white-space: nowrap;
+}
+
+.pickerCapacity {
+  width: 64px;
+  text-align: right;
+  font-family: var(--ds-font-family-code);
+}
+
+.pickerModality {
+  width: 32px;
+  text-align: center;
+}
+
+.pickerLevels {
+  display: inline-flex;
+  gap: 1px;
+}
+
+/* 每块等宽居中：■ 与 □ 的字形宽度不同，靠固定盒子把它们对在同一列上。 */
+.levelMark {
+  display: inline-block;
+  width: 9px;
+  text-align: center;
 }
 
 .pickerFoot {

@@ -349,8 +349,8 @@ describe('probe', () => {
     const table = screen.getByRole('table')
     expect(within(table).getByText('qwen2.5:7b')).toBeDefined()
     expect(within(table).getByText('Qwen 2.5 7B')).toBeDefined()
-    expect(within(table).getByText('32768')).toBeDefined()
-    expect(within(table).getByText('4096')).toBeDefined()
+    expect(within(table).getByText('33k')).toBeDefined()
+    expect(within(table).getByText('4k')).toBeDefined()
     expect(within(table).getByText('llama3.2:1b')).toBeDefined()
     // Absent metadata renders as the dash: the bare row (llama3.2:1b) shows one in name, context, and output (3); the thinking column adds one per
     expect(within(table).getAllByText('—')).toHaveLength(7)
@@ -935,7 +935,7 @@ describe('adoption', () => {
     fireEvent.click(screen.getByRole('button', { name: '把 glm-5.2-fast-preview/cc 匹配到 glm-5.2-air' }))
     expect(entryButton().title).toBe('手动匹配：glm-5.2-air')
     expect(within(row()).getByText('GLM-5.2 Air')).toBeDefined()
-    expect(within(row()).getByText('128000')).toBeDefined()
+    expect(within(row()).getByText('128k')).toBeDefined()
     expect(within(row()).getByText('文')).toBeDefined()
   })
 

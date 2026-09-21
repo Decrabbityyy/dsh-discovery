@@ -93,8 +93,8 @@ describe('catalog matching', () => {
     // A resolved row shows the entry's name, capacities, inputs, and levels.
     const resolved = within(rowOf('glm-5.2'))
     expect(resolved.getByText('GLM-5.2')).toBeDefined()
-    expect(resolved.getByText('200000')).toBeDefined()
-    expect(resolved.getByText('128000')).toBeDefined()
+    expect(resolved.getByText('200k')).toBeDefined()
+    expect(resolved.getByText('128k')).toBeDefined()
     expect(resolved.getByText('文·图')).toBeDefined()
     expect(resolved.getByLabelText('glm-5.2 档位 high')).toBeDefined()
     // The variant shows nothing until the user names its entry.
@@ -107,6 +107,11 @@ describe('catalog matching', () => {
     const search = screen.getByLabelText<HTMLInputElement>('搜索目录条目：glm-5.2-fast-preview/cc')
     expect(search.value).toBe('glm-5.2')
     expect(screen.getByText('共 1 条')).toBeDefined()
+    // 选择器一行里的摘要：上下文/最大输出缩写、模态，以及六个等宽方块。
+    const meta = screen.getByTitle('上下文窗口 200000 · 最大输出 128000 · 思考档位 high/max')
+    expect(within(meta).getByText('200k/128k')).toBeDefined()
+    expect(within(meta).getByText('文·图')).toBeDefined()
+    expect(within(meta).getAllByText(/^[■□]$/).map(mark => mark.textContent).join('')).toBe('□□□■□■')
 
     fireEvent.click(screen.getByRole('button', { name: '把 glm-5.2-fast-preview/cc 匹配到 glm-5.2' }))
     expect(screen.queryByLabelText('搜索目录条目：glm-5.2-fast-preview/cc')).toBeNull()
@@ -138,7 +143,7 @@ describe('catalog matching', () => {
     fireEvent.click(screen.getByRole('button', { name: '把 glm-5.2-fast-preview/cc 匹配到 glm-5.2-air' }))
     const rebound = within(rowOf('glm-5.2-fast-preview/cc'))
     expect(rebound.getByText('GLM-5.2 Air')).toBeDefined()
-    expect(rebound.getByText('128000')).toBeDefined()
+    expect(rebound.getByText('128k')).toBeDefined()
     expect(rebound.getByText('文')).toBeDefined()
     expect(rebound.getByLabelText('glm-5.2-fast-preview/cc 档位 low')).toBeDefined()
     expect(matchButton('glm-5.2-fast-preview/cc').title).toBe('手动匹配：glm-5.2-air')
@@ -152,9 +157,35 @@ describe('catalog matching', () => {
     fireEvent.click(matchButton('never-heard-of-it'))
     fireEvent.click(screen.getByRole('button', { name: '把 never-heard-of-it 匹配到 glm-5.2' }))
     expect(within(row()).getByText('GLM-5.2')).toBeDefined()
-    expect(within(row()).getByText('200000')).toBeDefined()
-    expect(within(row()).getByText('128000')).toBeDefined()
+    expect(within(row()).getByText('200k')).toBeDefined()
+    expect(within(row()).getByText('128k')).toBeDefined()
     expect(within(row()).getByText('文·图')).toBeDefined()
+  })
+
+  it('filters the picker by provider with @', () => {
+    const tables: Tables = {
+      catalog: { 'glm-5.2': ['high'], 'nano-1': [], 'nano-2': [] },
+      modalities: {},
+      facts: {},
+      sources: { 'glm-5.2': ['zai-org', 'fireworks'], 'nano-1': ['nano-gpt'], 'nano-2': ['nano-gpt'] },
+    }
+    render(<Harness tables={tables} />)
+    fireEvent.click(matchButton('never-heard-of-it'))
+    const items = (): string[] => screen
+      .getAllByRole('button', { name: /^把 never-heard-of-it 匹配到 / })
+      .map(button => (button.getAttribute('aria-label') ?? '').replace('把 never-heard-of-it 匹配到 ', ''))
+    const search = screen.getByLabelText<HTMLInputElement>('搜索目录条目：never-heard-of-it')
+    expect(items().sort()).toEqual(['glm-5.2', 'nano-1', 'nano-2'])
+
+    fireEvent.change(search, { target: { value: '@nano' } })
+    expect(items().sort()).toEqual(['nano-1', 'nano-2'])
+
+    fireEvent.change(search, { target: { value: 'nano-1 @zai' } })
+    expect(screen.getByText('目录里没有 @zai 收录的条目')).toBeDefined()
+
+    // 文本与 @ 可以混写：文本命中 id，@ 只看来源。
+    fireEvent.change(search, { target: { value: 'glm @zai' } })
+    expect(items()).toEqual(['glm-5.2'])
   })
 
   it('unpins a row the user had pinned', () => {
@@ -176,8 +207,11 @@ describe('catalog matching', () => {
   it('labels an entry with the providers behind it and searches them by name', () => {
     render(<Harness />)
     fireEvent.click(matchButton('glm-5.2-fast-preview/cc'))
-    // Two providers record glm-5.2; the label names the first and counts the rest.
-    expect(screen.getByText('zai-org 等 2 家')).toBeDefined()
+    // Two providers record glm-5.2; the label names the first and counts the rest,
+    // and hovering it lists every provider.
+    const badge = screen.getByText('zai-org 等 2 家')
+    expect(badge).toBeDefined()
+    expect(badge.getAttribute('title')).toBe('收录它的 provider：zai-org、fireworks')
     fireEvent.change(screen.getByLabelText('搜索目录条目：glm-5.2-fast-preview/cc'), { target: { value: 'fireworks' } })
     expect(screen.getByRole('button', { name: '把 glm-5.2-fast-preview/cc 匹配到 glm-5.2' })).toBeDefined()
     fireEvent.change(screen.getByLabelText('搜索目录条目：glm-5.2-fast-preview/cc'), { target: { value: 'openrouter' } })

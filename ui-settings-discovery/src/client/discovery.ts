@@ -126,6 +126,33 @@ export function catalogSearchSeed(modelId: string, index: CatalogIndex): string 
   return ''
 }
 
+/** 选择器搜索词的解析结果：`@供应商` 片段（多个之间是「或」）与其余词（全都要命中）。 */
+export interface PickerQuery {
+  readonly providers: readonly string[]
+  readonly words: readonly string[]
+}
+
+/** 解析选择器的搜索词：`glm @zai` 读作「文本里有 glm，且来源含 zai」。 */
+export function parsePickerQuery(query: string): PickerQuery {
+  const tokens = query.trim().toLowerCase().split(/\s+/).filter(token => token.length > 0)
+  return {
+    providers: tokens.filter(token => token.startsWith('@') && token.length > 1).map(token => token.slice(1)),
+    words: tokens.filter(token => !token.startsWith('@') || token.length === 1),
+  }
+}
+
+/** 一条目录条目是否命中：`@` 片段只看来源，其余词在 id、名称与来源里任一处命中即可。 */
+export function matchesPickerQuery(entry: CatalogEntry, query: PickerQuery): boolean {
+  const sources = entry.sources.map(source => source.toLowerCase())
+  if (query.providers.length > 0
+    && !query.providers.some(provider => sources.some(source => source.includes(provider)))) {
+    return false
+  }
+  if (query.words.length === 0) return true
+  const haystack = [entry.key.toLowerCase(), (entry.name ?? '').toLowerCase(), ...sources]
+  return query.words.every(word => haystack.some(part => part.includes(word)))
+}
+
 /** The per-model `input` declaration to write for one entry, or undefined when the catalog records nothing for it or no image support. */
 export function declaredInput(entry: CatalogEntry | undefined): readonly string[] | undefined {
   return entry !== undefined && entry.input.includes('image') ? entry.input : undefined
