@@ -1,49 +1,28 @@
 import type { Context } from '@deepseek-ai/cordis'
-import {
-  catalogKeyIndexOf, DISCOVERY_NAMESPACE, discoverEndpoint, enrichModels, MODELS_DEV_URL, parseModelFacts,
-  resolveCatalogKey, resolveDiscoveryConfig,
-} from './engine.ts'
-import type { Config, ModelFacts } from './engine.ts'
 import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-llm'
+import { DISCOVERY_NAMESPACE, discoverEndpoint, enrichModels, resolveDiscoveryConfig } from './engine.ts'
+import type { Config } from './engine.ts'
+import { provideModelCatalog } from './catalog/service.ts'
+import type { SharedCatalog } from './vocabulary.ts'
 
 export { Config, resolveDiscoveryConfig } from './engine.ts'
 export type { EngineSwitches, ResolvedDiscoveryConfig } from './engine.ts'
 export { DISCOVERY_NAMESPACE, discoverEndpoint, enrichModels } from './engine.ts'
 
 export const name = 'llm-discovery'
-/** Service dependency: the LLM registry the discovery offer registers on. */
+/** 探测 offer 注册在 llm 注册表上。 */
 export const inject = ['llm']
 
 /**
- * Fetch the current models.dev fact index. A failed fetch yields an empty index
- * rather than throwing, leaving the endpoint and bundled-catalog fields usable.
+ * 用目录补端点没披露的显示名称与容量：端点报的值优先，`x-ai/grok-4.6` 解析到自己那条，
+ * 而不是被裸名条目顶掉。
  */
-async function loadOnlineFacts(): Promise<ReadonlyMap<string, ModelFacts>> {
-  const facts = new Map<string, ModelFacts>()
-  try {
-    const response = await fetch(MODELS_DEV_URL, { signal: AbortSignal.timeout(15_000) })
-    if (!response.ok) return facts
-    for (const [name, fact] of parseModelFacts(await response.json())) facts.set(name, fact)
-  } catch {
-    // Offline startup must not make the discovery offer unavailable.
-  }
-  return facts
-}
-
-/**
- * Fill fields omitted by an endpoint from the current models.dev snapshot.
- * Endpoint values win, and an id resolves to its own entry when models.dev
- * records it, else to the one its head or tail names — `x-ai/grok-4.6` keeps
- * the id that provider records rather than collapsing onto another's.
- */
-export function enrichModelsFromOnline(
+export function enrichModelsFromCatalog(
   models: readonly LlmDiscoveredModel[],
-  facts: ReadonlyMap<string, ModelFacts>,
+  catalog: Pick<SharedCatalog, 'factsOf'>,
 ): LlmDiscoveredModel[] {
-  const index = catalogKeyIndexOf(facts.keys())
   return models.map((model) => {
-    const key = resolveCatalogKey(model.id, index)
-    const fact = key === undefined ? undefined : facts.get(key)
+    const fact = catalog.factsOf(model.id)
     if (fact === undefined) return { ...model }
     return {
       ...model,
@@ -56,12 +35,11 @@ export function enrichModelsFromOnline(
 
 export function apply(ctx: Context, config?: Config): void {
   const resolved = resolveDiscoveryConfig(config)
-  // Refresh once per plugin mount. The request waits for this snapshot, so a
-  // successful online catalog is applied even when the first probe is immediate.
-  const onlineFacts = resolved.enrichment ? loadOnlineFacts() : Promise.resolve(new Map<string, ModelFacts>())
+  // 目录是另外两个插件的硬依赖，所以这个开关只管本插件：关掉时只用本地已有的目录、不联网刷新、也不补全探测回复。
+  const catalog = provideModelCatalog(ctx, { offline: !resolved.enrichment })
   ctx.llm.registerModelDiscovery(DISCOVERY_NAMESPACE, async (request) => {
-    const [raw, facts] = await Promise.all([discoverEndpoint(request, resolved), onlineFacts])
+    const [raw] = await Promise.all([discoverEndpoint(request, resolved), catalog.ready()])
     const bundled = resolved.enrichment ? enrichModels(raw) : [...raw]
-    return enrichModelsFromOnline(bundled, facts)
+    return resolved.enrichment ? enrichModelsFromCatalog(bundled, catalog) : bundled
   })
 }

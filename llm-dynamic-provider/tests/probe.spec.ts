@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
 import { SettingsProvider } from '@deepseek-ai/dsh-settings'
-import { DYNAMIC_PROBE_PATH } from 'dsh-llm-discovery/engine'
+import { CATALOG_SERVICE, DYNAMIC_PROBE_PATH } from 'dsh-llm-discovery/vocabulary'
 import * as dynamicProvider from '../src/index.ts'
 import { startProbeServer } from './server.ts'
 import type { ProbeServer } from './server.ts'
@@ -68,10 +68,31 @@ async function answer(route: RegisteredRoute, method: string): Promise<{ status:
   return { status: res.statusCode, body: body.length === 0 ? {} : JSON.parse(body) as Record<string, unknown> }
 }
 
-/** The models.dev body the specs script, keyed by provider then model id. */
-const MODELS_DEV = { acme: { models: { 'acme-x': { name: 'Acme X', limit: { context: 4096 } } } } }
-
 const LISTING = { data: [{ id: 'acme-x', context_window: 4096 }] }
+
+/** 目录替身：只有 dyn 真正读的那几个成员，刷新次数可查。 */
+function fakeCatalog(options: { entries?: number; ready?: Promise<void> } = {}): {
+  catalog: unknown
+  refreshes: () => number
+} {
+  let refreshes = 0
+  const entries = options.entries ?? 1
+  const status = { entries, refreshedAt: 1_789_900_000_000, source: 'storage' as const }
+  return {
+    refreshes: () => refreshes,
+    catalog: {
+      factsOf: () => undefined,
+      inputModalitiesOf: () => undefined,
+      envelope: () => ({ catalog: {}, modalities: {}, facts: {} }),
+      status: () => status,
+      refresh: () => {
+        refreshes += 1
+        return Promise.resolve(status)
+      },
+      ready: () => options.ready ?? Promise.resolve(),
+    },
+  }
+}
 
 let ctx: Context | undefined
 let server: ProbeServer | undefined
@@ -81,137 +102,71 @@ afterEach(async () => {
   ctx = undefined
   if (server !== undefined) await server.close()
   server = undefined
-  vi.unstubAllGlobals()
 })
 
-/**
- * Answer models.dev from memory while every other request keeps its real
- * carrier, so the probe against the fixture server still reaches it.
- */
-function stubModelsDev(reply: 'body' | 'offline' = 'body'): void {
-  const real = globalThis.fetch
-  vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = input instanceof Request ? input.url : String(input)
-    if (!url.startsWith('https://models.dev/')) return real(input, init)
-    if (reply === 'offline') return Promise.reject(new Error('offline'))
-    return Promise.resolve(new Response(JSON.stringify(MODELS_DEV), {
-      status: 200,
-      headers: { 'content-type': 'application/json' },
-    }))
-  })
-}
-
-/** The storage-domain face: the catalog's one record behind `open`. */
-function fakeStorage(): {
-  open(): Promise<unknown>
-  records: Map<string, { entries: Record<string, unknown> }>
-} {
-  const records = new Map<string, { entries: Record<string, unknown> }>()
-  return {
-    records,
-    open: () => Promise.resolve({
-      name: 'llm_models_dev_catalog',
-      global: { get: () => ({}), set: () => Promise.resolve() },
-      table: () => ({
-        get: (key: string) => records.get(key),
-        put: (key: string, value: { entries: Record<string, unknown> }) => {
-          records.set(key, value)
-          return Promise.resolve()
-        },
-        entries: () => records.entries(),
-      }),
-      close: () => Promise.resolve(),
-    }),
-  }
-}
-
 /** Mount the seams plus the plugin over one config, capturing its endpoints. */
-async function boot(config?: dynamicProvider.Config, storage?: unknown): Promise<Map<string, RegisteredRoute>> {
+async function boot(config?: dynamicProvider.Config, catalog: unknown = fakeCatalog().catalog): Promise<Map<string, RegisteredRoute>> {
   const routes = new Map<string, RegisteredRoute>()
   ctx = new Context()
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(MemorySettings)
   ctx.provide('webServer', fakeWebServer(routes))
-  if (storage !== undefined) ctx.provide('storageDomain', storage)
+  ctx.provide(CATALOG_SERVICE, catalog)
   await ctx.plugin(dynamicProvider, config)
   return routes
 }
 
 describe('probe endpoint', () => {
-  it('reports the declared routes and where the facts came from', async () => {
-    stubModelsDev()
+  it('reports the declared routes and the catalog status it reads from the service', async () => {
     server = await startProbeServer({ '/models': { body: JSON.stringify(LISTING) } })
     const routes = await boot({ routes: { upstream: { baseURL: server.url, api: 'openai-completions' } } })
     const probe = routes.get(DYNAMIC_PROBE_PATH)
     expect(routes.has('/llm-dynamic-provider/routes')).toBe(true)
-    expect(probe).toBeDefined()
 
-    // The boot-time load lands asynchronously; the status reports it once it has.
-    await vi.waitFor(async () => {
-      const { body } = await answer(probe!, 'GET')
-      expect(body['modelsDev']).toMatchObject({ entries: 1, source: 'models.dev' })
-    })
     const { body } = await answer(probe!, 'GET')
     expect(body['routes']).toBe(1)
-    // Nor a storage domain in this composition, which the status admits.
-    expect(body['modelsDev']).toMatchObject({ storageError: 'no storage domain is mounted in this composition' })
-  })
-
-  it('loads and stores the facts through the storage domain when one is mounted', async () => {
-    stubModelsDev()
-    const storage = fakeStorage()
-    const routes = await boot(undefined, storage)
-    const probe = routes.get(DYNAMIC_PROBE_PATH)!
-
-    const { body } = await answer(probe, 'POST')
     expect(body['modelsDev']).toMatchObject({ entries: 1, source: 'storage' })
-    expect((body['modelsDev'] as Record<string, unknown>)['storageError']).toBeUndefined()
-    // The parsed catalog went through the domain as its one record.
-    expect([...storage.records.keys()]).toEqual(['models'])
-    expect(Object.keys(storage.records.get('models')?.entries ?? {})).toHaveLength(1)
   })
 
-  it('reports a storage domain that will not open instead of quietly using the network', async () => {
-    stubModelsDev()
-    const routes = await boot(undefined, { open: () => Promise.reject(new Error('no kv backend for this domain')) })
-    const probe = routes.get(DYNAMIC_PROBE_PATH)!
-
-    const { body } = await answer(probe, 'POST')
-    expect(body['modelsDev']).toMatchObject({
-      entries: 1,
-      source: 'models.dev',
-      storageError: 'no kv backend for this domain',
-    })
-  })
-
-  it('re-reads the facts and re-probes every route on POST', async () => {
-    stubModelsDev()
+  it('refreshes the catalog and re-probes every route on POST', async () => {
+    const fake = fakeCatalog()
     server = await startProbeServer({ '/models': { body: JSON.stringify(LISTING) } })
-    const routes = await boot({ routes: { upstream: { baseURL: server.url, api: 'openai-completions' } } })
+    const routes = await boot({ routes: { upstream: { baseURL: server.url, api: 'openai-completions' } } }, fake.catalog)
     const probe = routes.get(DYNAMIC_PROBE_PATH)!
 
     const { body } = await answer(probe, 'POST')
+    expect(fake.refreshes()).toBe(1)
     expect(body['probes']).toEqual([{ route: 'upstream', models: 1 }])
-    expect(body['modelsDev']).toMatchObject({ entries: 1, source: 'models.dev' })
     // The refresh probed the endpoint again rather than reusing the boot pass.
     expect(server.requests.filter(request => request.path === '/models').length).toBeGreaterThanOrEqual(2)
   })
 
-  it('reports a facts load that failed and a route whose probe did', async () => {
-    stubModelsDev('offline')
+  it('reports a route whose probe failed', async () => {
     const routes = await boot({ routes: { broken: { baseURL: 'http://127.0.0.1:1', api: 'openai-completions' } } })
     const probe = routes.get(DYNAMIC_PROBE_PATH)!
 
     const { body } = await answer(probe, 'POST')
-    expect(body['modelsDev']).toMatchObject({ entries: 0, error: 'offline' })
     const probes = body['probes'] as Record<string, unknown>[]
     expect(probes[0]?.['route']).toBe('broken')
     expect(typeof probes[0]?.['error']).toBe('string')
     expect(probes[0]?.['models']).toBeUndefined()
   })
 
+  it('waits for the catalog before the first probe', async () => {
+    const gate = Promise.withResolvers<void>()
+    server = await startProbeServer({ '/models': { body: JSON.stringify(LISTING) } })
+    await boot({ routes: { upstream: { baseURL: server.url, api: 'openai-completions' } } }, fakeCatalog({ ready: gate.promise }).catalog)
+    await new Promise(resolve => setTimeout(resolve, 10))
+    // 目录还没就绪：一条路由都不注册。
+    expect(ctx!.llm.listProviders().map(provider => provider.id)).toEqual([])
+
+    gate.resolve()
+    await vi.waitFor(() => {
+      expect(ctx!.llm.listProviders().map(provider => provider.id)).toContain('upstream')
+    })
+  })
+
   it('refuses a method it does not serve', async () => {
-    stubModelsDev()
     const routes = await boot()
     const refused = await answer(routes.get(DYNAMIC_PROBE_PATH)!, 'DELETE')
     expect(refused.status).toBe(405)

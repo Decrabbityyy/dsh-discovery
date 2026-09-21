@@ -12,13 +12,9 @@ import type { Config, DynamicSection } from './config.ts'
 import { NamespaceConfig } from './config.ts'
 import { discoverDynamicProviders } from './provider.ts'
 import type { DynamicProviderProfile } from './provider.ts'
-import { catalogEntries, factsOfRow, openModelCatalog, refreshModelCatalog } from 'dsh-llm-discovery/catalog/service'
-import type { OpenedCatalog } from 'dsh-llm-discovery/catalog/service'
-import {
-  catalogInputModalities, catalogKeyIndexOf, catalogReasoningEfforts, discoverEndpoint, DYNAMIC_PROBE_PATH,
-  enrichModels, MODELS_DEV_URL, parseModelFacts, resolveCatalogKey, resolveDiscoveryConfig,
-} from 'dsh-llm-discovery/engine'
-import type { ModelFacts } from 'dsh-llm-discovery/engine'
+import { catalogReasoningEfforts, discoverEndpoint, enrichModels, resolveDiscoveryConfig } from 'dsh-llm-discovery/engine'
+import { CATALOG_SERVICE, DYNAMIC_PROBE_PATH } from 'dsh-llm-discovery/vocabulary'
+import type { CatalogStatus, SharedCatalog } from 'dsh-llm-discovery/vocabulary'
 
 export { Config, NamespaceConfig } from './config.ts'
 export type { DynamicSection, RouteProfile } from './config.ts'
@@ -37,21 +33,18 @@ interface WebServerFace {
 }
 
 export const name = 'llm-dynamic-provider'
-/** The llm seam owns the registry; the settings seam owns the route namespace. */
-export const inject = ['llm', 'settings']
+/** llm 注册表、设置命名空间，以及 dsh-llm-discovery 提供的 models.dev 目录。 */
+export const inject = ['llm', 'settings', CATALOG_SERVICE]
 
 /** This plugin's settings namespace, holding the route declarations. */
 // alpha.4 dropped the settingsNamespace() factory; a namespace is a branded
 // string validated by SettingsNamespaceInput at registration time.
 export const DYNAMIC_NS = 'llm-dynamic-provider' as SettingsNamespace
 
-/** models.dev facts 的来源与时间；`storageError`/`error` 说明为什么没落在存储域、上次为什么失败。 */
-interface ModelsDevStatus {
-  readonly entries: number
-  readonly refreshedAt: number | null
-  readonly source?: 'storage' | 'models.dev'
-  readonly storageError?: string
-  readonly error?: string
+/** 设置页「模型目录」读的状态：声明的路由数与 models.dev 目录状态。 */
+export interface DynamicRouteStatus {
+  readonly routes: number
+  readonly modelsDev: CatalogStatus
 }
 
 /** One route's outcome in a refresh report. */
@@ -65,93 +58,15 @@ interface RouteProbeReport {
 /** 设置页「模型目录」读的状态：声明的路由数与 models.dev 目录状态。 */
 export interface DynamicRouteStatus {
   readonly routes: number
-  readonly modelsDev: ModelsDevStatus
+  readonly modelsDev: CatalogStatus
 }
 
 /** Mount the dynamic-provider adapter: declared routes register on first successful probe. */
 export function apply(ctx: Context, config?: Config): void {
   ctx.settings.register(DYNAMIC_NS, NamespaceConfig, { base: { routes: config?.routes ?? {} } })
 
-  // models.dev facts by catalog key: the synchronous read path for enrichment
-  // and modality lookups, backed by the storage domain when the composition
-  // mounts it and by a plain fetch otherwise. The key index is rebuilt with the
-  // map so every lookup resolves an id the same way the settings page does.
-  let facts = new Map<string, ModelFacts>()
-  let factKeys = catalogKeyIndexOf([])
-  // What the last load of those facts landed, for the cache tab's status.
-  let factsStatus: ModelsDevStatus = { entries: 0, refreshedAt: null }
-  let storageCatalog: OpenedCatalog | undefined
-  // Why the facts are not storage-backed, when they are not. Recomputed on every
-  // load rather than latched: the storage domain can be provided after this
-  // plugin's own apply, and a later refresh is then the one that finds it.
-  let storageError: string | undefined
-  let storageFailureLogged = false
-  const refillFacts = (entries: Iterable<readonly [string, ModelFacts]>): void => {
-    facts = new Map(entries)
-    factKeys = catalogKeyIndexOf(facts.keys())
-  }
-  /** Open the storage-backed catalog, recording (and once, logging) why not. */
-  const openStorageCatalog = async (): Promise<void> => {
-    try {
-      storageCatalog = await openModelCatalog(ctx)
-      storageError = storageCatalog === undefined ? 'no storage domain is mounted in this composition' : undefined
-    } catch (error) {
-      storageError = error instanceof Error ? error.message : String(error)
-      if (!storageFailureLogged) {
-        storageFailureLogged = true
-        ctx.logger.warn('llm-dynamic-provider: the stored models.dev catalog is unavailable, loading it over the network instead')
-        ctx.logger.warn(error)
-      }
-    }
-  }
-  /** The stored catalog as facts. */
-  const storedFacts = (opened: OpenedCatalog): [string, ModelFacts][] =>
-    Object.entries(catalogEntries(opened)).map(([name, row]) => [name, factsOfRow(row)])
-  const factsOf = (modelId: string): ModelFacts | undefined => {
-    const key = resolveCatalogKey(modelId, factKeys)
-    return key === undefined ? undefined : facts.get(key)
-  }
-  const modalitiesOf = (modelId: string): readonly string[] | undefined => {
-    const fact = factsOf(modelId)
-    if (fact?.inputModalities !== undefined && fact.inputModalities.length > 0) return fact.inputModalities
-    return catalogInputModalities(modelId)
-  }
-
-  /**
-   * Reload the models.dev facts once: the storage-backed catalog refreshes
-   * incrementally by ETag, and a deployment without that seam re-reads the file
-   * over the network. Never throws — a failure is reported in the status the
-   * cache tab reads.
-   */
-  const refreshFacts = async (): Promise<ModelsDevStatus> => {
-    if (storageCatalog === undefined) await openStorageCatalog()
-    try {
-      if (storageCatalog !== undefined) {
-        refillFacts(storedFacts(storageCatalog))
-        await refreshModelCatalog(storageCatalog)
-        refillFacts(storedFacts(storageCatalog))
-        factsStatus = { entries: facts.size, refreshedAt: Date.now(), source: 'storage' }
-      } else {
-        const response = await fetch(MODELS_DEV_URL, { signal: AbortSignal.timeout(15_000) })
-        if (!response.ok) throw new Error(`models.dev answered ${response.status}`)
-        refillFacts(parseModelFacts(await response.json()))
-        factsStatus = {
-          entries: facts.size,
-          refreshedAt: Date.now(),
-          source: 'models.dev',
-          ...storageError === undefined ? {} : { storageError },
-        }
-      }
-    } catch (error) {
-      factsStatus = {
-        ...factsStatus,
-        error: error instanceof Error ? error.message : String(error),
-        ...storageError === undefined ? {} : { storageError },
-      }
-    }
-    return factsStatus
-  }
-  void refreshFacts()
+  // 目录由 dsh-llm-discovery 提供（`inject` 保证它在）：facts 查询、模态与状态都读它。
+  const catalog = ctx.get(CATALOG_SERVICE) as SharedCatalog
   const webServer = ctx.get('webServer') as WebServerFace | undefined
 
   // The route read/write endpoint. The settings RPC refuses this namespace
@@ -232,7 +147,7 @@ export function apply(ctx: Context, config?: Config): void {
     const raw = await discoverEndpoint(request, discovery)
     const enriched = discovery.enrichment ? enrichModels(raw) : [...raw]
     return enriched.map((model) => {
-      const fact = factsOf(model.id)
+      const fact = catalog.factsOf(model.id)
       return {
         ...model,
         ...model.name === undefined && fact?.displayName !== undefined ? { name: fact.displayName } : {},
@@ -316,8 +231,8 @@ export function apply(ctx: Context, config?: Config): void {
   const reprobe = async (): Promise<readonly RouteProbeReport[]> => {
     const routes = declaredRoutes()
     const outcome = await discoverDynamicProviders(ctx, routes, config, { signal: undefined }, {
-      inputModalitiesOf: modalitiesOf,
-      factsOf,
+      inputModalitiesOf: catalog.inputModalitiesOf,
+      factsOf: catalog.factsOf,
     })
     // The probe may outlive the plugin: a disposed fiber's registration is
     // gone, so swapping routes now would throw REGISTRATION_DISPOSED. FiberState
@@ -343,7 +258,7 @@ export function apply(ctx: Context, config?: Config): void {
   // 设置页「模型目录」读的端点：GET 报状态，POST 重读目录并重新探测所有路由。
   const routeStatus = (): DynamicRouteStatus => ({
     routes: Object.keys(declaredRoutes()).length,
-    modelsDev: factsStatus,
+    modelsDev: catalog.status(),
   })
   if (webServer !== undefined) {
     ctx.effect(() => webServer.register({
@@ -359,7 +274,7 @@ export function apply(ctx: Context, config?: Config): void {
           sendJson(res, 405, { error: 'method not allowed' })
           return
         }
-        const modelsDev = await refreshFacts()
+        const modelsDev = await catalog.refresh()
         const probes = await reprobe()
         sendJson(res, 200, { ...routeStatus(), modelsDev, probes })
       },
@@ -376,5 +291,6 @@ export function apply(ctx: Context, config?: Config): void {
   // Publish the namespace's exposure before serving: the directory is what
   // admits it to the proxy's exposed set.
   syncDirectory()
-  void reprobe()
+  // 目录先落到内存，再按它注册路由并实时探测：否则首次注册会缺名称与容量。
+  void catalog.ready().then(() => reprobe())
 }

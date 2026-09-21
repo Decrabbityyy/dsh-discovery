@@ -1,34 +1,55 @@
 /**
- * The model-catalog store: the domain declaration it writes through, the
- * incremental refresh (ETag 304 / 200 replace) and the single-record layout
- * that makes a refresh one durable write.
+ * 目录服务：一次刷新一次写、ETag 增量、ready 的语义，以及三面读得到的那几个查询。
  */
 
-import { describe, expect, it } from 'vitest'
-import type { Context } from '@deepseek-ai/cordis'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { Context } from '@deepseek-ai/cordis'
 import { parseModelFacts } from '../../src/catalog/models-dev.ts'
+import { provideModelCatalog } from '../../src/catalog/service.ts'
 import { modelCatalogDomainSpec } from '../../src/catalog/spec.ts'
-import { CATALOG_RECORD, catalogEntries, factsOfRow, openModelCatalog, refreshModelCatalog } from '../../src/catalog/service.ts'
-import type { OpenedCatalog } from '../../src/catalog/service.ts'
+import { CATALOG_SERVICE } from '../../src/vocabulary.ts'
 import type { CatalogRow, ModelRow } from '../../src/catalog/spec.ts'
 
-/** A scripted response the fetch mock replays. */
+/** One scripted HTTP response. */
 interface Script {
   status: number
   body?: unknown
   etag?: string
 }
 
-/** An in-memory domain stand-in holding the one catalog record. */
-function fakeDomain(initial: Record<string, ModelRow> = {}, meta: { etag?: string } = {}): {
-  catalog: OpenedCatalog
-  records: Map<string, CatalogRow>
+/** 回放脚本的 fetch，并记下每次请求发出的 If-None-Match。 */
+function scriptedFetch(scripts: readonly Script[]): {
+  fetchFn: typeof fetch
+  ifNoneMatch: (string | undefined)[]
+  calls: () => number
+} {
+  const ifNoneMatch: (string | undefined)[] = []
+  let calls = 0
+  const fetchFn = ((_: unknown, init?: { headers?: Record<string, string> }) => {
+    const script = scripts[Math.min(calls, scripts.length - 1)] ?? { status: 500 }
+    calls += 1
+    ifNoneMatch.push(init?.headers?.['if-none-match'])
+    return Promise.resolve({
+      status: script.status,
+      ok: script.status >= 200 && script.status < 300,
+      json: () => Promise.resolve(script.body ?? {}),
+      headers: { get: (name: string) => (name === 'etag' ? (script.etag ?? null) : null) },
+    } as unknown as Response)
+  }) as typeof fetch
+  return { fetchFn, ifNoneMatch, calls: () => calls }
+}
+
+/** 内存里的存储域：一张单记录表，加一个 global。 */
+function fakeStorageDomain(initial: Record<string, ModelRow> = {}, meta: { etag?: string; fetchedAt?: number } = {}): {
+  open(spec: unknown): Promise<unknown>
+  opened: unknown[]
   puts: CatalogRow[]
   global: { etag?: string; fetchedAt?: number }
 } {
   const records = new Map<string, CatalogRow>()
-  if (Object.keys(initial).length > 0) records.set(CATALOG_RECORD, { entries: structuredClone(initial) })
+  if (Object.keys(initial).length > 0) records.set('models', { entries: structuredClone(initial) })
   const puts: CatalogRow[] = []
+  const opened: unknown[] = []
   const global: { etag?: string; fetchedAt?: number } = { ...meta }
   const table = {
     get: (key: string) => records.get(key),
@@ -39,148 +60,175 @@ function fakeDomain(initial: Record<string, ModelRow> = {}, meta: { etag?: strin
     },
     entries: () => records.entries(),
   }
-  const catalog = {
-    domain: {
-      name: 'test',
-      global: {
-        get: () => global,
-        set: (value: { etag?: string; fetchedAt?: number }) => {
-          Object.assign(global, value)
-          return Promise.resolve()
+  return {
+    opened,
+    puts,
+    global,
+    open: (spec: unknown) => {
+      opened.push(spec)
+      return Promise.resolve({
+        name: 'llm_models_dev_catalog',
+        global: {
+          get: () => global,
+          set: (value: { etag?: string; fetchedAt?: number }) => {
+            Object.assign(global, value)
+            return Promise.resolve()
+          },
         },
-      },
-      table: () => table,
-      close: () => Promise.resolve(),
+        table: () => table,
+        close: () => Promise.resolve(),
+      })
     },
-    catalog: table,
-  } as unknown as OpenedCatalog
-  return { catalog, records, puts, global }
-}
-
-function fetchOf(script: Script): typeof fetch {
-  return (() => Promise.resolve({
-    status: script.status,
-    ok: script.status >= 200 && script.status < 300,
-    json: () => Promise.resolve(script.body),
-    headers: { get: (name: string) => (name === 'etag' ? (script.etag ?? null) : null) },
-  } as unknown as Response)) as typeof fetch
+  }
 }
 
 const BODY = {
-  'xai': { models: { 'grok-4.6': { name: 'Grok 4.6', reasoning: true, reasoning_options: [{ type: 'effort', values: ['low', 'high'] }], modalities: { input: ['text', 'image'], output: ['text'] }, limit: { context: 500000, output: 500000 } } } },
-  'openrouter': { models: { 'x-ai/grok-4.6': { name: 'xAI: Grok 4.6', limit: { context: 999 } } } }, // its own id, plus the bare alias
+  'xai': { models: { 'grok-4.6': { name: 'Grok 4.6', reasoning: true, reasoning_options: [{ type: 'effort', values: ['low', 'high'] }], modalities: { input: ['text', 'image'], output: ['text'] }, limit: { context: 500_000, output: 500_000 } } } },
+  'openrouter': { models: { 'x-ai/grok-4.6': { name: 'xAI: Grok 4.6', limit: { context: 999 } } } },
 }
 
-describe('refreshModelCatalog', () => {
-  it('replaces the whole catalog with one write and records the ETag', async () => {
-    const { catalog, puts, global } = fakeDomain()
-    const applied = await refreshModelCatalog(catalog, { fetchFn: fetchOf({ status: 200, body: BODY, etag: 'W/"v1"' }), now: () => 1000 })
-    expect(applied).toBe(true)
-    // One record, whatever the catalog's size: the `single` layout republishes
+const contexts: Context[] = []
+
+/** 挂上可选的存储域与 fetch 之后建目录。 */
+function boot(options: { storage?: unknown; fetchFn?: typeof fetch; offline?: boolean } = {}): ReturnType<typeof provideModelCatalog> {
+  const ctx = new Context()
+  contexts.push(ctx)
+  if (options.storage !== undefined) ctx.provide('storageDomain', options.storage)
+  return provideModelCatalog(ctx, {
+    ...options.fetchFn === undefined ? {} : { fetchFn: options.fetchFn },
+    ...options.offline === undefined ? {} : { offline: options.offline },
+    now: () => 1000,
+  })
+}
+
+afterEach(async () => {
+  for (const ctx of contexts.splice(0)) await ctx.fiber.dispose()
+})
+
+describe('model catalog service', () => {
+  it('writes the whole catalog as one record and records the ETag', async () => {
+    const storage = fakeStorageDomain()
+    const { fetchFn } = scriptedFetch([{ status: 200, body: BODY, etag: 'W/"v1"' }])
+    const catalog = boot({ storage, fetchFn })
+    await catalog.ready()
+
+    // One record, whatever the catalog's size: the json single layout republishes
     // the whole unit per write, so per-model rows would cost one write per model.
-    expect(puts).toHaveLength(1)
-    const entries = catalogEntries(catalog)
-    // The id openrouter records keeps its own entry; xai's bare id is the alias.
-    expect(entries['grok-4.6']).toMatchObject({ displayName: 'Grok 4.6', contextWindow: 500000, inputModalities: ['text', 'image'] })
-    expect(entries['x-ai/grok-4.6']).toMatchObject({ displayName: 'xAI: Grok 4.6', contextWindow: 999 })
-    expect(global.etag).toBe('W/"v1"')
-    expect(global.fetchedAt).toBe(1000)
+    expect(storage.puts).toHaveLength(1)
+    expect(storage.global).toMatchObject({ etag: 'W/"v1"', fetchedAt: 1000 })
+    expect(catalog.status()).toMatchObject({ entries: 2, source: 'storage' })
+    expect(storage.opened[0]).toMatchObject({ name: 'llm_models_dev_catalog', version: 0 })
   })
 
-  it('sends the stored ETag and leaves the catalog alone on a 304', async () => {
-    const { catalog, puts } = fakeDomain({ 'grok-4.6': { displayName: 'Grok 4.6' } }, { etag: 'W/"v1"' })
-    let seenIfNoneMatch: string | undefined
+  it('resolves ready from the stored catalog and sends its ETag without waiting for the network', async () => {
+    const storage = fakeStorageDomain({ 'grok-4.6': { displayName: 'Grok 4.6' } }, { etag: 'W/"v1"', fetchedAt: 7 })
+    const seen: (string | undefined)[] = []
     const fetchFn = ((_: unknown, init?: { headers?: Record<string, string> }) => {
-      seenIfNoneMatch = init?.headers?.['if-none-match']
-      return Promise.resolve({ status: 304, ok: false, json: () => Promise.resolve({}), headers: { get: () => null } } as unknown as Response)
-    }) as typeof fetch
+      seen.push(init?.headers?.['if-none-match'])
+      return new Promise<Response>(() => {})
+    }) as unknown as typeof fetch
 
-    const applied = await refreshModelCatalog(catalog, { fetchFn })
-    expect(applied).toBe(false)
-    expect(seenIfNoneMatch).toBe('W/"v1"')
-    expect(puts).toHaveLength(0)
-    expect(catalogEntries(catalog)['grok-4.6']).toEqual({ displayName: 'Grok 4.6' })
+    const catalog = boot({ storage, fetchFn })
+    await catalog.ready()
+
+    expect(catalog.status()).toMatchObject({ entries: 1, source: 'storage', refreshedAt: 7 })
+    expect(catalog.factsOf('grok-4.6')).toMatchObject({ displayName: 'Grok 4.6' })
+    // 后台校验是异步起的：它带着存储里的 ETag 去问，但 ready 不等它。
+    await vi.waitFor(() => { expect(seen).toEqual(['W/"v1"']) })
+  })
+
+  it('keeps the stored catalog on a 304', async () => {
+    const storage = fakeStorageDomain({ 'grok-4.6': { displayName: 'Grok 4.6' } }, { etag: 'W/"v1"', fetchedAt: 5 })
+    const { fetchFn, ifNoneMatch } = scriptedFetch([{ status: 304 }])
+    const catalog = boot({ storage, fetchFn })
+    await catalog.ready()
+
+    expect((await catalog.refresh()).refreshedAt).toBe(1000)
+    expect(ifNoneMatch).toEqual(['W/"v1"', 'W/"v1"'])
+    expect(storage.puts).toHaveLength(0)
+    expect(catalog.factsOf('grok-4.6')).toMatchObject({ displayName: 'Grok 4.6' })
   })
 
   it('does not offer the ETag of a catalog that holds no rows', async () => {
-    // A 304 here would leave nothing to enrich from, so the ETag is withheld
-    // until there are rows it describes.
-    const { catalog } = fakeDomain({}, { etag: 'W/"v1"' })
-    let seenIfNoneMatch: string | undefined = 'unset'
-    const fetchFn = ((_: unknown, init?: { headers?: Record<string, string> }) => {
-      seenIfNoneMatch = init?.headers?.['if-none-match']
-      return Promise.resolve({
-        status: 200,
-        ok: true,
-        json: () => Promise.resolve(BODY),
-        headers: { get: () => 'W/"v1"' },
-      } as unknown as Response)
-    }) as typeof fetch
+    // A 304 here would leave nothing to enrich from, so the ETag is withheld.
+    const storage = fakeStorageDomain({}, { etag: 'W/"stale"' })
+    const { fetchFn, ifNoneMatch } = scriptedFetch([{ status: 200, body: BODY, etag: 'W/"v1"' }])
+    const catalog = boot({ storage, fetchFn })
+    await catalog.ready()
 
-    expect(await refreshModelCatalog(catalog, { fetchFn })).toBe(true)
-    expect(seenIfNoneMatch).toBeUndefined()
-    expect(Object.keys(catalogEntries(catalog)).length).toBeGreaterThan(0)
+    expect(ifNoneMatch).toEqual([undefined])
+    expect(catalog.status()).toMatchObject({ entries: 2, source: 'storage' })
   })
 
-  it('keeps the stored catalog on a fetch failure', async () => {
-    const { catalog, puts } = fakeDomain({ 'grok-4.6': { displayName: 'Grok 4.6' } })
-    const applied = await refreshModelCatalog(catalog, { fetchFn: () => Promise.reject(new Error('offline')) })
-    expect(applied).toBe(false)
-    expect(puts).toHaveLength(0)
-    expect(catalogEntries(catalog)['grok-4.6']).toEqual({ displayName: 'Grok 4.6' })
-  })
-})
+  it('keeps the previous snapshot and reports a failed refresh', async () => {
+    const storage = fakeStorageDomain({ 'grok-4.6': { displayName: 'Grok 4.6' } }, { etag: 'W/"v1"' })
+    const catalog = boot({ storage, fetchFn: (() => Promise.reject(new Error('offline'))) as unknown as typeof fetch })
+    await catalog.ready()
 
-describe('catalogEntries', () => {
-  it('reads the record the refresh wrote, and nothing before it', () => {
-    const empty = fakeDomain()
-    expect(catalogEntries(empty.catalog)).toEqual({})
-    const stored = fakeDomain({ 'grok-4.6': { displayName: 'Grok 4.6' } })
-    expect(factsOfRow(catalogEntries(stored.catalog)['grok-4.6']!)).toEqual({ displayName: 'Grok 4.6' })
-  })
-})
-
-describe('openModelCatalog', () => {
-  it('opens the catalog with its own domain spec and closes it with the fiber', async () => {
-    const table = { get: () => undefined, put: () => Promise.resolve(), entries: () => new Map<string, CatalogRow>().entries() }
-    let closed = false
-    const domain = {
-      name: 'llm_dynamic_provider_models',
-      global: { get: () => ({}), set: () => Promise.resolve() },
-      table: () => table,
-      close: () => {
-        closed = true
-        return Promise.resolve()
-      },
-    }
-    const specs: unknown[] = []
-    const effects: (() => void)[] = []
-    const ctx = {
-      get: (name: string) => (name === 'storageDomain'
-        ? { open: (spec: unknown) => { specs.push(spec); return Promise.resolve(domain) } }
-        : undefined),
-      effect: (callback: () => (() => void) | undefined) => {
-        const dispose = callback()
-        if (dispose !== undefined) effects.push(dispose)
-        return () => { dispose?.() }
-      },
-    } as unknown as Context
-
-    const opened = await openModelCatalog(ctx)
-    expect(opened?.catalog).toBe(table)
-    // The declaration rides in from `./store-spec.ts`, so this also fails if
-    // that module (or a seam it imports) cannot be resolved at runtime.
-    expect(specs).toHaveLength(1)
-    expect(specs[0]).toMatchObject({ name: 'llm_dynamic_provider_models', version: 0 })
-    expect(Object.keys((specs[0] as { tables: object }).tables)).toEqual(['catalog'])
-    expect(effects).toHaveLength(1)
-    effects[0]?.()
-    expect(closed).toBe(true)
+    expect((await catalog.refresh()).error).toBe('offline')
+    expect(catalog.status()).toMatchObject({ entries: 1, source: 'storage' })
+    expect(catalog.factsOf('grok-4.6')).toMatchObject({ displayName: 'Grok 4.6' })
   })
 
-  it('returns undefined where the composition mounts no storage domain', async () => {
-    const ctx = { get: () => undefined, effect: () => () => {} } as unknown as Context
-    expect(await openModelCatalog(ctx)).toBeUndefined()
+  it('reads only the stored catalog when offline', async () => {
+    const storage = fakeStorageDomain({ 'grok-4.6': { displayName: 'Grok 4.6' } })
+    const { fetchFn, calls } = scriptedFetch([{ status: 200, body: BODY }])
+    const catalog = boot({ storage, fetchFn, offline: true })
+    await catalog.ready()
+    await catalog.refresh()
+
+    expect(calls()).toBe(0)
+    expect(catalog.status()).toMatchObject({ entries: 1, source: 'storage' })
+  })
+
+  it('falls back to the network, and says why the storage domain was not used', async () => {
+    const { fetchFn } = scriptedFetch([{ status: 200, body: BODY, etag: 'W/"v1"' }])
+    const catalog = boot({ fetchFn })
+    await catalog.ready()
+
+    expect(catalog.status()).toMatchObject({
+      entries: 2,
+      source: 'models.dev',
+      storageError: 'no storage domain is mounted in this composition',
+    })
+    expect(catalog.factsOf('grok-4.6')).toMatchObject({ contextWindow: 500_000 })
+    expect(catalog.inputModalitiesOf('grok-4.6')).toEqual(['text', 'image'])
+  })
+
+  it('reports a storage domain that will not open instead of quietly using the network', async () => {
+    const { fetchFn } = scriptedFetch([{ status: 200, body: BODY }])
+    const ctx = new Context()
+    contexts.push(ctx)
+    ctx.provide('storageDomain', { open: () => Promise.reject(new Error('no kv backend for this domain')) })
+    const catalog = provideModelCatalog(ctx, { fetchFn })
+    await catalog.ready()
+
+    expect(catalog.status()).toMatchObject({
+      entries: 2,
+      source: 'models.dev',
+      storageError: 'no kv backend for this domain',
+    })
+  })
+
+  it('builds the envelope once per snapshot', async () => {
+    const storage = fakeStorageDomain({ 'grok-4.6': { displayName: 'Grok 4.6' } }, { etag: 'W/"v1"' })
+    const { fetchFn } = scriptedFetch([{ status: 304 }])
+    const catalog = boot({ storage, fetchFn })
+    await catalog.ready()
+
+    const first = catalog.envelope()
+    expect(catalog.envelope()).toBe(first)
+    expect(first.facts['grok-4.6']).toMatchObject({ name: 'Grok 4.6' })
+    await catalog.refresh()
+    expect(catalog.envelope()).toBe(first)
+  })
+
+  it('registers itself under the catalog service name and refuses a second one', () => {
+    const ctx = new Context()
+    contexts.push(ctx)
+    const first = provideModelCatalog(ctx)
+    expect(ctx.get(CATALOG_SERVICE)).toBe(first)
+    expect(() => provideModelCatalog(ctx)).toThrow(/modelsDevCatalog/)
   })
 })
 
@@ -188,9 +236,6 @@ describe('the catalog domain declaration', () => {
   it('reads a row that recorded an unknown capacity as zero', () => {
     // models.dev says "unknown" as 0, and earlier parser versions stored that
     // verbatim: 163 rows on disk in a real deployment say `contextWindow: 0`.
-    // With the catalog in one record, rejecting such a value would cost the
-    // whole catalog, which the plugin then reports as "no local catalog" and
-    // works around by re-fetching every model over the network.
     const row = modelCatalogDomainSpec.tables.catalog.valueSchema.parse({
       entries: {
         'active-speaker-detection': { displayName: 'Active Speaker Detection', outputModalities: ['text'], contextWindow: 0, maxTokens: 4096 },

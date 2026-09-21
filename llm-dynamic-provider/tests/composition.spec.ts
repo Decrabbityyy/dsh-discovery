@@ -10,6 +10,7 @@ import { Context } from '@deepseek-ai/cordis'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
 import { SettingsProvider } from '@deepseek-ai/dsh-settings'
 import { DYNAMIC_PROBE_PATH } from 'dsh-llm-discovery/engine'
+import { CATALOG_SERVICE } from 'dsh-llm-discovery/vocabulary'
 import * as dynamicProvider from '../src/index.ts'
 import { startProbeServer } from './server.ts'
 import type { ProbeServer } from './server.ts'
@@ -54,11 +55,24 @@ const LISTING = {
   ],
 }
 
-/** Mount the llm seam, the settings seam, plus the dynamic provider over one config. */
+/** 目录替身：这个组合里没有 models.dev 数据，只有服务本身。 */
+function catalogService(): Record<string, unknown> {
+  return {
+    factsOf: () => undefined,
+    inputModalitiesOf: () => undefined,
+    envelope: () => ({ catalog: {}, modalities: {}, facts: {} }),
+    status: () => ({ entries: 0, refreshedAt: null, source: 'storage' }),
+    refresh: () => Promise.resolve({ entries: 0, refreshedAt: null, source: 'storage' }),
+    ready: () => Promise.resolve(),
+  }
+}
+
+/** Mount the llm seam, the settings seam, a catalog service, plus the dynamic provider. */
 async function boot(config?: dynamicProvider.Config): Promise<Context> {
   ctx = new Context()
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(MemorySettings)
+  ctx.provide(CATALOG_SERVICE, catalogService())
   await ctx.plugin(dynamicProvider, config)
   return ctx
 }
@@ -116,6 +130,7 @@ describe('plugin composition', () => {
     const fresh = new Context()
     await fresh.plugin(LlmRuntime)
     await fresh.plugin(MemorySettings)
+    fresh.provide(CATALOG_SERVICE, catalogService())
     const fiber = await fresh.plugin(dynamicProvider, {
       routes: { upstream: { baseURL: 'http://127.0.0.1:1', api: 'openai-completions' } },
     })
@@ -139,6 +154,7 @@ describe('plugin composition', () => {
     await fresh.plugin(LlmRuntime)
     await fresh.plugin(MemorySettings)
     fresh.provide('webServer', webServer)
+    fresh.provide(CATALOG_SERVICE, catalogService())
 
     const first = await fresh.plugin(dynamicProvider)
     expect(live.has('/llm-dynamic-provider/routes')).toBe(true)

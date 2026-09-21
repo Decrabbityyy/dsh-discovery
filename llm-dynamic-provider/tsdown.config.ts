@@ -8,7 +8,7 @@ export default defineConfig({
   format: ['esm'],
   deps: {
     neverBundle: [/^@deepseek-ai\//, /^@earendil-works\//],
-    alwaysBundle: ['dsh-llm-discovery/engine', 'dsh-llm-discovery/vocabulary', 'dsh-llm-discovery/catalog/service'],
+    alwaysBundle: ['dsh-llm-discovery/engine', 'dsh-llm-discovery/vocabulary'],
   },
   dts: false,
   clean: false,

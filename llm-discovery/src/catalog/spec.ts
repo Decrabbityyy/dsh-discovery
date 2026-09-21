@@ -6,52 +6,34 @@ const modelRowSchema = z.object({
   levels: z.array(z.string()).optional(),
   inputModalities: z.array(z.string()).optional(),
   outputModalities: z.array(z.string()).optional(),
-  // `.catch(undefined)` carries rows whose capacity models.dev never stated:
-  // it says "unknown" as 0, and an earlier version of the parser stored that 0
-  // verbatim. Rejecting such a value would fail the record — and with the whole
-  // catalog in one record, one bad field would cost the entire catalog, which
-  // the plugin reads as "no local catalog" and works around by re-fetching every
-  // model over the network. Anything that is not a positive integer therefore
-  // reads back as unstated.
+  // models.dev 用 0 表示「不知道」，早期解析器把这个 0 存了进来：读回「未声明」，而不是让整条记录读不过去。
   contextWindow: z.number().int().positive().optional().catch(undefined),
   maxTokens: z.number().int().positive().optional().catch(undefined),
 })
 
-/** One model's facts as stored, keyed by the id models.dev records. */
 export type ModelRow = z.infer<typeof modelRowSchema>
 
-/**
- * The whole catalog as one record. models.dev hands over a complete snapshot per
- * fetch, and the json backend's `single` layout republishes the entire unit on
- * every write: a row-per-model table would therefore cost one whole-file write
- * per model (measured at ~46 ms each, i.e. seven minutes for a full refresh, and
- * the unit only grows). Kept as one record, a refresh is one write whatever the
- * catalog's size.
- */
-const catalogRowSchema = z.object({
-  /** Catalog key → the facts stored under it, exactly as parsed. */
-  entries: z.record(z.string(), modelRowSchema),
-})
+/** 整份目录存成一条记录：json 后端的 single 布局每次写入都重发整个单元，逐模型存行会让一次刷新变成上万次整文件重写。 */
+const catalogRowSchema = z.object({ entries: z.record(z.string(), modelRowSchema) })
 
 export type CatalogRow = z.infer<typeof catalogRowSchema>
 
-/** The fetch validators that make the refresh incremental. */
+/** 让刷新增量化的两个值。 */
 const catalogMetaSchema = z.object({
-  /** The ETag models.dev last answered with, sent back as If-None-Match. */
   etag: z.string().optional(),
-  /** Fetch timestamp (ms) of the last successful refresh. */
   fetchedAt: z.number().int().nonnegative().optional(),
 })
 
 export type CatalogMeta = z.infer<typeof catalogMetaSchema>
 
-/** Version 0: no compatibility promise before the first tagged release. */
+/**
+ * version 0：首个带标签的版本之前不做兼容承诺。
+ * single 布局是精确版本比对，将来改表结构只能改 version 并删文件重抓。
+ */
 export const modelCatalogDomainSpec = defineDomain({
-  name: 'llm_dynamic_provider_models',
+  name: 'llm_models_dev_catalog',
   version: 0,
-  // Insurance for drift this schema cannot foresee, on backends that can move a
-  // record aside (per-record and SQLite do; the json `single` layout has no
-  // backup, so there the domain still refuses rather than guessing).
+  // 读不过去的记录能在 per-record 与 SQLite 后端挪走；single 布局没有备份，仍会拒绝。
   invalidRecords: 'backup-and-skip',
   tables: {
     catalog: domainTable<string, CatalogRow>(catalogRowSchema),

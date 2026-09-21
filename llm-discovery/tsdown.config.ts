@@ -8,7 +8,6 @@ export default defineConfig({
     'src/engine.ts',
     'src/vocabulary.ts',
     'src/catalog/models-dev.ts',
-    'src/catalog/service.ts',
     'src/invariant.ts',
   ],
   outDir: 'lib',

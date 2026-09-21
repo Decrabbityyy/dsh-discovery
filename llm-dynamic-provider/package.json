@@ -58,12 +58,10 @@
     "@deepseek-ai/dsh-llm": "^0.1.5-rc.2",
     "@deepseek-ai/dsh-llm-pi-ai": "^0.1.5-rc.2",
     "@deepseek-ai/dsh-settings": "^0.1.5-rc.2",
-    "@deepseek-ai/dsh-storage-domain": "^0.1.5-rc.2",
     "@deepseek-ai/schemastery": "^3.18.2",
     "@earendil-works/pi-ai": "^0.85.1",
     "dsh-llm-discovery": "workspace:*",
-    "tsdown": "^0.22.2",
-    "zod": "^4.4.3"
+    "tsdown": "^0.22.2"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",
@@ -72,10 +70,8 @@
     "@deepseek-ai/dsh-llm": "^0.1.5-rc.1",
     "@deepseek-ai/dsh-llm-pi-ai": "^0.1.5-rc.1",
     "@deepseek-ai/dsh-settings": "^0.1.5-rc.1",
-    "@deepseek-ai/dsh-storage-domain": "^0.1.5-rc.1",
     "@deepseek-ai/schemastery": "^3.18.2",
-    "@earendil-works/pi-ai": "^0.85.1",
-    "zod": "^4.4.3"
+    "@earendil-works/pi-ai": "^0.85.1"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis": {
@@ -96,9 +92,7 @@
     "@deepseek-ai/dsh-settings": {
       "optional": true
     },
-    "@deepseek-ai/dsh-storage-domain": {
-      "optional": true
-    },
+
     "@deepseek-ai/schemastery": {
       "optional": true
     }

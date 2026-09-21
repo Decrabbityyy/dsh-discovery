@@ -41,10 +41,7 @@
       "types": "./lib/types/catalog/models-dev.d.ts",
       "default": "./lib/catalog/models-dev.js"
     },
-    "./catalog/service": {
-      "types": "./lib/types/catalog/service.d.ts",
-      "default": "./lib/catalog/service.js"
-    },
+
     "./invariant": {
       "types": "./lib/types/invariant.d.ts",
       "default": "./lib/invariant.js"

@@ -1,6 +1,8 @@
 import { normalizeModelName } from '../vocabulary.ts'
+import type { ModelModality, ModelModalities } from '../vocabulary.ts'
 
 export { normalizeModelName }
+export type { ModelModality, ModelModalities } from '../vocabulary.ts'
 
 export const MODELS_DEV_URL = 'https://models.dev/api.json'
 
@@ -33,13 +35,6 @@ export interface ModelFacts {
 }
 
 /** models.dev also lists pdf/audio/video, which the pi-ai wire cannot carry. */
-export type ModelModality = 'text' | 'image'
-
-export interface ModelModalities {
-  readonly input: readonly ModelModality[]
-  readonly output: readonly ModelModality[]
-}
-
 function keepSupported(values: readonly string[] | undefined): ModelModality[] {
   return (values ?? []).filter((value): value is ModelModality => value === 'text' || value === 'image')
 }
