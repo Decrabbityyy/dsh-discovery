@@ -15,8 +15,8 @@ import type { ReactNode } from 'react'
 import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-api-remotes/client'
 import clsx from 'clsx'
 import { catalogIndexOf, catalogSearchSeed, matchCatalogEntry } from './discovery.ts'
-import type { CatalogEntry, CatalogMatch } from './discovery.ts'
-import styles from './DiscoveryStyles.module.css'
+import type { CatalogEntry, CatalogIndex, CatalogMatch } from './discovery.ts'
+import styles from './styles.module.css'
 
 /** The facts column sources, keyed by bare model name. */
 export interface ModelTableFacts {
@@ -67,6 +67,8 @@ export interface ModelResultsTableProps {
   readonly sources: Readonly<Record<string, readonly string[]>>
   /** Catalog key the user pinned per model id, overriding candidate resolution. */
   readonly bindings: Readonly<Record<string, string>>
+  /** 调用方共用的目录索引；不传就按上面几张表自己建一份。 */
+  readonly index?: CatalogIndex
   /** Pin one row to a catalog key, or unpin it with `undefined`. */
   readonly onBind: (id: string, key: string | undefined) => void
   /** Bumped by the caller on every fresh probe; a new value clears the filter. */
@@ -141,10 +143,11 @@ export function ModelResultsTable(props: ModelResultsTableProps): ReactNode {
   const [pickerFor, setPickerFor] = useState<string | undefined>(undefined)
   const [pickerQuery, setPickerQuery] = useState('')
 
-  const index = useMemo(
+  const ownIndex = useMemo(
     () => catalogIndexOf({ catalog, modalities, facts, sources }),
     [catalog, modalities, facts, sources],
   )
+  const index = props.index ?? ownIndex
   // One lookup per row per change, so the row body, the picker, and the write
   // path in the caller all read the same entry.
   const matches = useMemo(() => {

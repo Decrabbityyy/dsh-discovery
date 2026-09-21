@@ -1,14 +1,15 @@
 import type { LlmDiscoveredModel, LlmModelDiscoveryRequest, RpcResponse } from '@deepseek-ai/dsh-api-remotes/client'
 import {
   catalogKeyCandidates, catalogKeyIndexOf, CREDENTIAL_REF_PATTERN, DISCOVERY_NS, DYNAMIC_NS, DYNAMIC_PROBE_PATH,
-  mergeCatalogEnvelopes, PI_AI_NS, ROUTE_PATTERN, resolveCatalogKey, UI_CATALOG_PATH, deriveKeyRef, messageOf,
+  mergeCatalogEnvelopes, PI_AI_NS, ROUTE_PATTERN, resolveCatalogKey, UI_CATALOG_PATH, UI_CATALOG_STATUS_PATH,
+  deriveKeyRef, messageOf,
 } from 'dsh-llm-discovery/vocabulary'
 import type { CatalogEnvelope, CatalogKeyIndex } from 'dsh-llm-discovery/vocabulary'
 import { reasoningEffortsOf } from './presets.ts'
 
 export {
   catalogKeyCandidates, CREDENTIAL_REF_PATTERN, DISCOVERY_NS, DYNAMIC_NS, DYNAMIC_PROBE_PATH, mergeCatalogEnvelopes,
-  PI_AI_NS, ROUTE_PATTERN, UI_CATALOG_PATH, deriveKeyRef, messageOf,
+  PI_AI_NS, ROUTE_PATTERN, UI_CATALOG_PATH, UI_CATALOG_STATUS_PATH, deriveKeyRef, messageOf,
 }
 export type { CatalogEnvelope }
 
@@ -296,18 +297,20 @@ export interface RouteProbe {
   readonly error?: string
 }
 
-/** 动态路由插件报的状态：声明路由数与 models.dev 目录状态。 */
+/** 动态路由插件报的状态：声明路由数与逐条探测结果。 */
 export interface RouteStatus {
   readonly routes: number
-  readonly modelsDev: {
-    readonly entries: number
-    readonly refreshedAt: number | null
-    readonly source?: 'storage' | 'models.dev'
-    readonly storageError?: string
-    readonly error?: string
-  }
   /** Present only in the answer to a refresh. */
   readonly probes?: readonly RouteProbe[]
+}
+
+/** 目录状态，跟宿主半边报的 `CatalogStatus` 同形。 */
+export interface CatalogStatus {
+  readonly entries: number
+  readonly refreshedAt: number | null
+  readonly source?: 'storage' | 'models.dev'
+  readonly storageError?: string
+  readonly error?: string
 }
 
 /**

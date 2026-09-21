@@ -7,6 +7,7 @@ import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-api-remotes/client'
 import { UI_CATALOG_PATH } from '../src/client/discovery.ts'
 import type { DiscoveryApi, DiscoveryResponse } from '../src/client/discovery.ts'
 import { DiscoverySection } from '../src/client/DiscoverySection.tsx'
+import { resetCatalogCache } from '../src/client/catalogStore.ts'
 import { CUSTOM_PRESET } from '../src/client/presets.ts'
 
 afterEach(cleanup)
@@ -38,6 +39,7 @@ afterEach(() => {
 // Every case starts with an empty catalog so no spec depends on the ambient
 // jsdom network state; a spec that needs tables stubs its own.
 beforeEach(() => {
+  resetCatalogCache()
   stubCatalog({})
 })
 

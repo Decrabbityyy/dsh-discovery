@@ -1,41 +1,48 @@
 /**
- * The settings section's own catalog endpoint. Its browser half is the only
- * consumer and the per-model `input` modalities it adopts come from here, so
- * the route must answer the models.dev snapshot while the plugin is loaded and
- * leave with its fiber.
+ * 设置页的宿主半边：把共享目录服务的 envelope 与状态转给浏览器半边，并随插件卸载撤销。
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { UI_CATALOG_PATH } from 'dsh-llm-discovery/vocabulary'
+import { CATALOG_SERVICE, UI_CATALOG_PATH, UI_CATALOG_STATUS_PATH } from 'dsh-llm-discovery/vocabulary'
 import { apply } from '../src/index.ts'
 
-/** One models.dev body carrying a vision model and a text-only one. */
-const MODELS_DEV_BODY = {
-  xai: {
-    models: {
-      'grok-4.6': {
-        name: 'Grok 4.6',
-        reasoning: true,
-        reasoning_options: [{ type: 'effort', values: ['low', 'high'] }],
-        modalities: { input: ['text', 'image'], output: ['text'] },
-        limit: { context: 500_000, output: 500_000 },
+/** 目录服务的替身：只有宿主半边真正读的那几个成员。 */
+const ENVELOPE = {
+  catalog: { 'grok-4.6': ['low', 'high'] },
+  modalities: { 'grok-4.6': { input: ['text', 'image'], output: ['text'] } },
+  facts: { 'grok-4.6': { name: 'Grok 4.6', contextWindow: 500_000, maxTokens: 500_000 } },
+  sources: { 'grok-4.6': ['xai'] },
+}
+
+function fakeCatalog(): { service: Record<string, unknown>; refreshes: () => number } {
+  let refreshes = 0
+  const status = { entries: 2, refreshedAt: 1_789_900_000_000, source: 'storage' as const }
+  return {
+    refreshes: () => refreshes,
+    service: {
+      factsOf: () => undefined,
+      inputModalitiesOf: () => undefined,
+      envelope: () => ENVELOPE,
+      status: () => status,
+      refresh: () => {
+        refreshes += 1
+        return Promise.resolve(status)
       },
-      'chat-only': { name: 'Chat Only', modalities: { input: ['text'], output: ['text'] } },
+      ready: () => Promise.resolve(),
     },
-  },
+  }
+}
+
+interface ResponseStub {
+  statusCode: number
+  setHeader(name: string, value: string): void
+  end(body: string): void
 }
 
 interface CatalogRoute {
   readonly path: string
   readonly handler: (req: unknown, res: ResponseStub) => unknown
-}
-
-/** The web server face: a path registry mirroring duplicate rejection and disposal. */
-interface ResponseStub {
-  statusCode: number
-  setHeader(name: string, value: string): void
-  end(body: string): void
 }
 
 /** A path registry mirroring the real webServer: duplicate paths throw, the disposer frees the path. */
@@ -49,101 +56,80 @@ function fakeWebServer(routes: Map<string, CatalogRoute>): { register(route: Cat
   }
 }
 
-/** Invoke one registered route and parse the JSON body it answers with. */
-function answer(route: CatalogRoute): unknown {
+/** Invoke one registered route and parse the answer it wrote. */
+async function answer(route: CatalogRoute, method = 'GET'): Promise<{ status: number; body: unknown }> {
   let body = ''
-  route.handler(undefined, {
+  const res: ResponseStub = {
     statusCode: 200,
     setHeader: () => {},
     end: (value: string) => { body = value },
-  })
-  return JSON.parse(body)
+  }
+  await route.handler({ method }, res)
+  return { status: res.statusCode, body: body.length === 0 ? undefined : JSON.parse(body) }
 }
 
-/** Stub the mount-time models.dev fetch with one bodied or failing reply. */
-function stubModelsDev(reply: { body?: unknown } | 'reject'): ReturnType<typeof vi.fn> {
-  const fetchMock = vi.fn(() => (reply === 'reject'
-    ? Promise.reject(new Error('offline'))
-    : Promise.resolve({ ok: true, json: () => Promise.resolve(reply.body) })))
-  vi.stubGlobal('fetch', fetchMock)
-  return fetchMock
+async function mount(routes: Map<string, CatalogRoute>, catalog: Record<string, unknown>): Promise<Context> {
+  const ctx = new Context()
+  ctx.provide('webServer', fakeWebServer(routes))
+  ctx.provide(CATALOG_SERVICE, catalog)
+  await ctx.plugin(apply)
+  return ctx
 }
 
 afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('section catalog endpoint', () => {
-  it('answers the models.dev levels, modalities, and capacities of the mount-time snapshot', async () => {
-    const fetchMock = stubModelsDev({ body: MODELS_DEV_BODY })
+describe('section catalog endpoints', () => {
+  it('answers the shared envelope on the catalog path', async () => {
     const routes = new Map<string, CatalogRoute>()
-    const ctx = new Context()
-    ctx.provide('webServer', fakeWebServer(routes))
-    await ctx.plugin(apply)
-    const route = routes.get(UI_CATALOG_PATH)
-    expect(route).toBeDefined()
-    expect(fetchMock).toHaveBeenCalledWith('https://models.dev/api.json', expect.anything())
-    // The envelope fills once the mount-time fetch resolves; until then it is empty.
-    await vi.waitFor(() => {
-      expect(answer(route!)).toMatchObject({
-        catalog: { 'grok-4.6': ['low', 'high'] },
-        modalities: {
-          'grok-4.6': { input: ['text', 'image'], output: ['text'] },
-          'chat-only': { input: ['text'], output: ['text'] },
-        },
-      })
-    })
-    expect(answer(route!)).toEqual({
-      catalog: { 'grok-4.6': ['low', 'high'] },
-      modalities: {
-        'grok-4.6': { input: ['text', 'image'], output: ['text'] },
-        'chat-only': { input: ['text'], output: ['text'] },
-      },
-      facts: {
-        'grok-4.6': { name: 'Grok 4.6', contextWindow: 500_000, maxTokens: 500_000 },
-        'chat-only': { name: 'Chat Only' },
-      },
-      sources: { 'grok-4.6': ['xai'], 'chat-only': ['xai'] },
-    })
+    const ctx = await mount(routes, fakeCatalog().service)
+    await expect(answer(routes.get(UI_CATALOG_PATH)!)).resolves.toEqual({ status: 200, body: ENVELOPE })
     await ctx.fiber.dispose()
   })
 
-  it('withdraws the route with its fiber and re-registers on the next mount', async () => {
-    stubModelsDev({ body: MODELS_DEV_BODY })
+  it('answers the status on the status path and refreshes on POST', async () => {
+    const routes = new Map<string, CatalogRoute>()
+    const fake = fakeCatalog()
+    const ctx = await mount(routes, fake.service)
+    const route = routes.get(UI_CATALOG_STATUS_PATH)!
+
+    await expect(answer(route)).resolves.toEqual({
+      status: 200,
+      body: { entries: 2, refreshedAt: 1_789_900_000_000, source: 'storage' },
+    })
+    expect(fake.refreshes()).toBe(0)
+    await answer(route, 'POST')
+    expect(fake.refreshes()).toBe(1)
+    await expect(answer(route, 'DELETE')).resolves.toEqual({ status: 405, body: { error: 'method not allowed' } })
+    await ctx.fiber.dispose()
+  })
+
+  it('withdraws its routes with the fiber and re-registers on the next mount', async () => {
     const routes = new Map<string, CatalogRoute>()
     const ctx = new Context()
     ctx.provide('webServer', fakeWebServer(routes))
+    ctx.provide(CATALOG_SERVICE, fakeCatalog().service)
     const first = await ctx.plugin(apply)
-    expect(routes.has(UI_CATALOG_PATH)).toBe(true)
+    expect(routes.size).toBe(2)
     await first.dispose()
     expect(routes.size).toBe(0)
-    // A reload finds the path free rather than rejected as a duplicate.
+    // A reload finds the paths free rather than rejected as duplicates.
     const second = await ctx.plugin(apply)
-    expect(routes.has(UI_CATALOG_PATH)).toBe(true)
+    expect(routes.size).toBe(2)
     await second.dispose()
     await ctx.fiber.dispose()
   })
 
   it('waits for a web server that mounts after the plugin', async () => {
-    stubModelsDev({ body: MODELS_DEV_BODY })
     const routes = new Map<string, CatalogRoute>()
     const ctx = new Context()
+    ctx.provide(CATALOG_SERVICE, fakeCatalog().service)
     const fiber = await ctx.plugin(apply)
-    expect(routes.has(UI_CATALOG_PATH)).toBe(false)
+    expect(routes.size).toBe(0)
     ctx.provide('webServer', fakeWebServer(routes))
-    await vi.waitFor(() => { expect(routes.has(UI_CATALOG_PATH)).toBe(true) })
+    await vi.waitFor(() => { expect(routes.size).toBe(2) })
     await fiber.dispose()
-    await ctx.fiber.dispose()
-  })
-
-  it('answers an empty index instead of failing the mount when models.dev is unreachable', async () => {
-    stubModelsDev('reject')
-    const routes = new Map<string, CatalogRoute>()
-    const ctx = new Context()
-    ctx.provide('webServer', fakeWebServer(routes))
-    await ctx.plugin(apply)
-    await vi.waitFor(() => { expect(routes.has(UI_CATALOG_PATH)).toBe(true) })
-    expect(answer(routes.get(UI_CATALOG_PATH)!)).toEqual({ catalog: {}, modalities: {}, facts: {} })
     await ctx.fiber.dispose()
   })
 })

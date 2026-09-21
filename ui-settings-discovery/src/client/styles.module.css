@@ -497,13 +497,6 @@
   color: var(--dsw-alias-label-primary);
 }
 
-.cacheIntro {
-  margin: 0;
-  font-size: 13px;
-  line-height: 20px;
-  color: var(--dsw-alias-label-tertiary);
-}
-
 /* Label over value, one pair per line: the facts are longer than a 76px label. */
 .cacheFacts {
   display: flex;

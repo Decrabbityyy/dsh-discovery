@@ -10,7 +10,7 @@ import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import { CREDENTIAL_REF_PATTERN, deriveKeyRef, messageOf, ROUTE_PATTERN } from './discovery.ts'
 import type { DiscoveryApi, DynamicRoute } from './discovery.ts'
-import styles from './DiscoveryStyles.module.css'
+import styles from './styles.module.css'
 
 const DYNAMIC_PROTOCOLS = ['openai-completions', 'openai-responses', 'anthropic-messages', 'google-generative-ai'] as const
 

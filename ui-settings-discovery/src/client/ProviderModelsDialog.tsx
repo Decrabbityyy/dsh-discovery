@@ -14,18 +14,17 @@
  * the same settings path.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-api-remotes/client'
 import type { ProviderDirectoryEntry } from '@deepseek-ai/dsh-client-ui-settings-models/client'
 import {
-  catalogIndexOf, matchCatalogEntry, mergeCatalogEnvelopes, messageOf, modelDeclaration, PI_AI_NS, providerProfileOf,
-  UI_CATALOG_PATH,
+  matchCatalogEntry, messageOf, modelDeclaration, PI_AI_NS, providerProfileOf,
 } from './discovery.ts'
+import { useCatalog } from './catalogStore.ts'
 import type { DiscoveryApi, ProfileModel, ProviderProfileDraft } from './discovery.ts'
 import { ModelResultsTable } from './ModelResultsTable.tsx'
-import type { ModelTableFacts, ModelTableModalities } from './ModelResultsTable.tsx'
-import styles from './DiscoveryStyles.module.css'
+import styles from './styles.module.css'
 import dialogStyles from './ProviderModelsDialog.module.css'
 
 /** Injected dependencies of the provider-card extension (slot `inject`). */
@@ -147,11 +146,9 @@ function ProviderModelsDialog({ api, provider, onClose }: ProviderModelsDialogPr
   const [rows, setRows] = useState<readonly ProfileModel[]>([])
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set())
   const [levels, setLevels] = useState<Readonly<Record<string, ReadonlySet<string>>>>({})
-  const [catalog, setCatalog] = useState<Readonly<Record<string, readonly string[]>>>({})
-  const [facts, setFacts] = useState<Readonly<Record<string, ModelTableFacts>>>({})
-  const [modalities, setModalities] = useState<Readonly<Record<string, ModelTableModalities>>>({})
-  // Which providers record each key: the picker labels an entry with them.
-  const [sources, setSources] = useState<Readonly<Record<string, readonly string[]>>>({})
+  // 目录与发现页共用同一份快照，只提供默认值。
+  const { tables, index } = useCatalog()
+  const { catalog, facts, modalities, sources = {} } = tables
   // Catalog keys the user pinned per row; the table and the write path read
   // them through the same lookup, so what a row shows is what it saves.
   const [bindings, setBindings] = useState<Readonly<Record<string, string>>>({})
@@ -163,22 +160,11 @@ function ProviderModelsDialog({ api, provider, onClose }: ProviderModelsDialogPr
   const [saved, setSaved] = useState(false)
   const panel = useRef<HTMLDivElement>(null)
 
-  // The stored profile and the catalog tables both land before the editor is
-  // usable; the catalog only supplies defaults, so a failed fetch is not fatal.
+  // The stored profile lands before the editor is usable.
   useEffect(() => {
     let cancelled = false
-    void Promise.all([
-      api.settings.describe(),
-      fetch(UI_CATALOG_PATH)
-        .then(response => response.json() as Promise<unknown>)
-        .catch(() => undefined),
-    ]).then(([described, body]) => {
+    void Promise.resolve().then(() => api.settings.describe()).then((described) => {
       if (cancelled) return
-      const envelope = mergeCatalogEnvelopes([body])
-      setCatalog(envelope.catalog)
-      setModalities(envelope.modalities)
-      setFacts(envelope.facts)
-      setSources(envelope.sources ?? {})
       if (!described.ok) {
         setLoadError(described.error.message)
         return
@@ -215,11 +201,6 @@ function ProviderModelsDialog({ api, provider, onClose }: ProviderModelsDialogPr
   const onKeyDown = (event: { key: string }): void => {
     if (event.key === 'Escape') close()
   }
-
-  const index = useMemo(
-    () => catalogIndexOf({ catalog, modalities, facts, sources }),
-    [catalog, modalities, facts, sources],
-  )
 
   /**
    * Pin one row to a catalog entry, seeding its thinking levels from that entry
@@ -417,6 +398,7 @@ function ProviderModelsDialog({ api, provider, onClose }: ProviderModelsDialogPr
                 modalities={modalities}
                 sources={sources}
                 bindings={bindings}
+                index={index}
                 onBind={bind}
                 resetToken={probeToken}
               />

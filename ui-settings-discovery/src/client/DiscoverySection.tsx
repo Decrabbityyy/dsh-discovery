@@ -10,20 +10,21 @@
  * `models` key at all, which serves the route's whole catalog.
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-api-remotes/client'
 import clsx from 'clsx'
 import {
-  catalogIndexOf, CREDENTIAL_REF_PATTERN, deriveKeyRef, DISCOVERY_NS, DISCOVERY_PLUGIN, DYNAMIC_PLUGIN, isActivePlugin,
-  matchCatalogEntry, mergeCatalogEnvelopes, messageOf, modelDeclaration, PI_AI_NS, ROUTE_PATTERN, UI_CATALOG_PATH,
+  CREDENTIAL_REF_PATTERN, deriveKeyRef, DISCOVERY_NS, DISCOVERY_PLUGIN, DYNAMIC_PLUGIN, isActivePlugin,
+  matchCatalogEntry, messageOf, modelDeclaration, PI_AI_NS, ROUTE_PATTERN,
 } from './discovery.ts'
+import { useCatalog } from './catalogStore.ts'
 import type { DiscoveryApi, DiscoveryResponse } from './discovery.ts'
 import { DynamicRoutes } from './DynamicRoutes.tsx'
 import { ModelResultsTable } from './ModelResultsTable.tsx'
 import { CUSTOM_PRESET, ENGINE_PRESETS, PROTOCOLS } from './presets.ts'
 import type { EnginePreset } from './presets.ts'
-import styles from './DiscoveryStyles.module.css'
+import styles from './styles.module.css'
 
 /** Injected dependencies of {@link DiscoverySection} (slot `inject`). */
 export interface DiscoverySectionInjected {
@@ -64,25 +65,12 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
   // carries no reasoningEfforts, which lets a catalog route inherit while a
   // hand-declared route stays non-reasoning.
   const [modelLevels, setModelLevels] = useState<Readonly<Record<string, ReadonlySet<string>>>>({})
-  // The three tables this section's own host half serves; empty while unfetched
-  // or when that endpoint answered nothing.
-  const [catalog, setCatalog] = useState<Readonly<Record<string, readonly string[]>>>({})
-  const [modalities, setModalities] = useState<Readonly<Record<string, { input?: readonly string[]; output?: readonly string[] }>>>({})
-  // The bare-name facts beside them. The host discovery seam enriches from the
-  // bundled pi-ai catalog only, so these fill in a model it has not catalogued
-  // yet, and the modalities decide what an adopted model may accept.
-  const [facts, setFacts] = useState<Readonly<Record<string, { name?: string; contextWindow?: number; maxTokens?: number }>>>({})
-  // Which providers record each key: the picker labels an entry with them.
-  const [sources, setSources] = useState<Readonly<Record<string, readonly string[]>>>({})
+  // 目录在页面会话内共用一份：两个消费者只抓一次、只建一份索引。
+  const { tables, index: catalogIndex } = useCatalog()
+  const { catalog, modalities, facts, sources = {} } = tables
   // Catalog keys the user pinned per row for ids the tables cannot resolve on
   // their own; the table and the adoption read them through the same lookup.
   const [bindings, setBindings] = useState<Readonly<Record<string, string>>>({})
-  // One index per catalog snapshot: every row lookup, the picker's list, and
-  // the write path share it.
-  const catalogIndex = useMemo(
-    () => catalogIndexOf({ catalog, modalities, facts, sources }),
-    [catalog, modalities, facts, sources],
-  )
   // Whether the route id names an installed-catalog pi-ai provider; such a
   // route inherits each known model's reasoning, so the picker disables itself.
   const [isCatalogRoute, setIsCatalogRoute] = useState(false)
@@ -112,28 +100,6 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
       cancelled = true
     }
   }, [api])
-
-  // The section's own host half serves the models.dev snapshot this page reads
-  // for thinking levels, modalities, and undisclosed capacities. One request on
-  // mount: a failed or malformed answer leaves the tables empty rather than
-  // blocking the page, and the pickers then offer no defaults.
-  useEffect(() => {
-    let cancelled = false
-    void fetch(UI_CATALOG_PATH)
-      .then(response => response.json() as Promise<unknown>)
-      .catch(() => undefined)
-      .then((body) => {
-        if (cancelled) return
-        const merged = mergeCatalogEnvelopes([body])
-        setCatalog(merged.catalog)
-        setModalities(merged.modalities)
-        setFacts(merged.facts)
-        setSources(merged.sources ?? {})
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   // Backfills defaults for models the probe initialized empty once the catalog
   // lands or a row is pinned; a model with any pick already keeps it.
@@ -497,6 +463,7 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
               modalities={modalities}
               sources={sources}
               bindings={bindings}
+              index={catalogIndex}
               onBind={bindModel}
               resetToken={probeToken}
             />

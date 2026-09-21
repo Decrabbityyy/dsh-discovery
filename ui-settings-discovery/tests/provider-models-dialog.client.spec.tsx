@@ -7,17 +7,23 @@
  */
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Mock } from 'vitest'
 import type { ReactNode } from 'react'
 import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-api-remotes/client'
 import type { ProviderDirectoryEntry } from '@deepseek-ai/dsh-client-ui-settings-models/client'
 import { ProviderModelsCard } from '../src/client/ProviderModelsDialog.tsx'
 import type { DiscoveryApi, DiscoveryResponse } from '../src/client/discovery.ts'
+import { resetCatalogCache } from '../src/client/catalogStore.ts'
 
 afterEach(cleanup)
 afterEach(() => {
   vi.unstubAllGlobals()
+})
+
+// The catalog is cached per page session; each case stubs its own fetch.
+beforeEach(() => {
+  resetCatalogCache()
 })
 
 /** The card's directory row: a hand-declared llm-pi-ai route with a profile. */
