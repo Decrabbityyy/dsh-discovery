@@ -1,4 +1,4 @@
-/** The 动态路由 block: manage the routes declared in the `llm-dynamic-provider` namespace. */
+/** 「动态路由」区域：管理 `llm-dynamic-provider` 命名空间里声明的路由。 */
 
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'

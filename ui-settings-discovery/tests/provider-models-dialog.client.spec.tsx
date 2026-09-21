@@ -103,7 +103,7 @@ async function openDialog(api: DiscoveryApi, configured = true): Promise<void> {
   await waitFor(() => { expect(screen.getByRole('button', { name: '保存' })).toBeDefined() })
 }
 
-/** A provider card in the shape the Models page builds it: the row head with its own buttons, the slot anchor around the extension cell, and — once 编辑 is */
+/** 按 Models 页实际结构搭的提供方卡片：行头带自己的按钮、扩展格外面套插槽锚点，点「编辑」后卡片里还会多一个密钥输入框。 */
 function HostCard({ editing, children }: { readonly editing: boolean; readonly children: ReactNode }): ReactNode {
   return (
     <ul>

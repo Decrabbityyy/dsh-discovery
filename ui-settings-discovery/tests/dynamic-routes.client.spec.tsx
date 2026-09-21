@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** The merged Models panel: the 动态路由 block renders only when the dynamic-provider host plugin is active in the Host Loader inventory, and */
+/** 模型页合并后的面板：「动态路由」区域只在动态插件于宿主 Loader 清单里 active 时渲染。 */
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -85,7 +85,7 @@ function faceWith(overrides: {
   return { api, describe, mutate, set }
 }
 
-/** The rendered 动态路由 block, scoped so its fields don't collide with the discovery block's. */
+/** 渲染出来的「动态路由」区域，查询范围限定在里面，免得和发现区的字段撞名。 */
 function dynamicBlock(): HTMLElement {
   return screen.getByLabelText('动态路由')
 }

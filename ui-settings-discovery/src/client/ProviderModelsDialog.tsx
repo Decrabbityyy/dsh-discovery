@@ -1,4 +1,4 @@
-/** The 模型与选项 entry on a provider card, and the dialog it opens. */
+/** 提供方卡片上的「模型与选项」入口，以及它打开的弹窗。 */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'

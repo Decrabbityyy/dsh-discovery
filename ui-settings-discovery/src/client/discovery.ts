@@ -241,7 +241,7 @@ export function providerProfileOf(namespaceValue: unknown, routeId: string): Pro
   }
 }
 
-/** One model entry to write back：手动指定的条目连名称与容量一起覆盖行上的值。 */
+/** 写回配置的一条模型：手动指定的条目连名称与容量一起覆盖行上的值。 */
 export function modelDeclaration(
   row: ProfileModel,
   levels: ReadonlySet<string>,

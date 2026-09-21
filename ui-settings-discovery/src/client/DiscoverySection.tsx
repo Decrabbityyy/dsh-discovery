@@ -1,4 +1,4 @@
-/** The 模型发现 settings section: probe a preset or custom endpoint through the host's `llm.discoverModels` offer and adopt a selection into a new pi-ai */
+/** 「模型发现」设置分区：用宿主的 `llm.discoverModels` offer 探测预设或自定义端点，把选中的模型采纳成一个新的 pi-ai 提供方。 */
 
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'

@@ -52,7 +52,7 @@ export interface ModelResultsTableProps {
   readonly levelsDisabled: boolean
   /** Bare-name facts filling what the endpoint left undisclosed. */
   readonly facts: Readonly<Record<string, ModelTableFacts>>
-  /** Bare-name modalities for the 模态 column. */
+  /** 模态列用的裸名模态表。 */
   readonly modalities: Readonly<Record<string, ModelTableModalities>>
   /** Which providers record each catalog key, for the picker's own label. */
   readonly sources: Readonly<Record<string, readonly string[]>>
@@ -66,7 +66,7 @@ export interface ModelResultsTableProps {
   readonly resetToken: number
 }
 
-/** A compact modality marker: 文 for text, 图 for image, joined. */
+/** 紧凑的模态标记：文＝文本、图＝图片，多个用 · 连接。 */
 export function modalityLabel(input: readonly string[] | undefined): string {
   if (input === undefined || input.length === 0) return '—'
   return input.map(value => (value === 'image' ? '图' : '文')).join('·')
@@ -109,7 +109,7 @@ function sourceTitle(entry: CatalogEntry): string | undefined {
   return entry.sources.length === 0 ? undefined : `收录它的 provider：${entry.sources.join('、')}`
 }
 
-/** The 名称 cell: the name it resolved plus the control that pins an entry. */
+/** 名称格：这一行解析到的名字，以及指定目录条目的那个按钮。 */
 function MatchCell(props: {
   readonly id: string
   readonly name: string | undefined
