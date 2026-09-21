@@ -1,9 +1,4 @@
-/**
- * Host loader entry for the browser implementation exported from `./client`.
- *
- * 目录由 `dsh-llm-discovery` 提供的 `modelsDevCatalog` 服务持有（本包依赖它），
- * 这里只把它的 envelope 与状态转给浏览器半边。
- */
+/** Host loader entry for the browser implementation exported from `./client`. */
 
 import type { Context } from '@deepseek-ai/cordis'
 import { CATALOG_SERVICE, UI_CATALOG_PATH, UI_CATALOG_STATUS_PATH } from 'dsh-llm-discovery/vocabulary'

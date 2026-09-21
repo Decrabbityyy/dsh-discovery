@@ -1,8 +1,4 @@
-/**
- * Browser-safe: this module must stay free of I/O and of Cordis imports. It
- * carries the shared vocabulary both halves need, including the catalog
- * envelope a Host plugin serves and a settings surface reads.
- */
+/** Browser-safe: this module must stay free of I/O and of Cordis imports. */
 
 /** Wire protocols an endpoint route may speak (the discovery dialects). */
 export const ROUTE_PROTOCOLS = [
@@ -23,18 +19,12 @@ export const PI_AI_NS = 'llm-pi-ai'
 /** The namespace dynamic-provider routes are declared in (webui-editable). */
 export const DYNAMIC_NS = 'llm-dynamic-provider'
 
-/**
- * The levels the pi-ai adapter accepts as `reasoningEfforts` keys. Each key is
- * its own wire spelling, except `off`, which writes `null`.
- */
+/** The levels the pi-ai adapter accepts as `reasoningEfforts` keys. */
 export const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
 
 export type ThinkingLevel = (typeof THINKING_LEVELS)[number]
 
-/**
- * Build one model entry's `reasoningEfforts` declaration from the picked
- * levels, or `undefined` when none are picked.
- */
+/** Build one model entry's `reasoningEfforts` declaration from the picked levels, or `undefined` when none are picked. */
 export function reasoningEffortsOf(levels: ReadonlySet<string>): Record<string, string | null> | undefined {
   if (levels.size === 0) return undefined
   const efforts: Record<string, string | null> = {}
@@ -42,30 +32,18 @@ export function reasoningEffortsOf(levels: ReadonlySet<string>): Record<string, 
   return efforts
 }
 
-/**
- * Derive the conventional credential reference for a provider route
- * (`local-ollama` → `LOCAL_OLLAMA_API_KEY`), using the same derivation the
- * Models page applies.
- */
+/** Derive the conventional credential reference for a provider route (`local-ollama` → `LOCAL_OLLAMA_API_KEY`), using the same derivation the */
 export function deriveKeyRef(provider: string): string {
   return `${provider.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_API_KEY`
 }
 
-/**
- * Normalize a model id to its bare lookup name, dropping every
- * `/`-separated provider prefix.
- */
+/** Normalize a model id to its bare lookup name, dropping every `/`-separated provider prefix. */
 export function normalizeModelName(id: string): string {
   const slash = id.lastIndexOf('/')
   return slash === -1 ? id : id.slice(slash + 1)
 }
 
-/**
- * The catalog names one advertised model id may carry, widest first: the id
- * itself, then the segment before its first `/`, then the one after its last.
- * An endpoint spends a slash on both a vendor prefix (`z-ai/glm-5.2`) and a
- * variant tag (`Gemini-3.7-Flash/Antigravity`), so both halves are offered.
- */
+/** The catalog names one advertised model id may carry, widest first: the id itself, then the segment before its first `/`, then the one after its last. */
 export function catalogKeyCandidates(modelId: string): readonly string[] {
   const slash = modelId.indexOf('/')
   const head = slash === -1 ? modelId : modelId.slice(0, slash)
@@ -81,10 +59,7 @@ export interface CatalogKeyIndex {
   keyOf(name: string): string | undefined
 }
 
-/**
- * Build the key view every catalog lookup shares. The first spelling of a name
- * wins, mirroring the parsers' own first-model-wins rule.
- */
+/** Build the key view every catalog lookup shares. */
 export function catalogKeyIndexOf(keys: Iterable<string>): CatalogKeyIndex {
   const listed = [...new Set(keys)]
   const byName = new Map<string, string>()
@@ -95,12 +70,7 @@ export function catalogKeyIndexOf(keys: Iterable<string>): CatalogKeyIndex {
   return { keys: listed, keyOf: name => byName.get(name.toLowerCase()) }
 }
 
-/**
- * The key one advertised model id resolves to, or undefined. The id itself
- * wins. Otherwise exactly one of its head/tail candidates has to be recorded:
- * a surface that writes the facts it resolves must not guess between two
- * models, because the `input` it writes is a claim about the endpoint.
- */
+/** The key one advertised model id resolves to, or undefined. */
 export function resolveCatalogKey(modelId: string, index: CatalogKeyIndex): string | undefined {
   const exact = index.keyOf(modelId)
   if (exact !== undefined) return exact
@@ -117,32 +87,22 @@ export function resolveCatalogKey(modelId: string, index: CatalogKeyIndex): stri
 /** Route ids accepted by the adopt flow (lowercase letters, digits, hyphens). */
 export const ROUTE_PATTERN = /^[a-z0-9-]+$/
 
-/**
- * The grammar a credential reference must satisfy: the host brands one as a
- * POSIX-style environment-variable name and `credentials.set` refuses anything
- * else as `gateway/bad-request`. A route id is free to start with a digit, so
- * `deriveKeyRef` can produce a reference this rejects — a surface that stores a
- * typed key has to check the derived reference before calling.
- */
+/** The grammar a credential reference must satisfy: the host brands one as a POSIX-style environment-variable name and `credentials.set` refuses anything */
 export const CREDENTIAL_REF_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
 
-/**
- * Human text for a rejected call. A rejection need not be an Error, so
- * anything else is stringified rather than dropped.
- */
+/** Human text for a rejected call. */
 export function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-/**
- * The exact-path HTTP route the discovery settings section's own host half
- * serves the models.dev index on. The only consumer is its browser half, so
- * the section owns the endpoint and it exists exactly while that page does.
- */
+/** The exact-path HTTP route the discovery settings section's own host half serves the models.dev index on. */
 export const UI_CATALOG_PATH = '/ui-settings-discovery/catalog'
 
 /** 动态路由插件自己的端点：GET 报状态，POST 重新探测所有声明路由。 */
 export const DYNAMIC_PROBE_PATH = '/llm-dynamic-provider/probe'
+
+/** 路由声明的读写端点：GET 报文，POST set/unset。 */
+export const DYNAMIC_ROUTES_PATH = '/llm-dynamic-provider/routes'
 
 /** 目录状态的浏览器面端点：GET 只回状态，POST 重新读取目录。 */
 export const UI_CATALOG_STATUS_PATH = '/ui-settings-discovery/catalog/status'
@@ -158,12 +118,7 @@ export interface ModelModalities {
   readonly output: readonly ModelModality[]
 }
 
-/**
- * One model's models.dev fact set as the catalog envelope carries it. The host
- * parsers' `ModelFacts` is structurally assignable to this, so a browser
- * surface can read an envelope without importing the host-side parser (which
- * pulls the bundled pi-ai catalog).
- */
+/** One model's models.dev fact set as the catalog envelope carries it. */
 export interface CatalogFact {
   readonly levels?: readonly string[]
   readonly inputModalities?: readonly string[]
@@ -175,14 +130,7 @@ export interface CatalogFact {
   readonly sources?: readonly string[]
 }
 
-/**
- * The models.dev index a Host plugin serves to a settings surface. Keys are the
- * ids models.dev records — `glm-5.2` under `zai-org`, `x-ai/grok-4.6` under
- * `openrouter` — plus, for every id carrying a `/`, its bare name, so an
- * endpoint that omits the vendor prefix still resolves. A model absent from
- * `modalities` is unknown rather than text-only, which is what keeps an
- * unlisted id from being frozen as text.
- */
+/** The models.dev index a Host plugin serves to a settings surface. */
 export interface CatalogEnvelope {
   /** Reasoning levels per model, for preselecting the thinking-level picker. */
   readonly catalog: Record<string, readonly string[]>
@@ -190,21 +138,11 @@ export interface CatalogEnvelope {
   readonly modalities: Record<string, { readonly input: readonly string[]; readonly output: readonly string[] }>
   /** Display name and capacities per model, for one the pi-ai catalog does not describe. */
   readonly facts: Record<string, { readonly name?: string; readonly contextWindow?: number; readonly maxTokens?: number }>
-  /**
-   * Which providers record each key, in file order. Several providers serve the
-   * same model under different ids and disagree about its capacities, so a
-   * surface that lets the user pick a key has to be able to say whose numbers
-   * those are. Absent until a parser records one, which keeps the envelope a
-   * surface merging an older body backward compatible.
-   */
+  /** Which providers record each key, in file order. */
   readonly sources?: Record<string, readonly string[]>
 }
 
-/**
- * Build the envelope both Host catalog endpoints answer with: a fact with no
- * levels, no modalities, and no capacities contributes no entry at all, and a
- * snapshot whose parser recorded no provider contributes no `sources` table.
- */
+/** Build the envelope both Host catalog endpoints answer with: a fact with no levels, no modalities, and no capacities contributes no entry at all, and a */
 export function catalogEnvelope(entries: Iterable<readonly [string, CatalogFact]>): CatalogEnvelope {
   const catalog: Record<string, readonly string[]> = {}
   const modalities: Record<string, { readonly input: readonly string[]; readonly output: readonly string[] }> = {}
@@ -241,19 +179,7 @@ function stringsOf(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((member): member is string => typeof member === 'string') : []
 }
 
-/**
- * Merge parsed catalog bodies into one envelope in source order: the first
- * body carrying a key keeps it, and later bodies only fill what is missing. A
- * malformed body or entry contributes nothing, so a surface merging a failed
- * endpoint with a live one still renders the live answer.
- */
-/**
- * Merge parsed catalog bodies into one envelope in source order: the first
- * body carrying a key keeps it, and later bodies only fill what is missing. A
- * malformed body or entry contributes nothing, so a surface merging a failed
- * endpoint with a live one still renders the live answer. A body that carries
- * no provider list at all leaves the merged envelope without one.
- */
+/** Merge parsed catalog bodies into one envelope in source order: the first body carrying a key keeps it, and later bodies only fill what is missing. */
 export function mergeCatalogEnvelopes(bodies: readonly unknown[]): CatalogEnvelope {
   const catalog: Record<string, readonly string[]> = {}
   const modalities: Record<string, { readonly input: readonly string[]; readonly output: readonly string[] }> = {}

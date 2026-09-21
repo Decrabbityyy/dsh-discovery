@@ -1,10 +1,5 @@
 // @vitest-environment jsdom
-/**
- * The merged Models panel: the 动态路由 block renders only when the
- * dynamic-provider host plugin is active in the Host Loader inventory, and
- * manages routes through the plugin's own `/llm-dynamic-provider/routes` HTTP
- * endpoint (not the gated settings RPC).
- */
+/** The merged Models panel: the 动态路由 block renders only when the dynamic-provider host plugin is active in the Host Loader inventory, and */
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'

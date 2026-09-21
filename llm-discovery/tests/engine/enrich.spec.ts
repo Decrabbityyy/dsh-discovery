@@ -1,7 +1,4 @@
-/**
- * Bundled-catalog enrichment semantics: exact-id fill, endpoint-wins, and
- * honest unknowns, plus the configuration resolve step's defaults.
- */
+/** Bundled-catalog enrichment semantics: exact-id fill, endpoint-wins, and honest unknowns, plus the configuration resolve step's defaults. */
 
 import { describe, expect, it } from 'vitest'
 import { resolveDiscoveryConfig } from '../../src/engine/config.ts'

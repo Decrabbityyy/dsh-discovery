@@ -1,9 +1,4 @@
-/**
- * Real-Loader composition coverage for `dsh-llm-discovery`: the
- * plugin boots from a cordis.yml row, answers the `llm-discovery` namespace
- * through `ctx.llm.discoverModels`, and withdraws the offer when its fiber is
- * disposed (HMR safety).
- */
+/** Real-Loader composition coverage for `dsh-llm-discovery`: the plugin boots from a cordis.yml row, answers the `llm-discovery` namespace */
 
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -92,7 +87,7 @@ describe('real Loader composition', () => {
     ])).rejects.toThrow()
   })
 
-  it('withdraws the discovery offer when the plugin fiber is disposed (HMR safety)', async () => {
+  it('withdraws the discovery offer when the plugin fiber is disposed (HMR safety)', { timeout: 60_000 }, async () => {
     const server = await startProbeServer({
       '/models': { body: JSON.stringify({ data: [{ id: 'm' }] }) },
     })

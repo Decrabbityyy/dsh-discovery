@@ -1,7 +1,4 @@
-/**
- * Orchestration behavior of the discovery namespace: draft validation, engine
- * gating, the error taxonomy of a failed ladder, and the enrichment switch.
- */
+/** Orchestration behavior of the discovery namespace: draft validation, engine gating, the error taxonomy of a failed ladder, and the enrichment switch. */
 
 import { describe, expect, it } from 'vitest'
 import { INVALID_CREDENTIAL_CODE, LlmError } from '@deepseek-ai/dsh-llm'

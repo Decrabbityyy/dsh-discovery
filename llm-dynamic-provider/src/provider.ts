@@ -25,13 +25,7 @@ const PROTOCOLS: Readonly<Record<string, () => ProviderStreams>> = {
 const DEFAULT_CONTEXT_WINDOW = 262_144
 const DEFAULT_MAX_TOKENS = 32_768
 
-/**
- * A profile this plugin assembled, with two invariants the harness contract
- * does not state: `piProvider` is always built here (a route that could not be
- * constructed never becomes a profile, it is reported as a probe failure), and
- * `modelErrors` is always empty (discovery drops a model before a route is
- * assembled). Readers rely on both and never re-check them.
- */
+/** A profile this plugin assembled, with two invariants the harness contract does not state: `piProvider` is always built here (a route that could not be */
 export interface DynamicProviderProfile extends ResolvedPiAiProviderProfile {
   readonly piProvider: Provider
   readonly modelErrors: ReadonlyMap<string, string>
@@ -48,10 +42,7 @@ export interface DiscoveryDeps {
   readonly signal: AbortSignal | undefined
 }
 
-/**
- * Resolve one route's probe credential: the credential seam first, the launch
- * environment as the fallback layer.
- */
+/** Resolve one route's probe credential: the credential seam first, the launch environment as the fallback layer. */
 async function resolveKey(ctx: Context, ref: string | undefined): Promise<string | undefined> {
   if (ref === undefined) return undefined
   const credentials = ctx.get('credentials')
@@ -61,13 +52,7 @@ async function resolveKey(ctx: Context, ref: string | undefined): Promise<string
   return hit !== undefined && hit.length > 0 ? assertUsableApiKey(hit, 'dsh-llm-dynamic-provider', ref) : undefined
 }
 
-/**
- * Translate one discovered model into a pi-ai `Model`. Endpoint-disclosed
- * capacities win; the bundled catalog fills the display name and, for
- * reasoning-capable ids, the thinking levels; the route's declared defaults
- * (then pi-ai's own) size whatever both leave undisclosed. Every model carries
- * the route's protocol, matching pi-ai's explicit `api` posture.
- */
+/** Translate one discovered model into a pi-ai `Model`. */
 export function toModel(routeName: string, route: RouteProfile, discovered: LlmDiscoveredModel, inputModalities?: readonly string[]): Model<Api> {
   const reasoningEfforts = catalogReasoningEfforts(discovered.id)
   return {
@@ -91,15 +76,7 @@ export function toModel(routeName: string, route: RouteProfile, discovered: LlmD
   } as Model<Api>
 }
 
-/**
- * Assemble one route's resolved profile from its probe answer. The assembly
- * materializes exactly the fields the adapter reads: `provider`, `displayName`,
- * `retryPolicy`, `streamIdleTimeoutMs`, `configuredMaxTokens`, `piProvider`,
- * plus the optional streaming knobs (`reasoning`, `headers`, `transport`,
- * `timeoutMs`, `websocketConnectTimeoutMs`, `thinkingBudgets`,
- * `cacheRetention`), and `modelErrors`, which the harness reads on every
- * prepared call (0.1.5-rc) and which is empty by construction here.
- */
+/** Assemble one route's resolved profile from its probe answer. */
 export function assembleProfile(routeName: string, route: RouteProfile, models: readonly Model<Api>[]): DynamicProviderProfile {
   const factory = PROTOCOLS[route.api]
   if (factory === undefined) {
@@ -125,15 +102,10 @@ export function assembleProfile(routeName: string, route: RouteProfile, models: 
     provider: routeName,
     displayName,
     ...(route.apiKeyEnv === undefined ? {} : { apiKeyEnv: credentialRef(route.apiKeyEnv) }),
-    // A credential-less route streams with the placeholder key (see the
-    // adapter's resolveApiKey), so the empty Authorization header erases the
-    // Bearer line the OpenAI SDK builds from it: keyless gateways refuse a
-    // malformed bearer outright. Only openai-completions takes this posture;
-    // the other dialects' SDKs would send the placeholder as a real credential.
+    // 无凭证路由用占位密钥推流，空的 Authorization 头把它从请求里抹掉。
     ...(route.apiKeyEnv === undefined && route.api === 'openai-completions' ? { headers: { authorization: '' } } : {}),
     streamIdleTimeoutMs: 300_000,
-    // Image-payload budgets mirror the llm-pi-ai defaults: 20 MiB base64
-    // payload, a 2048x2048 pixel budget, and a 1 MiB raw target.
+    // 图片预算对齐 llm-pi-ai 的默认值。
     maxRequestImageBytes: 20 * 1024 * 1024,
     requestImagePixelBudget: 2048 * 2048,
     requestImageMaxBytes: 1024 * 1024,
@@ -144,12 +116,7 @@ export function assembleProfile(routeName: string, route: RouteProfile, models: 
   }
 }
 
-/**
- * Run one discovery pass over the declared dynamic routes. Each route is
- * probed, enriched, and assembled independently; expected probe failures are
- * reported under `failed` rather than thrown, so one bad endpoint never blocks
- * the others.
- */
+/** Run one discovery pass over the declared dynamic routes. */
 export async function discoverDynamicProviders(
   ctx: Context,
   routes: Readonly<Record<string, RouteProfile>>,

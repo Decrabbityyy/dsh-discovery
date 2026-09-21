@@ -1,18 +1,4 @@
-/**
- * The 模型与选项 entry on a provider card, and the dialog it opens.
- *
- * The entry only shows while the Models page has that card open: the collapsed
- * row already carries 编辑 and 删除, and the page hands an extension cell no
- * editing flag, so the cell reads the card it was dropped into instead (see
- * {@link useProviderCardEditor}).
- *
- * The Models page's own editor is a schema form; this dialog reuses the
- * discovery flow the 模型发现 page already offers — probe the endpoint, pick
- * models, tick their thinking levels — against a provider that already exists.
- * The route id and its credential are therefore never re-entered: the dialog
- * reads the stored profile for its endpoint and protocol and writes back to
- * the same settings path.
- */
+/** The 模型与选项 entry on a provider card, and the dialog it opens. */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
@@ -32,11 +18,7 @@ export interface ProviderModelsCardInjected {
   api: DiscoveryApi
 }
 
-/**
- * Props of one provider-card occurrence: the Models page's owner share (the
- * card's directory row and whether a profile configures it) plus the injected
- * wire face.
- */
+/** Props of one provider-card occurrence: the Models page's owner share (the card's directory row and whether a profile configures it) plus the injected */
 export type ProviderModelsCardProps = Partial<ProviderModelsCardInjected> & {
   readonly provider?: ProviderDirectoryEntry
   readonly configured?: boolean
@@ -89,19 +71,7 @@ function ConfiguredProviderCard({ api, provider }: {
   )
 }
 
-/**
- * Whether the Models page has this card's editor on screen, read off the card
- * the entry was dropped into.
- *
- * The page renders the extension cell as a sibling of the row head and of the
- * editor it opens on 编辑, and passes the cell no editing flag. So the editor is
- * the sibling that carries a form control — the row head holds buttons only.
- * A cell mounted without the page's slot anchor (a bare render, or a host that
- * seats the cell inside the editor) counts as open: nothing there says the card
- * is closed, and a hidden entry could not be reached at all.
- *
- * @returns the marker the cell attaches inside itself, and whether the editor is up.
- */
+/** Whether the Models page has this card's editor on screen, read off the card the entry was dropped into. */
 function useProviderCardEditor(): {
   readonly attach: (node: HTMLSpanElement | null) => void
   readonly editorOpen: boolean
@@ -202,11 +172,7 @@ function ProviderModelsDialog({ api, provider, onClose }: ProviderModelsDialogPr
     if (event.key === 'Escape') close()
   }
 
-  /**
-   * Pin one row to a catalog entry, seeding its thinking levels from that entry
-   * when the profile declared none: the picks are the user's, so a row that
-   * already carries some keeps them.
-   */
+  /** Pin one row to a catalog entry, seeding its thinking levels from that entry when the profile declared none: the picks are the user's, so a row that */
   const bind = (id: string, key: string | undefined): void => {
     setBindings((current) => {
       const next = { ...current }

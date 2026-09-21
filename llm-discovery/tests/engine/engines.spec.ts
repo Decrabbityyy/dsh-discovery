@@ -1,8 +1,4 @@
-/**
- * Engine-ladder behavior of `dsh-llm-discovery` against a real
- * local HTTP fixture: per-engine parsing, skip/fail classification, ladder
- * order, timeouts, aborts, and reply bounds.
- */
+/** Engine-ladder behavior of `dsh-llm-discovery` against a real local HTTP fixture: per-engine parsing, skip/fail classification, ladder */
 
 import { createServer as createNetServer } from 'node:net'
 import type { AddressInfo } from 'node:net'

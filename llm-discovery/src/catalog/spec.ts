@@ -26,10 +26,7 @@ const catalogMetaSchema = z.object({
 
 export type CatalogMeta = z.infer<typeof catalogMetaSchema>
 
-/**
- * version 0：首个带标签的版本之前不做兼容承诺。
- * single 布局是精确版本比对，将来改表结构只能改 version 并删文件重抓。
- */
+/** version 0：首个带标签的版本之前不做兼容承诺。 */
 export const modelCatalogDomainSpec = defineDomain({
   name: 'llm_models_dev_catalog',
   version: 0,

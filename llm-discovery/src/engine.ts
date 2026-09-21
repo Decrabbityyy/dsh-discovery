@@ -9,7 +9,7 @@ export type { ReasoningEfforts } from './engine/catalog.ts'
 export { MODELS_DEV_URL, normalizeLevel, normalizeModelName, parseCatalog, parseModalities, parseModelFacts } from './catalog/models-dev.ts'
 export type { ModelFacts } from './catalog/models-dev.ts'
 export {
-  CATALOG_SERVICE, CREDENTIAL_REF_PATTERN, DISCOVERY_NS, DYNAMIC_NS, DYNAMIC_PROBE_PATH, PI_AI_NS, ROUTE_PATTERN,
+  CATALOG_SERVICE, CREDENTIAL_REF_PATTERN, DISCOVERY_NS, DYNAMIC_NS, DYNAMIC_PROBE_PATH, DYNAMIC_ROUTES_PATH, PI_AI_NS, ROUTE_PATTERN,
   ROUTE_PROTOCOLS, THINKING_LEVELS, UI_CATALOG_PATH, UI_CATALOG_STATUS_PATH, catalogEnvelope, catalogKeyCandidates,
   catalogKeyIndexOf, deriveKeyRef, mergeCatalogEnvelopes, messageOf, reasoningEffortsOf, resolveCatalogKey,
 } from './vocabulary.ts'

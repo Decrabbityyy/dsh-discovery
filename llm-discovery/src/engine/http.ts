@@ -29,12 +29,7 @@ export interface FetchJsonOptions {
   readonly signal: AbortSignal | undefined
 }
 
-/**
- * Read a reply body under a hard byte ceiling: refuse before transfer when a
- * declared content-length exceeds it, and cap accumulated bytes during the
- * read as well, because endpoints lie about length.
- * @returns the body text, or `undefined` when the ceiling was exceeded.
- */
+/** Read a reply body under a hard byte ceiling: refuse before transfer when a declared content-length exceeds it, and cap accumulated bytes during the */
 async function readBounded(response: Response, maxBytes: number): Promise<string | undefined> {
   const declared = Number(response.headers.get('content-length'))
   if (Number.isFinite(declared) && declared > maxBytes) {
@@ -68,20 +63,14 @@ async function readBounded(response: Response, maxBytes: number): Promise<string
   return new TextDecoder().decode(bytes)
 }
 
-/**
- * Caller cancellation outranks this request's own timeout.
- * @returns the typed failure.
- */
+/** Caller cancellation outranks this request's own timeout. */
 function classifyFailure(error: unknown, caller: AbortSignal | undefined, timeout: AbortSignal): JsonFetchFailure {
   if (caller?.aborted) return { kind: 'aborted' }
   if (timeout.aborted) return { kind: 'timeout' }
   return { kind: 'unreachable', detail: errorChain(error) }
 }
 
-/**
- * Fetch one URL and parse its reply as JSON, with timeout, caller
- * cancellation, Bearer auth, and a reply-size ceiling. Never throws.
- */
+/** Fetch one URL and parse its reply as JSON, with timeout, caller cancellation, Bearer auth, and a reply-size ceiling. */
 export async function fetchJson(options: FetchJsonOptions): Promise<JsonFetch> {
   const timeout = AbortSignal.timeout(options.timeoutMs)
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout

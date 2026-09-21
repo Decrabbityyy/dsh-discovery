@@ -1,8 +1,4 @@
-/**
- * 模型发现 settings section plugin, browser half: registers the 模型发现 section
- * into the settings panel, the model editor its provider cards open, and the
- * 模型目录 page of the Plugins section.
- */
+/** 模型发现 settings section plugin, browser half: registers the 模型发现 section into the settings panel, the model editor its provider cards open, and the */
 // The browser half is an ordinary cordis plugin: its context type is cordis's
 // own (0.1.5 deleted the dsh-client-runtime facade that used to alias it).
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
@@ -40,13 +36,7 @@ const CACHE_TAB_ID = 'model-catalog'
 
 const CACHE_TAB_LABEL = '模型目录'
 
-/**
- * Required services. `remote` and its generated faces are the typed Remote
- * clients this page calls; `locale` and `settingsScope` are runtime ordering
- * requirements only, since the section renders static copy and no scoped value.
- * Target slots are injected through `slots.inject()`, so the activation order
- * against the ui-settings and ui-settings-models plugins is not constrained.
- */
+/** Required services. `remote` and its generated faces are the typed Remote clients this page calls; `locale` and `settingsScope` are runtime ordering */
 export const inject = [
   'slots',
   'locale',
@@ -59,10 +49,7 @@ export const inject = [
   'settingsScope',
 ]
 
-/**
- * Register the discovery section, the provider-card editor, and the Plugins
- * section's cache tab once their slot declarations are on the ledger.
- */
+/** Register the discovery section, the provider-card editor, and the Plugins section's cache tab once their slot declarations are on the ledger. */
 export function apply(ctx: ClientContext): void {
   // The published ClientRemote interface carries only the stream/host seats;
   // the generated Typert domains are the runtime contract, so cast to the

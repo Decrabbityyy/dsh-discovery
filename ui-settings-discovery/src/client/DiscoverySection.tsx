@@ -1,14 +1,4 @@
-/**
- * The 模型发现 settings section: probe a preset or custom endpoint through the
- * host's `llm.discoverModels` offer and adopt a selection into a new pi-ai
- * provider profile.
- *
- * Adoption writes through the same public wire the Models page uses, with two
- * ordering constraints: a typed key is stored FIRST through `credentials.set`
- * under the derived `<ROUTE>_API_KEY` reference and the profile records
- * `apiKeyEnv` only when a key was entered, and a selection of nothing writes no
- * `models` key at all, which serves the route's whole catalog.
- */
+/** The 模型发现 settings section: probe a preset or custom endpoint through the host's `llm.discoverModels` offer and adopt a selection into a new pi-ai */
 
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
@@ -31,10 +21,7 @@ export interface DiscoverySectionInjected {
   api: DiscoveryApi
 }
 
-/**
- * Props delivered by the slot outlet: the inject face spread flat (the renderer
- * erases the share boundary at the render call).
- */
+/** Props delivered by the slot outlet: the inject face spread flat (the renderer erases the share boundary at the render call). */
 export type DiscoverySectionProps = Partial<DiscoverySectionInjected>
 
 /** Renders the section, or null while the shell has not injected yet. */
@@ -226,12 +213,7 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
     })
   }
 
-  /**
-   * Pin one row to a catalog entry, seeding its thinking levels from that entry
-   * when it has none picked yet: a row the user already tuned keeps its picks.
-   * The pins live as long as the page does, so a re-probe of the same ids keeps
-   * them.
-   */
+  /** Pin one row to a catalog entry, seeding its thinking levels from that entry when it has none picked yet: a row the user already tuned keeps its picks. */
   const bindModel = (id: string, key: string | undefined): void => {
     setBindings((current) => {
       const next = { ...current }
@@ -282,11 +264,7 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
     }
   }
 
-  /**
-   * Perform the adoption, returning a failure message or undefined. The key
-   * is stored first so the profile only commits once its credential exists;
-   * an orphaned ref (mutate refused) is harmless.
-   */
+  /** Perform the adoption, returning a failure message or undefined. */
   const adoptOnce = async (): Promise<string | undefined> => {
     /* v8 ignore next -- the adopt button is disabled while the derived reference is illegal */
     if (keyRefProblem !== undefined) return keyRefProblem
@@ -319,10 +297,7 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
         ? {}
         : {
             models: selected.map((model) => {
-              // A catalog route inherits the installed catalog's reasoning and
-              // modalities; a hand-declared route needs the per-model
-              // declaration written here, because nothing below it but the
-              // route-wide text-only default would answer.
+              // A catalog route inherits the installed catalog's reasoning and modalities;
               if (isCatalogRoute) return { ...model }
               return modelDeclaration(
                 model,

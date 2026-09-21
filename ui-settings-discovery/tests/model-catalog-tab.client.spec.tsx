@@ -1,7 +1,5 @@
 // @vitest-environment jsdom
-/**
- * 设置 → 插件 → 模型目录页：目录与路由两个来源，以及刷新按钮要的结果。
- */
+/** 设置 → 插件 → 模型目录页：目录与路由两个来源，以及刷新按钮要的结果。 */
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'

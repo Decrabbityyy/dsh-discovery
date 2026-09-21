@@ -7,11 +7,7 @@ import { enrichModels } from './enrich.ts'
 /** The namespace this plugin registers. It owns no settings section and no routes. */
 export const DISCOVERY_NAMESPACE = 'llm-discovery'
 
-/**
- * Validate the draft credential before any header is built from it. A draft
- * with no key probes unauthenticated; a malformed key fails before the network
- * is touched.
- */
+/** Validate the draft credential before any header is built from it. */
 function probeKey(raw: string | undefined): string | undefined {
   if (raw === undefined) return undefined
   const check = normalizeApiKey(raw)
@@ -24,13 +20,7 @@ function probeKey(raw: string | undefined): string | undefined {
   )
 }
 
-/**
- * Interrogate one draft endpoint through the engine ladder and enrich the
- * answer. The first engine that recognizes the endpoint wins; when none does,
- * the most reportable failure (an auth refusal over a bare miss) is thrown.
- * `request.provider` is accepted for seam parity but unused: this namespace has
- * no route knowledge to short-circuit with.
- */
+/** Interrogate one draft endpoint through the engine ladder and enrich the answer. */
 export async function discoverEndpoint(
   request: LlmModelDiscoveryOperation,
   config: ResolvedDiscoveryConfig,

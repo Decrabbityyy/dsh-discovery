@@ -9,11 +9,7 @@ interface CatalogFacts {
 
 let cachedIndex: ReadonlyMap<string, CatalogFacts> | undefined
 
-/**
- * The id-keyed index over every provider the installed pi-ai catalog ships,
- * built once per process. A bare id two providers ship resolves to the first
- * provider in catalog order.
- */
+/** The id-keyed index over every provider the installed pi-ai catalog ships, built once per process. */
 function catalogIndex(): ReadonlyMap<string, CatalogFacts> {
   if (cachedIndex !== undefined) return cachedIndex
   const index = new Map<string, CatalogFacts>()
@@ -27,10 +23,7 @@ function catalogIndex(): ReadonlyMap<string, CatalogFacts> {
   return index
 }
 
-/**
- * Fill the fields one discovered model left undisclosed from the bundled
- * catalog. Endpoint-reported values are never overwritten.
- */
+/** Fill the fields one discovered model left undisclosed from the bundled catalog. */
 export function enrichModels(models: readonly LlmDiscoveredModel[]): LlmDiscoveredModel[] {
   const catalog = catalogIndex()
   return models.map((model) => {

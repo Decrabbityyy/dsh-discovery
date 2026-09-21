@@ -26,11 +26,7 @@ export interface ModelFacts {
   readonly outputModalities?: readonly ModelModality[]
   readonly contextWindow?: number
   readonly maxTokens?: number
-  /**
-   * Provider ids behind this entry, in file order. Providers that record the
-   * same facts share one entry and are all listed here; a provider whose facts
-   * differ gets an entry of its own, named by this list too.
-   */
+  /** Provider ids behind this entry, in file order. */
   readonly sources?: readonly string[]
 }
 
@@ -39,11 +35,7 @@ function keepSupported(values: readonly string[] | undefined): ModelModality[] {
   return (values ?? []).filter((value): value is ModelModality => value === 'text' || value === 'image')
 }
 
-/**
- * The keys one models.dev model is indexed under: the id exactly as recorded,
- * plus its bare name when that differs, so an endpoint that drops the vendor
- * prefix (`z-ai/glm-5.2` for `glm-5.2`) resolves too.
- */
+/** The keys one models.dev model is indexed under: the id exactly as recorded, plus its bare name when that differs, so an endpoint that drops the vendor */
 function keysOf(modelId: string): readonly string[] {
   const bare = normalizeModelName(modelId)
   return bare === modelId ? [modelId] : [modelId, bare]
@@ -69,11 +61,7 @@ function* indexedModels(body: unknown): Generator<IndexedModel> {
   }
 }
 
-/**
- * A capacity the catalog disclosed. Zero, negatives, and fractions mean it did
- * not: the stored row schema accepts only positive integers, so carrying one of
- * those through would make the stored catalog unreadable on the next boot.
- */
+/** A capacity the catalog disclosed. */
 function capacity(value: number | undefined): number | undefined {
   return value !== undefined && Number.isInteger(value) && value > 0 ? value : undefined
 }
@@ -126,12 +114,7 @@ interface RecordGroup {
   readonly provider: string
 }
 
-/**
- * Store one group's facts under the first candidate key that is free or already
- * carries them. An occupied key holding the same facts only gains the providers
- * of this group; one holding other facts is left alone, because both sets have
- * to stay reachable.
- */
+/** Store one group's facts under the first candidate key that is free or already carries them. */
 function placeFacts(index: Map<string, ModelFacts>, group: RecordGroup, key: string, candidates: readonly string[]): void {
   const signature = factSignature(group.facts)
   for (const candidate of [...candidates, `${group.provider}/${key}`, `${group.provider}/${key}~2`, `${group.provider}/${key}~3`]) {
@@ -157,12 +140,7 @@ export function normalizeLevel(value: string): string {
   return value === 'none' ? 'off' : value
 }
 
-/**
- * Parse the models.dev api.json body into a modelKey → levels index, keyed
- * exactly as {@link parseModelFacts} keys it. A model with no levels stays out;
- * a reasoning model without an effort entry records an empty list, which the
- * picker renders as no levels.
- */
+/** Parse the models.dev api.json body into a modelKey → levels index, keyed exactly as {@link parseModelFacts} keys it. */
 export function parseCatalog(body: unknown): Map<string, readonly string[]> {
   const index = new Map<string, readonly string[]>()
   for (const [key, facts] of parseModelFacts(body)) {
@@ -171,11 +149,7 @@ export function parseCatalog(body: unknown): Map<string, readonly string[]> {
   return index
 }
 
-/**
- * Parse the models.dev api.json body into a modelKey → modalities index, keyed
- * exactly as {@link parseModelFacts} keys it. A model with no modalities block
- * stays absent, which reads as unknown rather than text-only.
- */
+/** Parse the models.dev api.json body into a modelKey → modalities index, keyed exactly as {@link parseModelFacts} keys it. */
 export function parseModalities(body: unknown): Map<string, ModelModalities> {
   const index = new Map<string, ModelModalities>()
   for (const [key, facts] of parseModelFacts(body)) {
@@ -185,18 +159,7 @@ export function parseModalities(body: unknown): Map<string, ModelModalities> {
   return index
 }
 
-/**
- * Parse the models.dev api.json body into a modelKey → facts index. Keys are the
- * ids models.dev records plus their bare names, so an endpoint that drops the
- * vendor prefix still resolves.
- *
- * Every provider recording one key contributes to it. Providers that record the
- * same facts share that key's entry and are all named in its `sources`; a
- * provider whose facts differ keeps an entry of its own, under the id it records
- * or a provider-qualified name. Merging the agreements keeps the index small,
- * and splitting the disagreements is what lets a surface say whose capacities an
- * entry carries instead of silently taking the first provider's.
- */
+/** Parse the models.dev api.json body into a modelKey → facts index. */
 export function parseModelFacts(body: unknown): Map<string, ModelFacts> {
   // Every provider recording one key, in file order.
   const contributions = new Map<string, ModelRecord[]>()

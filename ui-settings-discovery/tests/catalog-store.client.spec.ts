@@ -1,7 +1,5 @@
 // @vitest-environment jsdom
-/**
- * 页面会话内的目录缓存：两个消费者共用一次抓取与一份索引。
- */
+/** 页面会话内的目录缓存：两个消费者共用一次抓取与一份索引。 */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { UI_CATALOG_PATH } from 'dsh-llm-discovery/vocabulary'

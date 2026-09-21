@@ -13,10 +13,7 @@ export const name = 'llm-discovery'
 /** 探测 offer 注册在 llm 注册表上。 */
 export const inject = ['llm']
 
-/**
- * 用目录补端点没披露的显示名称与容量：端点报的值优先，`x-ai/grok-4.6` 解析到自己那条，
- * 而不是被裸名条目顶掉。
- */
+/** 用目录补端点没披露的显示名称与容量：端点报的值优先，`x-ai/grok-4.6` 解析到自己那条， 而不是被裸名条目顶掉。 */
 export function enrichModelsFromCatalog(
   models: readonly LlmDiscoveredModel[],
   catalog: Pick<SharedCatalog, 'factsOf'>,

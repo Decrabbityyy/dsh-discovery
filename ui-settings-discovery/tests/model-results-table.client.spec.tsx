@@ -1,8 +1,5 @@
 // @vitest-environment jsdom
-/**
- * The shared results table's catalog matching: a row that resolves on its own,
- * the picker that pins the rows that cannot, and what a pinned row then shows.
- */
+/** The shared results table's catalog matching: a row that resolves on its own, the picker that pins the rows that cannot, and what a pinned row then shows. */
 
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { useState } from 'react'

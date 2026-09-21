@@ -1,14 +1,5 @@
 // @vitest-environment jsdom
-/**
- * Discovery section registration: slot declaration injection and fiber disposal.
- *
- * `@deepseek-ai/dsh-client-ui-renderer/client` ships as a `__ModuleLoader__`
- * bundle (the web shell's module seam) and owns the `slots` service, so the
- * spec installs a minimal shim before importing it: the loader registers the
- * factory, the require face forwards to the real packages, and the registered
- * entry becomes the import. (0.1.5 deleted `dsh-client-runtime`, which used to
- * re-export this class.)
- */
+/** Discovery section registration: slot declaration injection and fiber disposal. */
 import { createRequire } from 'node:module'
 import * as cordis from '@deepseek-ai/cordis'
 import * as uiSlots from '@deepseek-ai/dsh-client-ui-slots'
@@ -48,10 +39,7 @@ import { ProviderModelsCard } from '../src/client/ProviderModelsDialog.tsx'
 async function bench() {
   const ctx = new Context()
   await ctx.plugin(SlotRegistry).await()
-  // The apply path only captures the wire face; no call leaves this fake
-  // until the section actually probes or adopts. The alpha.4 contract reads
-  // the face from `ctx.remote`; `connection`/`locale`/`settingsScope` are
-  // inject-ordering requirements the section never reads.
+  // The apply path only captures the wire face;
   ctx.provide('connection', { api: {} } as never)
   ctx.provide('remote', {} as never)
   // Nested remote faces are independent Cordis services and must be present

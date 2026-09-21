@@ -1,14 +1,4 @@
-/**
- * The model results table both editing surfaces render: filter box, bulk
- * selection, and one row per model with its capacities, modalities, and
- * thinking levels. Kept in one place so the 模型发现 page and the provider
- * card's dialog cannot drift into two different tables.
- *
- * Every row reads the catalog through {@link matchCatalogEntry}: an id the
- * tables record under a variant spelling resolves on its own, and one they do
- * not — a `-max`/`-highspeed`/`vendor/x` id whose base they do record — is what
- * the row's 匹配目录 control is for.
- */
+/** The model results table both editing surfaces render: filter box, bulk selection, and one row per model with its capacities, modalities, and */
 
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
@@ -90,11 +80,7 @@ function pickerMeta(entry: CatalogEntry): string {
   ].filter(part => part !== undefined).join(' · ')
 }
 
-/**
- * Whose numbers one picker entry carries. Several providers serve the same
- * model under different ids and disagree about its capacities, so the label
- * names the first provider and counts the rest.
- */
+/** Whose numbers one picker entry carries. */
 function pickerSource(entry: CatalogEntry): string {
   const [first, ...rest] = entry.sources
   if (first === undefined) return ''
@@ -333,10 +319,7 @@ export function ModelResultsTable(props: ModelResultsTableProps): ReactNode {
                                       aria-label={`搜索目录条目：${model.id}`}
                                       autoFocus
                                       onChange={(event) => { setPickerQuery(event.target.value) }}
-                                      // Escape belongs to the picker while it is
-                                      // open: the enclosing dialog keeps it
-                                      // otherwise, and closing the whole editor
-                                      // to dismiss a list would lose the draft.
+                                      // Escape belongs to the picker while it is open: the enclosing dialog keeps it
                                       onKeyDown={(event) => {
                                         if (event.key !== 'Escape') return
                                         event.stopPropagation()

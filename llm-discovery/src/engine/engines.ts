@@ -4,11 +4,7 @@ import type { ResolvedDiscoveryConfig } from './config.ts'
 import { fetchJson } from './http.ts'
 import type { JsonFetchFailure } from './http.ts'
 
-/**
- * The engines of the discovery ladder, in probe order: the endpoint-specific
- * ones run before the generic listing floor, because an endpoint that answers
- * both would otherwise be read through the poorer listing.
- */
+/** The engines of the discovery ladder, in probe order: the endpoint-specific ones run before the generic listing floor, because an endpoint that answers */
 
 /** One engine rung's verdict. */
 export type EngineVerdict =
@@ -74,12 +70,7 @@ function bareHost(baseURL: string): string {
   return baseURL.replace(/\/+$/, '').replace(/\/v1$/i, '')
 }
 
-/**
- * Ollama native discovery: `GET /api/tags` for the model list, then one
- * `POST /api/show` per model for its `*.context_length`, since the listing
- * carries no capacities. A model whose show metadata has no context length
- * reports the configured engine default.
- */
+/** Ollama native discovery: `GET /api/tags` for the model list, then one `POST /api/show` per model for its `*.context_length`, since the listing */
 async function probeOllama(facts: ProbeFacts): Promise<EngineVerdict> {
   const base = bareHost(facts.baseURL)
   const tags = await fetchJson({
@@ -132,12 +123,7 @@ async function ollamaContextLength(base: string, id: string, facts: ProbeFacts):
 /** LiteLLM management metadata routes, richest first; a 404 names an absent route. */
 const LITELLM_METADATA_ROUTES = ['/model_group/info', '/v2/model/info', '/model/info', '/v1/model/info'] as const
 
-/**
- * LiteLLM discovery: the management metadata endpoints carry per-model
- * capacities the OpenAI listing does not. Routes are probed in order and the
- * first parseable answer wins; when every route is absent the rung skips, so
- * the generic listing floor still runs.
- */
+/** LiteLLM discovery: the management metadata endpoints carry per-model capacities the OpenAI listing does not. */
 async function probeLitellm(facts: ProbeFacts): Promise<EngineVerdict> {
   const base = bareHost(facts.baseURL)
   let refusal: EngineVerdict | undefined
@@ -180,11 +166,7 @@ async function probeLitellm(facts: ProbeFacts): Promise<EngineVerdict> {
   return refusal ?? { kind: 'skip' }
 }
 
-/**
- * Anthropic's Models API is the same `data`-array listing in its own dialect:
- * the key travels as `x-api-key`, `anthropic-version` is required, and pages
- * default to 20 entries, so `limit=1000` keeps one request enough.
- */
+/** Anthropic's Models API is the same `data`-array listing in its own dialect: */
 const ANTHROPIC_LISTING_HEADERS = { 'anthropic-version': '2023-06-01' } as const
 
 /** Convert a final listing request failure into the public discovery error. */
@@ -213,13 +195,7 @@ function listingFailure(url: string, result: JsonFetchFailure): EngineVerdict {
   }
 }
 
-/**
- * Google Generative Language discovery: list the native `models` collection,
- * authenticate with `x-goog-api-key`, and retain models that can generate
- * content. The documented 1,000-item page ceiling keeps the probe bounded.
- * @param facts - the probe facts.
- * @returns the verdict for the Google listing dialect.
- */
+/** Google Generative Language discovery: list the native `models` collection, authenticate with `x-goog-api-key`, and retain models that can generate */
 async function probeGoogleModels(facts: ProbeFacts): Promise<EngineVerdict> {
   const url = `${facts.baseURL.replace(/\/+$/, '')}/models?pageSize=1000`
   const result = await fetchJson({
@@ -260,15 +236,7 @@ async function probeGoogleModels(facts: ProbeFacts): Promise<EngineVerdict> {
   return { kind: 'models', models }
 }
 
-/**
- * The generic protocol-listing floor. OpenAI-compatible routes use
- * `GET {baseURL}/models`; `anthropic-messages` switches to Anthropic's
- * listing dialect, and `google-generative-ai` switches to the native Google
- * listing above. OpenAI replies may disclose stock `context_window` /
- * `context_length` fields or vLLM's `max_model_len`.
- * @param facts - the probe facts.
- * @returns the verdict for this rung.
- */
+/** The generic protocol-listing floor. */
 async function probeOpenAiModels(facts: ProbeFacts): Promise<EngineVerdict> {
   if (facts.api === 'google-generative-ai') return probeGoogleModels(facts)
   const anthropic = facts.api === 'anthropic-messages'
@@ -316,11 +284,7 @@ async function probeOpenAiModels(facts: ProbeFacts): Promise<EngineVerdict> {
   return { kind: 'models', models }
 }
 
-/**
- * The engine ladder in probe order, filtered by the deployment's switches.
- * @param config - the resolved configuration.
- * @returns the enabled engines in ladder order.
- */
+/** The engine ladder in probe order, filtered by the deployment's switches. */
 export function discoveryEngines(config: ResolvedDiscoveryConfig): readonly { readonly id: string; readonly probe: DiscoveryEngine }[] {
   const ladder = [
     { id: 'ollama', probe: probeOllama, enabled: config.engines.ollama },

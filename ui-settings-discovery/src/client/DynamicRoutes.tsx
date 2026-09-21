@@ -1,15 +1,11 @@
-/**
- * The 动态路由 block: manage the routes declared in the `llm-dynamic-provider`
- * namespace. Writes land in the namespace the host plugin watches, so a hot
- * edit reprobes without a restart. The block renders only when the Host Loader
- * inventory reports that plugin active.
- */
+/** The 动态路由 block: manage the routes declared in the `llm-dynamic-provider` namespace. */
 
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import { CREDENTIAL_REF_PATTERN, deriveKeyRef, messageOf, ROUTE_PATTERN } from './discovery.ts'
 import type { DiscoveryApi, DynamicRoute } from './discovery.ts'
+import { DYNAMIC_ROUTES_PATH } from './discovery.ts'
 import styles from './styles.module.css'
 
 const DYNAMIC_PROTOCOLS = ['openai-completions', 'openai-responses', 'anthropic-messages', 'google-generative-ai'] as const
@@ -36,7 +32,7 @@ export function DynamicRoutes({ api }: { api: DiscoveryApi }): ReactNode {
   /** Re-read the routes, bypassing the settings RPC the host exposes only once a route exists. */
   const reload = async (): Promise<void> => {
     try {
-      const response = await fetch('/llm-dynamic-provider/routes')
+      const response = await fetch(DYNAMIC_ROUTES_PATH)
       if (!response.ok) {
         setLoadError(`读取动态路由失败:HTTP ${response.status}`)
         return
@@ -57,7 +53,7 @@ export function DynamicRoutes({ api }: { api: DiscoveryApi }): ReactNode {
   /** Write one route set/unset through the same endpoint, then re-read. */
   const write = async (op: 'set' | 'unset', routeId: string, route?: DynamicRoute): Promise<string | undefined> => {
     try {
-      const response = await fetch('/llm-dynamic-provider/routes', {
+      const response = await fetch(DYNAMIC_ROUTES_PATH, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ op, routeId, ...route === undefined ? {} : { route } }),

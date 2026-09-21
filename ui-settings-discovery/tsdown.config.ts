@@ -1,10 +1,4 @@
-/**
- * Self-contained client build for the discovery settings section. Mirrors the
- * harness's shared client bundle contract without importing the monorepo: the
- * browser half is one CJS factory registered into `window.__ModuleLoader__`,
- * CSS Modules are compiled by lightningcss and injected as one `<style>` tag
- * per module, and only the platform module table stays external.
- */
+/** Self-contained client build for the discovery settings section. */
 
 import { readFile } from 'node:fs/promises'
 import { basename, dirname, resolve as resolvePath } from 'node:path'

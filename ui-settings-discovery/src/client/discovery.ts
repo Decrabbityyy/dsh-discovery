@@ -1,6 +1,6 @@
 import type { LlmDiscoveredModel, LlmModelDiscoveryRequest, RpcResponse } from '@deepseek-ai/dsh-api-remotes/client'
 import {
-  catalogKeyCandidates, catalogKeyIndexOf, CREDENTIAL_REF_PATTERN, DISCOVERY_NS, DYNAMIC_NS, DYNAMIC_PROBE_PATH,
+  catalogKeyCandidates, catalogKeyIndexOf, CREDENTIAL_REF_PATTERN, DISCOVERY_NS, DYNAMIC_NS, DYNAMIC_PROBE_PATH, DYNAMIC_ROUTES_PATH,
   mergeCatalogEnvelopes, PI_AI_NS, ROUTE_PATTERN, resolveCatalogKey, UI_CATALOG_PATH, UI_CATALOG_STATUS_PATH,
   deriveKeyRef, messageOf,
 } from 'dsh-llm-discovery/vocabulary'
@@ -8,7 +8,7 @@ import type { CatalogEnvelope, CatalogKeyIndex } from 'dsh-llm-discovery/vocabul
 import { reasoningEffortsOf } from './presets.ts'
 
 export {
-  catalogKeyCandidates, CREDENTIAL_REF_PATTERN, DISCOVERY_NS, DYNAMIC_NS, DYNAMIC_PROBE_PATH, mergeCatalogEnvelopes,
+  catalogKeyCandidates, CREDENTIAL_REF_PATTERN, DISCOVERY_NS, DYNAMIC_NS, DYNAMIC_PROBE_PATH, DYNAMIC_ROUTES_PATH, mergeCatalogEnvelopes,
   PI_AI_NS, ROUTE_PATTERN, UI_CATALOG_PATH, UI_CATALOG_STATUS_PATH, deriveKeyRef, messageOf,
 }
 export type { CatalogEnvelope }
@@ -52,11 +52,7 @@ export interface CatalogMatch {
   readonly entry: CatalogEntry
 }
 
-/**
- * Build the index every row lookup and the picker share. Keys come from the
- * union of the three data tables: an entry may carry levels without capacities,
- * or modalities without levels, and the row it belongs to must still resolve.
- */
+/** Build the index every row lookup and the picker share. */
 export function catalogIndexOf(tables: CatalogTables): CatalogIndex {
   const keys = catalogKeyIndexOf([
     ...Object.keys(tables.catalog),
@@ -83,11 +79,7 @@ export function catalogIndexOf(tables: CatalogTables): CatalogIndex {
   }
 }
 
-/**
- * The entry one row reads its facts from: the key the user pinned when there is
- * one, else the key its id resolves to. A key the pinned name no longer carries
- * falls back to resolution rather than losing the row's facts.
- */
+/** The entry one row reads its facts from: the key the user pinned when there is one, else the key its id resolves to. */
 export function matchCatalogEntry(
   modelId: string,
   index: CatalogIndex,
@@ -104,11 +96,7 @@ export function matchCatalogEntry(
   return entry === undefined ? undefined : { key, entry }
 }
 
-/**
- * The longest catalog key one id spells, as the picker's opening search: a
- * variant id like `deepseek-v4-flash-max` seeds `deepseek-v4-flash`, while an
- * id the catalog has never heard of seeds nothing and lists every entry.
- */
+/** The longest catalog key one id spells, as the picker's opening search: a variant id like `deepseek-v4-flash-max` seeds `deepseek-v4-flash`, while an */
 export function catalogSearchSeed(modelId: string, index: CatalogIndex): string {
   for (const candidate of catalogKeyCandidates(modelId)) {
     const exact = index.keyOf(candidate)
@@ -121,15 +109,7 @@ export function catalogSearchSeed(modelId: string, index: CatalogIndex): string 
   return ''
 }
 
-/**
- * The per-model `input` declaration to write for one entry, or undefined when
- * the catalog records nothing for it or no image support.
- *
- * Only a positive image claim is written. `input` has no settings-surface
- * editor, so writing `['text']` for a model the catalog still lists without
- * modalities would freeze it as text-only with no way back when the catalog
- * learns it accepts images; an unwritten field stays inheritable.
- */
+/** The per-model `input` declaration to write for one entry, or undefined when the catalog records nothing for it or no image support. */
 export function declaredInput(entry: CatalogEntry | undefined): readonly string[] | undefined {
   return entry !== undefined && entry.input.includes('image') ? entry.input : undefined
 }
@@ -184,12 +164,7 @@ function levelsOf(value: unknown): Readonly<Record<string, string | null>> | und
   return levels
 }
 
-/**
- * Read one provider profile out of a described namespace value. A shape this
- * cannot read yields an empty draft rather than throwing: a hand-edited
- * settings file must still open, and the dialog writes back only what it can
- * describe.
- */
+/** Read one provider profile out of a described namespace value. */
 export function providerProfileOf(namespaceValue: unknown, routeId: string): ProviderProfileDraft {
   const profile = recordOf(recordOf(recordOf(namespaceValue)?.['providers'])?.[routeId])
   if (profile === undefined) return { models: [] }
@@ -222,13 +197,7 @@ export function providerProfileOf(namespaceValue: unknown, routeId: string): Pro
   }
 }
 
-/**
- * One model entry to write back. The picked levels and the catalog entry the
- * row matched win; a field neither supplies keeps what the stored profile
- * already declared, so an edit that does not touch it cannot silently drop it.
- * The name and capacities a row displays but its endpoint never disclosed come
- * from the catalog the same way, which is what makes them survive the write.
- */
+/** One model entry to write back. */
 export function modelDeclaration(
   row: ProfileModel,
   levels: ReadonlySet<string>,
@@ -313,12 +282,7 @@ export interface CatalogStatus {
   readonly error?: string
 }
 
-/**
- * The Remote call shape every consumed method answers with: `ok` narrows to
- * either `value` or `error`. Declared locally so this package stays decoupled
- * from the exact `RpcResponse` generic layout of whichever
- * `dsh-client-connection` version the remotes facade resolved against.
- */
+/** The Remote call shape every consumed method answers with: `ok` narrows to either `value` or `error`. */
 export type DiscoveryResponse<T> = RpcResponse<T> & {
   readonly ok: boolean
   readonly value: T
@@ -347,11 +311,7 @@ export interface ProviderWireEntry {
   readonly declared?: boolean
 }
 
-/**
- * The exact subset of `ctx.remote` this section calls, declared structurally
- * because the generated Typert domain typings are not part of the published
- * `ClientRemote` interface. Calls take positional arguments.
- */
+/** The exact subset of `ctx.remote` this section calls, declared structurally because the generated Typert domain typings are not part of the published */
 export interface DiscoveryApi {
   readonly llm: {
     /** Interrogate one endpoint through a host discovery offer. */

@@ -15,11 +15,7 @@ export interface Config {
   timeoutMs?: number
   /** Maximum reply size in bytes before a probe is refused (default 4 MiB). */
   maxResponseBytes?: number
-  /**
-   * Fill fields an endpoint leaves undisclosed from the bundled pi-ai catalog,
-   * matched by exact model id (default true). Endpoint-reported facts always
-   * win, and unknown ids stay undisclosed.
-   */
+  /** Fill fields an endpoint leaves undisclosed from the bundled pi-ai catalog, matched by exact model id (default true). */
   enrichment?: boolean
   /** Context window for an Ollama model whose `/api/show` metadata carries no `*.context_length` (default 128,000). */
   ollamaDefaultContextWindow?: number
@@ -48,10 +44,7 @@ export interface ResolvedDiscoveryConfig {
   engines: Required<EngineSwitches>
 }
 
-/**
- * Resolve the deployment config into its fully-defaulted form. This is the one
- * place the defaults live.
- */
+/** Resolve the deployment config into its fully-defaulted form. This is the one place the defaults live. */
 export function resolveDiscoveryConfig(config: Config | undefined): ResolvedDiscoveryConfig {
   return {
     timeoutMs: config?.timeoutMs ?? 10_000,

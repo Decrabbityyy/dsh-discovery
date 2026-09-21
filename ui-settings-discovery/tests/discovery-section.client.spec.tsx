@@ -12,10 +12,7 @@ import { CUSTOM_PRESET } from '../src/client/presets.ts'
 
 afterEach(cleanup)
 
-/**
- * Stub the section's own catalog endpoint with a levels table and the optional
- * modality/capacity tables beside it.
- */
+/** Stub the section's own catalog endpoint with a levels table and the optional modality/capacity tables beside it. */
 function stubCatalog(
   catalog: Record<string, readonly string[]>,
   extra: {
@@ -355,10 +352,7 @@ describe('probe', () => {
     expect(within(table).getByText('32768')).toBeDefined()
     expect(within(table).getByText('4096')).toBeDefined()
     expect(within(table).getByText('llama3.2:1b')).toBeDefined()
-    // Absent metadata renders as the dash: the bare row (llama3.2:1b) shows
-    // one in name, context, and output (3); the thinking column adds one per
-    // row with no catalog levels (2); the modality column adds one per row
-    // with no catalog modalities (2). 3 + 2 + 2.
+    // Absent metadata renders as the dash: the bare row (llama3.2:1b) shows one in name, context, and output (3); the thinking column adds one per
     expect(within(table).getAllByText('—')).toHaveLength(7)
     // Everything found starts checked.
     expect((screen.getByLabelText<HTMLInputElement>('选择 qwen2.5:7b')).checked).toBe(true)

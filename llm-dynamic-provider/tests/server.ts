@@ -1,8 +1,4 @@
-/**
- * Programmable local HTTP server fixture for the discovery specs. Routes are a
- * plain path→reply table; the fixture records requests and supports delayed,
- * dripped, and unanswered replies for timeout and abort coverage.
- */
+/** Programmable local HTTP server fixture for the discovery specs. */
 
 import { createServer } from 'node:http'
 import type { Server } from 'node:http'
@@ -60,13 +56,7 @@ function sleep(ms: number): Promise<void> {
   return promise
 }
 
-/**
- * Start a probe server on an ephemeral loopback port. A path absent from the
- * table answers 404; a reply's `drip` chunk holds the socket open until the
- * client goes away.
- * @param routes - the path→reply table.
- * @returns the running server handle.
- */
+/** Start a probe server on an ephemeral loopback port. A path absent from the table answers 404; */
 export async function startProbeServer(routes: RouteTable): Promise<ProbeServer> {
   const requests: ObservedRequest[] = []
   const server: Server = createServer((req, res) => {

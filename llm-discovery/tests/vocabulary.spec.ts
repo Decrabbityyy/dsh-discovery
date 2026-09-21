@@ -1,8 +1,4 @@
-/**
- * The shared vocabulary and the models.dev parser: the protocol list, the
- * thinking-level spelling, the credential-ref derivation, and the api.json
- * → levels index the discovery surfaces all agree on.
- */
+/** The shared vocabulary and the models.dev parser: the protocol list, the thinking-level spelling, the credential-ref derivation, and the api.json */
 
 import { describe, expect, it } from 'vitest'
 import {

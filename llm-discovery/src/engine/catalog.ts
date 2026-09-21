@@ -7,10 +7,7 @@ export type ReasoningEfforts = Record<string, string | null>
 
 let cachedIndex: ReadonlyMap<string, ReasoningEfforts> | undefined
 
-/**
- * The exact-id index, built once per process. Only reasoning models get an
- * entry, and a shared id resolves to the first provider in catalog order.
- */
+/** The exact-id index, built once per process. */
 function reasoningIndex(): ReadonlyMap<string, ReasoningEfforts> {
   if (cachedIndex !== undefined) return cachedIndex
   const index = new Map<string, ReasoningEfforts>()
@@ -29,10 +26,7 @@ function reasoningIndex(): ReadonlyMap<string, ReasoningEfforts> {
   return index
 }
 
-/**
- * The catalog's `reasoningEfforts` for one model id, or `undefined` when the
- * catalog records no reasoning capability for it.
- */
+/** The catalog's `reasoningEfforts` for one model id, or `undefined` when the catalog records no reasoning capability for it. */
 export function catalogReasoningEfforts(id: string): ReasoningEfforts | undefined {
   const efforts = reasoningIndex().get(id)
   return efforts === undefined ? undefined : { ...efforts }
@@ -40,10 +34,7 @@ export function catalogReasoningEfforts(id: string): ReasoningEfforts | undefine
 
 let cachedModalityIndex: ReadonlyMap<string, readonly ModelModality[]> | undefined
 
-/**
- * The exact-id input-modality index, built once per process. A shared id
- * resolves to the first provider in catalog order, matching the reasoning index.
- */
+/** The exact-id input-modality index, built once per process. */
 function modalityIndex(): ReadonlyMap<string, readonly ModelModality[]> {
   if (cachedModalityIndex !== undefined) return cachedModalityIndex
   const index = new Map<string, readonly ModelModality[]>()
@@ -57,19 +48,12 @@ function modalityIndex(): ReadonlyMap<string, readonly ModelModality[]> {
   return index
 }
 
-/**
- * The catalog's accepted input modalities for one model id, or `undefined`
- * when the catalog does not know the id.
- */
+/** The catalog's accepted input modalities for one model id, or `undefined` when the catalog does not know the id. */
 export function catalogInputModalities(id: string): readonly ModelModality[] | undefined {
   return modalityIndex().get(id)
 }
 
-/**
- * Resolve one model's accepted input modalities: the models.dev index first,
- * then the bundled pi-ai catalog. A model neither source knows returns
- * `undefined`, leaving the default to the caller.
- */
+/** Resolve one model's accepted input modalities: the models.dev index first, then the bundled pi-ai catalog. */
 export function inputModalitiesOf(index: ReadonlyMap<string, ModelModalities>, modelId: string): readonly ModelModality[] | undefined {
   const listed = index.get(modelId)
   if (listed !== undefined && listed.input.length > 0) return listed.input

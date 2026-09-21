@@ -1,9 +1,4 @@
-/**
- * Full-plugin composition: a real Cordis context mounts the llm seam and this
- * plugin, which probes a fake endpoint and registers the discovered routes on
- * `ctx.llm` — in memory, with no settings document. A route whose endpoint is
- * down registers nothing until the endpoint answers and something reprobes.
- */
+/** Full-plugin composition: a real Cordis context mounts the llm seam and this plugin, which probes a fake endpoint and registers the discovered routes on */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'

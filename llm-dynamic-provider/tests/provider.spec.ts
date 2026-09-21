@@ -1,8 +1,4 @@
-/**
- * The discovery pass and the in-memory registration against a real Cordis
- * context, a real `LlmRuntime`, and a fake `/models` endpoint: routes probe,
- * assemble, and register on `ctx.llm` with no settings document involved.
- */
+/** The discovery pass and the in-memory registration against a real Cordis context, a real `LlmRuntime`, and a fake `/models` endpoint: routes probe, */
 
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
@@ -64,10 +60,7 @@ describe('discoverDynamicProviders', () => {
   })
 
   it('enriches a model the bundled catalog misses from the models.dev facts', async () => {
-    // The fixture id is deliberately fictional: a real vendor id drifts into
-    // the bundled pi-ai catalog over time (grok-4.6 did, once 0.85 shipped),
-    // and a catalog-known id stops exercising the models.dev fallback this
-    // test is about — the catalog would fill capacities and win.
+    // The fixture id is deliberately fictional: a real vendor id drifts into the bundled pi-ai catalog over time (grok-4.6 did, once 0.85 shipped),
     const context = await boot()
     server = await startProbeServer({ '/models': { body: JSON.stringify({ data: [{ id: 'acme-future-1' }] }) } })
     const outcome = await discoverDynamicProviders(context, {

@@ -1,10 +1,5 @@
 // @vitest-environment jsdom
-/**
- * The provider card's model editor: the entry button, the stored-profile read
- * that seeds it, the probe that adds models, and the write that lands on the
- * provider's own settings path. The route id and the credential are the
- * provider's own, so neither appears as a field here.
- */
+/** The provider card's model editor: the entry button, the stored-profile read that seeds it, the probe that adds models, and the write that lands on the */
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -108,11 +103,7 @@ async function openDialog(api: DiscoveryApi, configured = true): Promise<void> {
   await waitFor(() => { expect(screen.getByRole('button', { name: '保存' })).toBeDefined() })
 }
 
-/**
- * A provider card in the shape the Models page builds it: the row head with its
- * own buttons, the slot anchor around the extension cell, and — once 编辑 is
- * pressed — the editor as the anchor's next sibling.
- */
+/** A provider card in the shape the Models page builds it: the row head with its own buttons, the slot anchor around the extension cell, and — once 编辑 is */
 function HostCard({ editing, children }: { readonly editing: boolean; readonly children: ReactNode }): ReactNode {
   return (
     <ul>

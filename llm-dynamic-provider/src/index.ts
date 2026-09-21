@@ -13,7 +13,7 @@ import { NamespaceConfig } from './config.ts'
 import { discoverDynamicProviders } from './provider.ts'
 import type { DynamicProviderProfile } from './provider.ts'
 import { catalogReasoningEfforts, discoverEndpoint, enrichModels, resolveDiscoveryConfig } from 'dsh-llm-discovery/engine'
-import { CATALOG_SERVICE, DYNAMIC_PROBE_PATH } from 'dsh-llm-discovery/vocabulary'
+import { CATALOG_SERVICE, DYNAMIC_PROBE_PATH, DYNAMIC_ROUTES_PATH } from 'dsh-llm-discovery/vocabulary'
 import type { CatalogStatus, SharedCatalog } from 'dsh-llm-discovery/vocabulary'
 
 export { Config, NamespaceConfig } from './config.ts'
@@ -69,11 +69,7 @@ export function apply(ctx: Context, config?: Config): void {
   const catalog = ctx.get(CATALOG_SERVICE) as SharedCatalog
   const webServer = ctx.get('webServer') as WebServerFace | undefined
 
-  // The route read/write endpoint. The settings RPC refuses this namespace
-  // until the configurable-provider directory names it, and the directory needs
-  // at least one route, so the write that adds the first route can never pass
-  // through the proxy. The panel therefore talks to this endpoint, which writes
-  // through the settings seam directly. Served only where a web server is mounted.
+  // The route read/write endpoint.
   const readBody = (req: unknown): Promise<unknown> => new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
     // The web server passes a Node IncomingMessage; only its stream events are read.
@@ -96,7 +92,7 @@ export function apply(ctx: Context, config?: Config): void {
   if (webServer !== undefined) {
     ctx.effect(() => webServer.register({
       kind: 'exact',
-      path: '/llm-dynamic-provider/routes',
+      path: DYNAMIC_ROUTES_PATH,
       handler: async (req, res) => {
         const method = (req as { method?: string }).method ?? 'GET'
         if (method === 'GET') {
@@ -167,10 +163,7 @@ export function apply(ctx: Context, config?: Config): void {
     profiles: () => current,
     resolveApiKey: async (provider, profile) => {
       const ref = profile.apiKeyEnv
-      // A route naming no credential is an unauthenticated endpoint. pi-ai's
-      // dialects require some apiKey string to build their client, so an inert
-      // placeholder satisfies the check and the profile's empty Authorization
-      // header keeps the value off the wire.
+      // A route naming no credential is an unauthenticated endpoint.
       if (ref === undefined) return 'dsh-no-key'
       const credentials = ctx.get('credentials')
       const hit = credentials !== undefined
@@ -203,13 +196,7 @@ export function apply(ctx: Context, config?: Config): void {
     return section?.routes ?? {}
   }
 
-  /**
-   * Mirror the declared routes into the LLM configurable-provider directory.
-   * Registration is what places the namespace inside the host proxy's exposed
-   * set, so the Web settings client can read and edit the routes. The directory
-   * follows the declared routes rather than only the successfully probed ones,
-   * so the namespace stays editable while every endpoint is down.
-   */
+  /** Mirror the declared routes into the LLM configurable-provider directory. */
   let directory: DirectoryRegistrationHandle | undefined
   const syncDirectory = (): void => {
     const entries: LlmConfigurableProvider[] = Object.entries(declaredRoutes()).map(([routeKey, route]) => ({
