@@ -3,6 +3,8 @@ import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 
 const modelRowSchema = z.object({
   displayName: z.string().optional(),
+  // 这一条真正对应的 id：数值不同的那家被挪到内部键上时，展示用的是它。
+  sourceId: z.string().optional(),
   // 同样容错：早期解析器把 models.dev 的 null 档位原样存了过来，读回「未声明」。
   levels: z.array(z.string()).optional().catch(undefined),
   inputModalities: z.array(z.string()).optional(),

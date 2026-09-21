@@ -126,6 +126,8 @@ export interface CatalogFact {
   readonly displayName?: string
   readonly contextWindow?: number
   readonly maxTokens?: number
+  /** 这一条真正对应的 id；只有键是内部替身时才有，用来替掉键上的假前缀。 */
+  readonly sourceId?: string
   /** Provider ids that record this model, in file order; the first supplied the facts. */
   readonly sources?: readonly string[]
 }
@@ -137,7 +139,7 @@ export interface CatalogEnvelope {
   /** Accepted and produced modalities per model. */
   readonly modalities: Record<string, { readonly input: readonly string[]; readonly output: readonly string[] }>
   /** Display name and capacities per model, for one the pi-ai catalog does not describe. */
-  readonly facts: Record<string, { readonly name?: string; readonly contextWindow?: number; readonly maxTokens?: number }>
+  readonly facts: Record<string, { readonly name?: string; readonly contextWindow?: number; readonly maxTokens?: number; readonly id?: string }>
   /** Which providers record each key, in file order. */
   readonly sources?: Record<string, readonly string[]>
 }
@@ -146,18 +148,19 @@ export interface CatalogEnvelope {
 export function catalogEnvelope(entries: Iterable<readonly [string, CatalogFact]>): CatalogEnvelope {
   const catalog: Record<string, readonly string[]> = {}
   const modalities: Record<string, { readonly input: readonly string[]; readonly output: readonly string[] }> = {}
-  const facts: Record<string, { readonly name?: string; readonly contextWindow?: number; readonly maxTokens?: number }> = {}
+  const facts: Record<string, { readonly name?: string; readonly contextWindow?: number; readonly maxTokens?: number; readonly id?: string }> = {}
   const sources: Record<string, readonly string[]> = {}
   for (const [name, fact] of entries) {
     if (fact.levels !== undefined) catalog[name] = fact.levels
     if (fact.inputModalities !== undefined || fact.outputModalities !== undefined) {
       modalities[name] = { input: fact.inputModalities ?? [], output: fact.outputModalities ?? [] }
     }
-    if (fact.displayName !== undefined || fact.contextWindow !== undefined || fact.maxTokens !== undefined) {
+    if (fact.displayName !== undefined || fact.contextWindow !== undefined || fact.maxTokens !== undefined || fact.sourceId !== undefined) {
       facts[name] = {
         ...fact.displayName === undefined ? {} : { name: fact.displayName },
         ...fact.contextWindow === undefined ? {} : { contextWindow: fact.contextWindow },
         ...fact.maxTokens === undefined ? {} : { maxTokens: fact.maxTokens },
+        ...fact.sourceId === undefined ? {} : { id: fact.sourceId },
       }
     }
     if (fact.sources !== undefined && fact.sources.length > 0) sources[name] = fact.sources
@@ -183,7 +186,7 @@ function stringsOf(value: unknown): string[] {
 export function mergeCatalogEnvelopes(bodies: readonly unknown[]): CatalogEnvelope {
   const catalog: Record<string, readonly string[]> = {}
   const modalities: Record<string, { readonly input: readonly string[]; readonly output: readonly string[] }> = {}
-  const facts: Record<string, { readonly name?: string; readonly contextWindow?: number; readonly maxTokens?: number }> = {}
+  const facts: Record<string, { readonly name?: string; readonly contextWindow?: number; readonly maxTokens?: number; readonly id?: string }> = {}
   const sources: Record<string, readonly string[]> = {}
   for (const body of bodies) {
     const parsed = entryRecordOf(body)
@@ -206,6 +209,7 @@ export function mergeCatalogEnvelopes(bodies: readonly unknown[]): CatalogEnvelo
         ...typeof fact['name'] === 'string' ? { name: fact['name'] } : {},
         ...typeof fact['contextWindow'] === 'number' ? { contextWindow: fact['contextWindow'] } : {},
         ...typeof fact['maxTokens'] === 'number' ? { maxTokens: fact['maxTokens'] } : {},
+        ...typeof fact['id'] === 'string' ? { id: fact['id'] } : {},
       }
     }
     for (const [name, value] of Object.entries(entryRecordOf(parsed['sources']) ?? {})) {

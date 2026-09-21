@@ -20,15 +20,17 @@ export type ModelModalities = CatalogEnvelope['modalities'][string]
 export interface CatalogTables {
   readonly catalog: Readonly<Record<string, readonly string[]>>
   readonly modalities: Readonly<Record<string, { readonly input?: readonly string[]; readonly output?: readonly string[] }>>
-  readonly facts: Readonly<Record<string, { readonly name?: string; readonly contextWindow?: number; readonly maxTokens?: number }>>
+  readonly facts: Readonly<Record<string, { readonly name?: string; readonly contextWindow?: number; readonly maxTokens?: number; readonly id?: string }>>
   /** Providers behind each key, in file order; absent in a legacy body. */
   readonly sources?: Readonly<Record<string, readonly string[]>>
 }
 
 /** Everything the catalog records for one entry. */
 export interface CatalogEntry {
-  /** The key the catalog stores the entry under. */
+  /** The key the catalog stores the entry under; may be an internal stand-in. */
   readonly key: string
+  /** 这一条真正对应的 id，没有就是键本身（键是内部替身时才不一样）。 */
+  readonly id?: string
   readonly name?: string
   readonly contextWindow?: number
   readonly maxTokens?: number
@@ -70,6 +72,7 @@ export function catalogIndexOf(tables: CatalogTables): CatalogIndex {
       if (levels === undefined && modalities === undefined && facts === undefined) return undefined
       return {
         key,
+        ...facts?.id === undefined ? {} : { id: facts.id },
         ...facts?.name === undefined ? {} : { name: facts.name },
         ...facts?.contextWindow === undefined ? {} : { contextWindow: facts.contextWindow },
         ...facts?.maxTokens === undefined ? {} : { maxTokens: facts.maxTokens },
@@ -149,8 +152,14 @@ export function matchesPickerQuery(entry: CatalogEntry, query: PickerQuery): boo
     return false
   }
   if (query.words.length === 0) return true
-  const haystack = [entry.key.toLowerCase(), (entry.name ?? '').toLowerCase(), ...sources]
+  // 键、真正对应的 id、名称与收录方都算命中面：键是内部替身时，用户看到的与搜的其实是 id。
+  const haystack = [entry.key.toLowerCase(), (entry.id ?? '').toLowerCase(), (entry.name ?? '').toLowerCase(), ...sources]
   return query.words.every(word => haystack.some(part => part.includes(word)))
+}
+
+/** 选择器一行里展示的 id：内部替身键换成这一条真正对应的 id。 */
+export function entryId(entry: CatalogEntry): string {
+  return entry.id ?? entry.key
 }
 
 /** The per-model `input` declaration to write for one entry, or undefined when the catalog records nothing for it or no image support. */

@@ -18,6 +18,12 @@ interface ModelsDevModel {
 /** One model's fact set parsed from models.dev, keyed by the id models.dev records. */
 export interface ModelFacts {
   readonly displayName?: string
+  /**
+   * 这一条真正对应的 id（models.dev 某个 provider 记录的那个）。
+   * 同一个 id 下数值不同的那家会被挪到内部键上（`above/deepseek-v4-flash`、`…~2`），
+   * 那些键不是任何人的 id，所以展示时用这个字段。
+   */
+  readonly sourceId?: string
   /** Normalized; models.dev's `none` becomes `off`. */
   readonly levels?: readonly string[]
   /** Accepted input modalities, filtered to what the pi-ai wire carries. */
@@ -119,10 +125,14 @@ interface RecordGroup {
 /** Store one group's facts under the first candidate key that is free or already carries them. */
 function placeFacts(index: Map<string, ModelFacts>, group: RecordGroup, key: string, candidates: readonly string[]): void {
   const signature = factSignature(group.facts)
-  for (const candidate of [...candidates, `${group.provider}/${key}`, `${group.provider}/${key}~2`, `${group.provider}/${key}~3`]) {
+  // 前几个候选是 models.dev 自己用的键，后面三个是替身（`provider/键`、`键~2/3`）：
+  // 只有落到替身上时才记 sourceId，因为那些键不是任何 provider 的 id。
+  const options = [...candidates, `${group.provider}/${key}`, `${group.provider}/${key}~2`, `${group.provider}/${key}~3`]
+  for (const [position, candidate] of options.entries()) {
+    const named = position < candidates.length ? {} : { sourceId: group.id }
     const existing = index.get(candidate)
     if (existing === undefined) {
-      index.set(candidate, { ...group.facts, sources: [...group.providers] })
+      index.set(candidate, { ...group.facts, ...named, sources: [...group.providers] })
       return
     }
     if (factSignature(existing) === signature) {

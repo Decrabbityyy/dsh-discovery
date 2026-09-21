@@ -421,16 +421,15 @@
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
-.pickerKey {
-  font-family: var(--ds-font-family-code);
-  font-size: 12px;
-  line-height: 18px;
-}
-
+/* 行上只有名字，所以它是主角：长了截断而不是换行，标签紧跟其后。 */
 .pickerName {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 12px;
   line-height: 18px;
-  color: var(--dsw-alias-label-secondary);
 }
 
 /* Whose capacities this entry carries: several providers serve one model. */

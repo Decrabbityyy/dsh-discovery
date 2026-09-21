@@ -14,7 +14,7 @@ afterEach(cleanup)
 interface Tables {
   readonly catalog: Readonly<Record<string, readonly string[]>>
   readonly modalities: Readonly<Record<string, { readonly input?: readonly string[] }>>
-  readonly facts: Readonly<Record<string, { readonly name?: string; readonly contextWindow?: number; readonly maxTokens?: number }>>
+  readonly facts: Readonly<Record<string, { readonly name?: string; readonly contextWindow?: number; readonly maxTokens?: number; readonly id?: string }>>
   readonly sources: Readonly<Record<string, readonly string[]>>
 }
 
@@ -186,6 +186,32 @@ describe('catalog matching', () => {
     // 文本与 @ 可以混写：文本命中 id，@ 只看来源。
     fireEvent.change(search, { target: { value: 'glm @zai' } })
     expect(items()).toEqual(['glm-5.2'])
+  })
+
+  it('shows the id models.dev records when the key is only an internal stand-in', () => {
+    const tables: Tables = {
+      catalog: { 'glm-5.2': ['high'], 'fireworks/glm-5.2': ['low'] },
+      modalities: {},
+      facts: {
+        'glm-5.2': { name: 'GLM-5.2', contextWindow: 200_000 },
+        'fireworks/glm-5.2': { name: 'GLM-5.2', contextWindow: 131_072, id: 'glm-5.2' },
+      },
+      sources: { 'glm-5.2': ['zai-org'], 'fireworks/glm-5.2': ['fireworks'] },
+    }
+    render(<Harness tables={tables} />)
+    fireEvent.click(matchButton('never-heard-of-it'))
+    const picker = (): HTMLElement => screen.getByRole('list')
+
+    // 行上只给名字；真正对应的 id 与内部键都在悬停里，绑定的仍是各自的键。
+    expect(within(picker()).getAllByText('GLM-5.2')).toHaveLength(2)
+    expect(within(picker()).getByTitle('id：glm-5.2')).toBeDefined()
+    expect(within(picker()).getByTitle('id：glm-5.2（目录键 fireworks/glm-5.2）')).toBeDefined()
+    expect(screen.getAllByRole('button', { name: /^把 never-heard-of-it 匹配到 / })
+      .map(button => button.getAttribute('aria-label')))
+      .toEqual([
+        '把 never-heard-of-it 匹配到 glm-5.2',
+        '把 never-heard-of-it 匹配到 fireworks/glm-5.2',
+      ])
   })
 
   it('unpins a row the user had pinned', () => {

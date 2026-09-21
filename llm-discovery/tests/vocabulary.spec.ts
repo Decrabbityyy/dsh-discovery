@@ -245,10 +245,12 @@ describe('parseModelFacts', () => {
       'fireworks': { models: { 'glm-5.2': { name: 'GLM-5.2', limit: { context: 131072 }, modalities: { input: ['text'], output: ['text'] } } } },
     })
     // The first provider holds the id; the disagreeing one keeps its own numbers
-    // under a provider-qualified name instead of being overwritten or dropped.
+    // under a provider-qualified key — which is no provider's id, so it also
+    // records the id it really stands for.
     expect(index.get('glm-5.2')).toEqual({ displayName: 'GLM-5.2', contextWindow: 200000, sources: ['zai-org'] })
     expect(index.get('fireworks/glm-5.2')).toEqual({
       displayName: 'GLM-5.2',
+      sourceId: 'glm-5.2',
       contextWindow: 131072,
       inputModalities: ['text'],
       outputModalities: ['text'],
@@ -295,6 +297,17 @@ describe('catalog envelope', () => {
       modalities: { 'grok-4.6': { input: ['text', 'image'], output: ['text'] } },
       facts: { 'grok-4.6': { name: 'Grok 4.6', contextWindow: 500_000, maxTokens: 500_000 } },
     })
+  })
+
+  it('carries the real id beside a key that is only an internal stand-in', () => {
+    expect(catalogEnvelope([['fireworks/glm-5.2', { displayName: 'GLM-5.2', sourceId: 'glm-5.2', contextWindow: 131072 }]])).toEqual({
+      catalog: {},
+      modalities: {},
+      facts: { 'fireworks/glm-5.2': { name: 'GLM-5.2', contextWindow: 131072, id: 'glm-5.2' } },
+    })
+    expect(mergeCatalogEnvelopes([
+      { facts: { 'glm-5.2': { name: 'GLM-5.2', id: 'glm-5.2' } } },
+    ]).facts['glm-5.2']).toEqual({ name: 'GLM-5.2', id: 'glm-5.2' })
   })
 
   it('records which providers supplied a key, and omits the table when none did', () => {

@@ -4,7 +4,9 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-api-remotes/client'
 import clsx from 'clsx'
-import { catalogIndexOf, catalogSearchSeed, matchCatalogEntry, matchesPickerQuery, parsePickerQuery } from './discovery.ts'
+import {
+  catalogIndexOf, catalogSearchSeed, entryId, matchCatalogEntry, matchesPickerQuery, parsePickerQuery,
+} from './discovery.ts'
 import type { CatalogEntry, CatalogIndex, CatalogMatch } from './discovery.ts'
 import { formatCapacity, formatCapacityPair, levelMarks } from './format.ts'
 import styles from './styles.module.css'
@@ -109,6 +111,12 @@ function sourceTitle(entry: CatalogEntry): string | undefined {
   return entry.sources.length === 0 ? undefined : `收录它的 provider：${entry.sources.join('、')}`
 }
 
+/** 行上不给 id，悬停时补上：真正对应的那个，加内部键（不一样时才写）。 */
+function pickerIds(entry: CatalogEntry): string {
+  const id = entryId(entry)
+  return id === entry.key ? `id：${id}` : `id：${id}（目录键 ${entry.key}）`
+}
+
 /** 名称格：这一行解析到的名字，以及指定目录条目的那个按钮。 */
 function MatchCell(props: {
   readonly id: string
@@ -196,11 +204,14 @@ export function ModelResultsTable(props: ModelResultsTableProps): ReactNode {
   }, [catalogEntries, pickerFor, pickerQueryParsed])
   const pickerRanked = useMemo(() => {
     const search = pickerQuery.trim().toLowerCase()
+    const idOf = (entry: CatalogEntry): string => entryId(entry).toLowerCase()
     return [...pickerOptions]
       .sort((left, right) => {
-        const rank = Number(!left.key.toLowerCase().startsWith(search))
-          - Number(!right.key.toLowerCase().startsWith(search))
-        return rank === 0 ? left.key.localeCompare(right.key) : rank
+        // 按 id 排名（搜索框里的种子就是 id），同名之间按名字排——行上只有名字。
+        const rank = Number(!idOf(left).startsWith(search)) - Number(!idOf(right).startsWith(search))
+        if (rank !== 0) return rank
+        const byName = (left.name ?? '').localeCompare(right.name ?? '')
+        return byName === 0 ? idOf(left).localeCompare(idOf(right)) : byName
       })
       .slice(0, PICKER_LIMIT)
   }, [pickerOptions, pickerQuery])
@@ -363,8 +374,8 @@ export function ModelResultsTable(props: ModelResultsTableProps): ReactNode {
                                                 aria-label={`把 ${model.id} 匹配到 ${option.key}`}
                                                 onClick={() => { onBind(model.id, option.key); closePicker() }}
                                               >
-                                                <span className={styles['pickerKey']}>{option.key}</span>
-                                                <span className={styles['pickerName']}>{option.name ?? '—'}</span>
+                                                {/* 行上只给名字：id 留给搜索与悬停——有些键是内部替身，摆出来反而误导。 */}
+                                                <span className={styles['pickerName']} title={pickerIds(option)}>{option.name ?? '—'}</span>
                                                 <span className={styles['pickerSource']} title={sourceTitle(option)}>{pickerSource(option)}</span>
                                                 <PickerMeta entry={option} />
                                               </button>

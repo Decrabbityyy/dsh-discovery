@@ -4,8 +4,8 @@ import { UI_CATALOG_PATH } from 'dsh-llm-discovery/vocabulary'
 import { CUSTOM_PRESET, ENGINE_PRESETS, PROTOCOLS } from '../src/client/presets.ts'
 import {
   catalogKeyCandidates, catalogIndexOf, catalogSearchSeed, CREDENTIAL_REF_PATTERN, declaredInput, deriveKeyRef,
-  DISCOVERY_NS, DISCOVERY_PLUGIN, DYNAMIC_PLUGIN, isActivePlugin, matchCatalogEntry, matchesPickerQuery, messageOf,
-  modelDeclaration, parsePickerQuery, boundLevels,
+  DISCOVERY_NS, DISCOVERY_PLUGIN, DYNAMIC_PLUGIN, entryId, isActivePlugin, matchCatalogEntry, matchesPickerQuery,
+  messageOf, modelDeclaration, parsePickerQuery, boundLevels,
   PI_AI_NS, providerProfileOf, ROUTE_PATTERN,
 } from '../src/client/discovery.ts'
 import type { CatalogEntry } from '../src/client/discovery.ts'
@@ -362,6 +362,17 @@ describe('picker query', () => {
     expect(matchesPickerQuery(glm, parsePickerQuery('glm @nano'))).toBe(false)
     expect(matchesPickerQuery(glm, parsePickerQuery('glm 5.2'))).toBe(true)
     expect(matchesPickerQuery(glm, parsePickerQuery('glm qwen'))).toBe(false)
+  })
+})
+
+describe('entryId', () => {
+  const entry = (key: string, id?: string): CatalogEntry =>
+    ({ key, ...id === undefined ? {} : { id }, input: [], levels: [], sources: [] })
+
+  it('prefers the id models.dev records over an internal stand-in key', () => {
+    expect(entryId(entry('fireworks/glm-5.2', 'glm-5.2'))).toBe('glm-5.2')
+    expect(entryId(entry('glm-5.2', 'glm-5.2'))).toBe('glm-5.2')
+    expect(entryId(entry('glm-5.2'))).toBe('glm-5.2')
   })
 })
 
