@@ -6,11 +6,11 @@
 
 import { describe, expect, it } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
-import { parseModelFacts } from '../src/models-dev.ts'
-import { modelCatalogDomainSpec } from '../src/store-spec.ts'
-import { CATALOG_RECORD, catalogEntries, factsOfRow, openModelCatalog, refreshModelCatalog } from '../src/store.ts'
-import type { OpenedCatalog } from '../src/store.ts'
-import type { CatalogRow, ModelRow } from '../src/store-spec.ts'
+import { parseModelFacts } from '../../src/catalog/models-dev.ts'
+import { modelCatalogDomainSpec } from '../../src/catalog/spec.ts'
+import { CATALOG_RECORD, catalogEntries, factsOfRow, openModelCatalog, refreshModelCatalog } from '../../src/catalog/service.ts'
+import type { OpenedCatalog } from '../../src/catalog/service.ts'
+import type { CatalogRow, ModelRow } from '../../src/catalog/spec.ts'
 
 /** A scripted response the fetch mock replays. */
 interface Script {

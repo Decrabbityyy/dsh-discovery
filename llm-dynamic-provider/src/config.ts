@@ -1,5 +1,5 @@
 import z from '@deepseek-ai/schemastery'
-import { ROUTE_PROTOCOLS } from 'dsh-llm-endpoint-base'
+import { ROUTE_PROTOCOLS } from 'dsh-llm-discovery/engine'
 
 export { ROUTE_PROTOCOLS }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ModelFacts } from 'dsh-llm-endpoint-base'
+import type { ModelFacts } from 'dsh-llm-discovery/engine'
 import { enrichModelsFromOnline } from '../src/index.ts'
 
 describe('models.dev enrichment', () => {

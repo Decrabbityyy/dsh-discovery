@@ -59,20 +59,30 @@ importers:
       '@deepseek-ai/dsh-llm':
         specifier: ^0.1.5-rc.2
         version: 0.1.5-rc.2(@deepseek-ai/cordis@4.0.2)
+      '@deepseek-ai/dsh-storage':
+        specifier: ^0.1.5-rc.2
+        version: 0.1.5-rc.2(@deepseek-ai/cordis@4.0.2)
+      '@deepseek-ai/dsh-storage-domain':
+        specifier: ^0.1.5-rc.2
+        version: 0.1.5-rc.2(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.5-rc.2(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-storage@0.1.5-rc.2(@deepseek-ai/cordis@4.0.2))
       '@deepseek-ai/schemastery':
         specifier: ^3.18.2
         version: 3.18.2
       '@earendil-works/pi-ai':
         specifier: ^0.85.1
         version: 0.85.1(ws@8.21.3)(zod@4.4.3)
-      dsh-llm-endpoint-base:
-        specifier: workspace:*
-        version: link:../llm-endpoint-base
       tsdown:
         specifier: ^0.22.2
         version: 0.22.14(typescript@6.0.3)
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
 
   llm-dynamic-provider:
+    dependencies:
+      dsh-llm-discovery:
+        specifier: workspace:*
+        version: link:../llm-discovery
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: ^4.0.2
@@ -107,36 +117,6 @@ importers:
       '@earendil-works/pi-ai':
         specifier: ^0.85.1
         version: 0.85.1(ws@8.21.3)(zod@4.4.3)
-      dsh-llm-endpoint-base:
-        specifier: workspace:*
-        version: link:../llm-endpoint-base
-      tsdown:
-        specifier: ^0.22.2
-        version: 0.22.14(typescript@6.0.3)
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
-
-  llm-endpoint-base:
-    devDependencies:
-      '@deepseek-ai/cordis':
-        specifier: ^4.0.2
-        version: 4.0.2(@deepseek-ai/cordis-plugin-include@1.0.7)(@deepseek-ai/cordis-plugin-loader@1.0.3)
-      '@deepseek-ai/dsh-llm':
-        specifier: ^0.1.5-rc.2
-        version: 0.1.5-rc.2(@deepseek-ai/cordis@4.0.2)
-      '@deepseek-ai/dsh-storage':
-        specifier: ^0.1.5-rc.2
-        version: 0.1.5-rc.2(@deepseek-ai/cordis@4.0.2)
-      '@deepseek-ai/dsh-storage-domain':
-        specifier: ^0.1.5-rc.2
-        version: 0.1.5-rc.2(@deepseek-ai/cordis@4.0.2)(@deepseek-ai/dsh-invariants@0.1.5-rc.2(@deepseek-ai/cordis@4.0.2))(@deepseek-ai/dsh-storage@0.1.5-rc.2(@deepseek-ai/cordis@4.0.2))
-      '@deepseek-ai/schemastery':
-        specifier: ^3.18.2
-        version: 3.18.2
-      '@earendil-works/pi-ai':
-        specifier: ^0.85.1
-        version: 0.85.1(ws@8.21.3)(zod@4.4.3)
       tsdown:
         specifier: ^0.22.2
         version: 0.22.14(typescript@6.0.3)
@@ -149,6 +129,9 @@ importers:
       clsx:
         specifier: ^2.0.0
         version: 2.1.1
+      dsh-llm-discovery:
+        specifier: workspace:*
+        version: link:../llm-discovery
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: ^4.0.2
@@ -174,9 +157,6 @@ importers:
       '@deepseek-ai/dsh-invariants':
         specifier: ^0.1.5-rc.2
         version: 0.1.5-rc.2(@deepseek-ai/cordis@4.0.2)
-      dsh-llm-endpoint-base:
-        specifier: workspace:*
-        version: link:../llm-endpoint-base
       lightningcss:
         specifier: ^1.32.0
         version: 1.33.0

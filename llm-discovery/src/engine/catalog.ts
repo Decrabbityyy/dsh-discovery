@@ -1,6 +1,6 @@
 import { getSupportedThinkingLevels } from '@earendil-works/pi-ai'
 import { getBuiltinModels, getBuiltinProviders } from '@earendil-works/pi-ai/providers/all'
-import type { ModelModalities, ModelModality } from './models-dev.ts'
+import type { ModelModalities, ModelModality } from '../catalog/models-dev.ts'
 
 /** A level → wire spelling map; only `off` may map to `null`. */
 export type ReasoningEfforts = Record<string, string | null>

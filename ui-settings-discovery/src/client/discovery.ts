@@ -2,8 +2,8 @@ import type { LlmDiscoveredModel, LlmModelDiscoveryRequest, RpcResponse } from '
 import {
   catalogKeyCandidates, catalogKeyIndexOf, CREDENTIAL_REF_PATTERN, DISCOVERY_NS, DYNAMIC_CACHE_PATH, DYNAMIC_NS,
   mergeCatalogEnvelopes, PI_AI_NS, ROUTE_PATTERN, resolveCatalogKey, UI_CATALOG_PATH, deriveKeyRef, messageOf,
-} from 'dsh-llm-endpoint-base/vocabulary'
-import type { CatalogEnvelope, CatalogKeyIndex } from 'dsh-llm-endpoint-base/vocabulary'
+} from 'dsh-llm-discovery/vocabulary'
+import type { CatalogEnvelope, CatalogKeyIndex } from 'dsh-llm-discovery/vocabulary'
 import { reasoningEffortsOf } from './presets.ts'
 
 export {

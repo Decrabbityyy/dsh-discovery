@@ -9,7 +9,7 @@ import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import { assertUsableApiKey, LlmError, resolveRetryPolicy } from '@deepseek-ai/dsh-llm'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ResolvedPiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
-import { discoverEndpoint, enrichModels, resolveDiscoveryConfig, catalogReasoningEfforts } from 'dsh-llm-endpoint-base'
+import { discoverEndpoint, enrichModels, resolveDiscoveryConfig, catalogReasoningEfforts } from 'dsh-llm-discovery/engine'
 import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-llm'
 import type { Config, RouteProfile } from './config.ts'
 

@@ -5,16 +5,16 @@
  * `input` modalities are what let that model accept an image at all. Only this
  * browser half consumes that data, so this package owns the endpoint that
  * serves it: the models.dev snapshot is parsed here through the shared
- * `dsh-llm-endpoint-base/models-dev` entry (no pi-ai dependency) and answered
+ * `dsh-llm-discovery/catalog/models-dev` entry (no pi-ai dependency) and answered
  * on {@link UI_CATALOG_PATH}. Mounting the plugin without a web server — or
  * with the section never opened — costs one background fetch and no route.
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { MODELS_DEV_URL, parseModelFacts } from 'dsh-llm-endpoint-base/models-dev'
-import type { ModelFacts } from 'dsh-llm-endpoint-base/models-dev'
-import { catalogEnvelope, UI_CATALOG_PATH } from 'dsh-llm-endpoint-base/vocabulary'
-import type { CatalogEnvelope } from 'dsh-llm-endpoint-base/vocabulary'
+import { MODELS_DEV_URL, parseModelFacts } from 'dsh-llm-discovery/catalog/models-dev'
+import type { ModelFacts } from 'dsh-llm-discovery/catalog/models-dev'
+import { catalogEnvelope, UI_CATALOG_PATH } from 'dsh-llm-discovery/vocabulary'
+import type { CatalogEnvelope } from 'dsh-llm-discovery/vocabulary'
 
 /** How long the mount-time models.dev snapshot may take before it reads as empty. */
 const MODELS_DEV_TIMEOUT_MS = 15_000

@@ -1,7 +1,7 @@
 {
   // Self-contained client compiler shape: harness types resolve from
-  // node_modules (@alpha/@next); only the workspace endpoint-base is a project
-  // reference. Browser library API + React JSX, no ambient node types.
+  // node_modules (@alpha/@next); only the workspace discovery package is a
+  // project reference. Browser library API + React JSX, no ambient node types.
   "compilerOptions": {
     "target": "es2024",
     "module": "esnext",
@@ -33,7 +33,7 @@
   ],
   "references": [
     {
-      "path": "../llm-endpoint-base"
+      "path": "../llm-discovery"
     }
   ]
 }

@@ -4,8 +4,8 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { resolveDiscoveryConfig } from '../src/config.ts'
-import { enrichModels } from '../src/enrich.ts'
+import { resolveDiscoveryConfig } from '../../src/engine/config.ts'
+import { enrichModels } from '../../src/engine/enrich.ts'
 
 describe('enrichModels', () => {
   it('fills every undisclosed field of a catalog-known id', () => {

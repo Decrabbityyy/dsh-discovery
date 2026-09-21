@@ -1,4 +1,4 @@
-import { normalizeModelName } from './vocabulary.ts'
+import { normalizeModelName } from '../vocabulary.ts'
 
 export { normalizeModelName }
 

@@ -1,5 +1,4 @@
 packages:
-  - 'llm-endpoint-base'
   - 'llm-discovery'
   - 'ui-settings-discovery'
   - 'llm-dynamic-provider'

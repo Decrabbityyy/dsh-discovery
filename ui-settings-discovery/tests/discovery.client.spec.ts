@@ -1,6 +1,6 @@
 /** Wire constants, derivation helpers, and presets of the discovery section. */
 import { describe, expect, it } from 'vitest'
-import { UI_CATALOG_PATH } from 'dsh-llm-endpoint-base/vocabulary'
+import { UI_CATALOG_PATH } from 'dsh-llm-discovery/vocabulary'
 import { CUSTOM_PRESET, ENGINE_PRESETS, PROTOCOLS } from '../src/client/presets.ts'
 import {
   catalogKeyCandidates, catalogIndexOf, catalogSearchSeed, CREDENTIAL_REF_PATTERN, declaredInput, deriveKeyRef,

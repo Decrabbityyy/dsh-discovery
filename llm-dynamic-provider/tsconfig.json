@@ -1,6 +1,6 @@
 {
   // Self-contained: harness deps resolve from node_modules (@alpha/@next); the
-  // only project reference is the workspace endpoint-base package.
+  // only project reference is the workspace discovery package.
   "compilerOptions": {
     "target": "es2024",
     "module": "esnext",
@@ -31,7 +31,7 @@
   ],
   "references": [
     {
-      "path": "../llm-endpoint-base"
+      "path": "../llm-discovery"
     }
   ]
 }

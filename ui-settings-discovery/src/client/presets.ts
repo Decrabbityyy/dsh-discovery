@@ -1,4 +1,4 @@
-import { ROUTE_PROTOCOLS, THINKING_LEVELS, reasoningEffortsOf } from 'dsh-llm-endpoint-base/vocabulary'
+import { ROUTE_PROTOCOLS, THINKING_LEVELS, reasoningEffortsOf } from 'dsh-llm-discovery/vocabulary'
 
 export { ROUTE_PROTOCOLS as PROTOCOLS, THINKING_LEVELS, reasoningEffortsOf }
 

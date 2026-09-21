@@ -1,16 +1,14 @@
 import { defineConfig } from 'tsdown'
 
-// Self-contained transpile. The shared endpoint-base primitives are dev-linked
-// and INLINED so the tarball works without a separate install; harness-side
-// peers stay bare and resolve from the installation's dependency closure at
-// runtime.
+// The shared discovery primitives are inlined so the plugin tarball needs no
+// extra install; harness-side peers stay external and resolve from the installation.
 export default defineConfig({
   entry: ['src/index.ts', 'src/invariant.ts'],
   outDir: 'lib',
   format: ['esm'],
   deps: {
     neverBundle: [/^@deepseek-ai\//, /^@earendil-works\//],
-    alwaysBundle: ['dsh-llm-endpoint-base', 'dsh-llm-endpoint-base/store'],
+    alwaysBundle: ['dsh-llm-discovery/engine', 'dsh-llm-discovery/vocabulary', 'dsh-llm-discovery/catalog/service'],
   },
   dts: false,
   clean: false,

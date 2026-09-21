@@ -16,7 +16,7 @@ import Include from '@deepseek-ai/cordis-plugin-include'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
 import * as discovery from '../src/index.ts'
 import { DISCOVERY_NAMESPACE } from '../src/index.ts'
-import { startProbeServer } from './server.ts'
+import { startProbeServer } from './support/server.ts'
 
 let root: string | undefined
 let context: Context | undefined

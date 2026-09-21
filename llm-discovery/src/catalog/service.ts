@@ -2,8 +2,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import { MODELS_DEV_URL, parseModelFacts } from './models-dev.ts'
 import type { ModelFacts } from './models-dev.ts'
 import type { Domain, KvTable } from '@deepseek-ai/dsh-storage-domain'
-import type { modelCatalogDomainSpec } from './store-spec.ts'
-import type { CatalogMeta, CatalogRow, ModelRow } from './store-spec.ts'
+import type { modelCatalogDomainSpec } from './spec.ts'
+import type { CatalogMeta, CatalogRow, ModelRow } from './spec.ts'
 
 /** The minimal storage-domain face this plugin reads. */
 interface StorageDomainFace {
@@ -38,9 +38,9 @@ export async function openModelCatalog(ctx: Context): Promise<OpenedCatalog | un
   if (storageDomain === undefined) return undefined
   // Loaded lazily: the spec carries the storage-domain and zod runtime values,
   // which the in-memory path must not need.
-  const { modelCatalogDomainSpec } = await import('./store-spec.ts')
+  const { modelCatalogDomainSpec } = await import('./spec.ts')
   const domain = await storageDomain.open(modelCatalogDomainSpec)
-  ctx.effect(() => () => domain.close(), 'llm-dynamic-provider: model catalog close')
+  ctx.effect(() => () => domain.close(), 'llm-discovery: model catalog close')
   return { domain, catalog: domain.table('catalog') }
 }
 

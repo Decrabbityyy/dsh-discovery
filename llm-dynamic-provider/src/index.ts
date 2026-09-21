@@ -15,18 +15,18 @@ import type { Config, DynamicSection } from './config.ts'
 import { NamespaceConfig } from './config.ts'
 import { assembleProfile, discoverDynamicProviders, toModel } from './provider.ts'
 import type { DynamicProviderProfile } from './provider.ts'
-import { catalogEntries, factsOfRow, openModelCatalog, refreshModelCatalog } from 'dsh-llm-endpoint-base/store'
-import type { OpenedCatalog } from 'dsh-llm-endpoint-base/store'
+import { catalogEntries, factsOfRow, openModelCatalog, refreshModelCatalog } from 'dsh-llm-discovery/catalog/service'
+import type { OpenedCatalog } from 'dsh-llm-discovery/catalog/service'
 import {
   catalogInputModalities, catalogKeyIndexOf, catalogReasoningEfforts, discoverEndpoint, DYNAMIC_CACHE_PATH,
   enrichModels, MODELS_DEV_URL, parseModelFacts, resolveCatalogKey, resolveDiscoveryConfig,
-} from 'dsh-llm-endpoint-base'
-import type { ModelFacts } from 'dsh-llm-endpoint-base'
+} from 'dsh-llm-discovery/engine'
+import type { ModelFacts } from 'dsh-llm-discovery/engine'
 
 export { Config, NamespaceConfig } from './config.ts'
 export type { DynamicSection, RouteProfile } from './config.ts'
-export { catalogReasoningEfforts } from 'dsh-llm-endpoint-base'
-export type { ReasoningEfforts } from 'dsh-llm-endpoint-base'
+export { catalogReasoningEfforts } from 'dsh-llm-discovery/engine'
+export type { ReasoningEfforts } from 'dsh-llm-discovery/engine'
 export { assembleProfile, discoverDynamicProviders, toModel } from './provider.ts'
 export type { DiscoveryDeps, DiscoveryOutcome, DynamicProviderProfile } from './provider.ts'
 

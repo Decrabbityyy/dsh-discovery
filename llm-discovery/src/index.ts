@@ -2,13 +2,13 @@ import type { Context } from '@deepseek-ai/cordis'
 import {
   catalogKeyIndexOf, DISCOVERY_NAMESPACE, discoverEndpoint, enrichModels, MODELS_DEV_URL, parseModelFacts,
   resolveCatalogKey, resolveDiscoveryConfig,
-} from 'dsh-llm-endpoint-base'
-import type { Config, ModelFacts } from 'dsh-llm-endpoint-base'
+} from './engine.ts'
+import type { Config, ModelFacts } from './engine.ts'
 import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-llm'
 
-export { Config, resolveDiscoveryConfig } from 'dsh-llm-endpoint-base'
-export type { EngineSwitches, ResolvedDiscoveryConfig } from 'dsh-llm-endpoint-base'
-export { DISCOVERY_NAMESPACE, discoverEndpoint, enrichModels } from 'dsh-llm-endpoint-base'
+export { Config, resolveDiscoveryConfig } from './engine.ts'
+export type { EngineSwitches, ResolvedDiscoveryConfig } from './engine.ts'
+export { DISCOVERY_NAMESPACE, discoverEndpoint, enrichModels } from './engine.ts'
 
 export const name = 'llm-discovery'
 /** Service dependency: the LLM registry the discovery offer registers on. */

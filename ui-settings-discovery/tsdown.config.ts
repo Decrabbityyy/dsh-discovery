@@ -36,7 +36,7 @@ export default defineConfig([{
   entry: ['src/index.ts', 'src/invariant.ts'],
   outDir: 'lib',
   format: ['esm'],
-  deps: { neverBundle: [/^@deepseek-ai\//, 'react', 'react-dom'], alwaysBundle: ['dsh-llm-endpoint-base/models-dev', 'dsh-llm-endpoint-base/vocabulary'] },
+  deps: { neverBundle: [/^@deepseek-ai\//, 'react', 'react-dom'], alwaysBundle: ['dsh-llm-discovery/catalog/models-dev', 'dsh-llm-discovery/vocabulary'] },
   dts: false,
   // tsc emits lib/types into the same tree in this package's build; tsdown's
   // default outDir cleanup would delete it.
@@ -47,7 +47,7 @@ export default defineConfig([{
   entry: { client: 'src/client/index.ts' },
   outDir: 'lib',
   format: ['cjs'],
-  deps: { neverBundle: [...CLIENT_EXTERNALS], alwaysBundle: ['clsx', 'dsh-llm-endpoint-base/vocabulary'] },
+  deps: { neverBundle: [...CLIENT_EXTERNALS], alwaysBundle: ['clsx', 'dsh-llm-discovery/vocabulary'] },
   dts: false,
   clean: false,
   plugins: [{

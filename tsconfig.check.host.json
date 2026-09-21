@@ -13,15 +13,15 @@
     "sourceMap": false,
     "noEmit": true,
     "paths": {
-      "dsh-llm-endpoint-base": ["./llm-endpoint-base/src/index.ts"],
-      "dsh-llm-endpoint-base/store": ["./llm-endpoint-base/src/store.ts"],
-      "dsh-llm-endpoint-base/models-dev": ["./llm-endpoint-base/src/models-dev.ts"],
-      "dsh-llm-endpoint-base/vocabulary": ["./llm-endpoint-base/src/vocabulary.ts"]
+      "dsh-llm-discovery": ["./llm-discovery/src/index.ts"],
+      "dsh-llm-discovery/engine": ["./llm-discovery/src/engine.ts"],
+      "dsh-llm-discovery/vocabulary": ["./llm-discovery/src/vocabulary.ts"],
+      "dsh-llm-discovery/catalog/models-dev": ["./llm-discovery/src/catalog/models-dev.ts"],
+      "dsh-llm-discovery/catalog/service": ["./llm-discovery/src/catalog/service.ts"]
     }
   },
   "include": [
-    "llm-endpoint-base/src",
-    "llm-endpoint-base/tests",
+
     "llm-discovery/src",
     "llm-discovery/tests",
     "llm-dynamic-provider/src",

@@ -21,8 +21,8 @@ import {
   reasoningEffortsOf,
   resolveCatalogKey,
 } from '../src/vocabulary.ts'
-import { inputModalitiesOf } from '../src/catalog.ts'
-import { MODELS_DEV_URL, normalizeLevel, normalizeModelName, parseCatalog, parseModalities, parseModelFacts } from '../src/models-dev.ts'
+import { inputModalitiesOf } from '../src/engine/catalog.ts'
+import { MODELS_DEV_URL, normalizeLevel, normalizeModelName, parseCatalog, parseModalities, parseModelFacts } from '../src/catalog/models-dev.ts'
 
 describe('vocabulary', () => {
   it('lists the wire protocols in the order the dialects were added', () => {

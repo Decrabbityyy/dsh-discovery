@@ -47,7 +47,9 @@
     "test": "vitest run",
     "prepublishOnly": "pnpm run test && pnpm run build"
   },
-  "dependencies": {},
+  "dependencies": {
+    "dsh-llm-discovery": "workspace:*"
+  },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",
     "@deepseek-ai/dsh-credentials": "^0.1.5-rc.2",
@@ -60,7 +62,7 @@
     "@deepseek-ai/dsh-storage-domain": "^0.1.5-rc.2",
     "@deepseek-ai/schemastery": "^3.18.2",
     "@earendil-works/pi-ai": "^0.85.1",
-    "dsh-llm-endpoint-base": "workspace:*",
+    "dsh-llm-discovery": "workspace:*",
     "tsdown": "^0.22.2",
     "zod": "^4.4.3"
   },

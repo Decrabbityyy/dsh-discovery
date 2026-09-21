@@ -7,7 +7,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { UI_CATALOG_PATH } from 'dsh-llm-endpoint-base/vocabulary'
+import { UI_CATALOG_PATH } from 'dsh-llm-discovery/vocabulary'
 import { apply } from '../src/index.ts'
 
 /** One models.dev body carrying a vision model and a text-only one. */

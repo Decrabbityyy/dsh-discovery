@@ -7,11 +7,11 @@
 import { createServer as createNetServer } from 'node:net'
 import type { AddressInfo } from 'node:net'
 import { describe, expect, it } from 'vitest'
-import { resolveDiscoveryConfig } from '../src/config.ts'
-import type { ResolvedDiscoveryConfig } from '../src/config.ts'
-import { discoverEndpoint } from '../src/discover.ts'
-import { startProbeServer } from './server.ts'
-import type { ProbeServer, RouteTable } from './server.ts'
+import { resolveDiscoveryConfig } from '../../src/engine/config.ts'
+import type { ResolvedDiscoveryConfig } from '../../src/engine/config.ts'
+import { discoverEndpoint } from '../../src/engine/discover.ts'
+import { startProbeServer } from '../support/server.ts'
+import type { ProbeServer, RouteTable } from '../support/server.ts'
 
 const config = resolveDiscoveryConfig(undefined)
 

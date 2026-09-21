@@ -5,9 +5,9 @@
 
 import { describe, expect, it } from 'vitest'
 import { INVALID_CREDENTIAL_CODE, LlmError } from '@deepseek-ai/dsh-llm'
-import { resolveDiscoveryConfig } from '../src/config.ts'
-import { discoverEndpoint } from '../src/discover.ts'
-import { startProbeServer } from './server.ts'
+import { resolveDiscoveryConfig } from '../../src/engine/config.ts'
+import { discoverEndpoint } from '../../src/engine/discover.ts'
+import { startProbeServer } from '../support/server.ts'
 
 const config = resolveDiscoveryConfig(undefined)
 
