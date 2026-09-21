@@ -270,6 +270,8 @@ function ProviderModelsDialog({ api, provider, onClose }: ProviderModelsDialogPr
         setSaveError(response.error.message)
         return
       }
+      // The write bumped the revision: keep it, or the next save in this dialog reads as stale.
+      if (typeof response.value?.revision === 'number') setRevision(response.value.revision)
       setProfile(current => ({ ...current, models }))
       setSaved(true)
     } catch (error) {

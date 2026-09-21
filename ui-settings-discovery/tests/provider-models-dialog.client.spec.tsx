@@ -344,6 +344,31 @@ describe('provider models dialog', () => {
     }])
   })
 
+  it('keeps the revision a save returned so a second save in the same dialog is not refused', async () => {
+    let current = REVISION
+    const mutate = vi.fn((_ns: string, _ops: unknown, expected: number) => {
+      if (expected !== current) {
+        return Promise.resolve({
+          ok: false,
+          error: { code: 'settings/conflict', message: `settings namespace "llm-pi-ai" changed since it was read (expected revision ${expected}, now ${current})` },
+        })
+      }
+      current += 1
+      return Promise.resolve(ok({ ns: 'llm-pi-ai', value: {}, revision: current }))
+    })
+    const { api } = scripted({ mutate })
+    await openDialog(api)
+
+    fireEvent.click(saveButton())
+    await waitFor(() => { expect(mutate.mock.calls).toHaveLength(1) })
+    fireEvent.click(saveButton())
+    await waitFor(() => { expect(mutate.mock.calls).toHaveLength(2) })
+
+    expect(mutate.mock.calls[0]?.[2]).toBe(REVISION)
+    expect(mutate.mock.calls[1]?.[2]).toBe(REVISION + 1)
+    expect(screen.queryByText(/changed since it was read/)).toBeNull()
+  })
+
   it('closes the catalog picker on Escape without closing the dialog', async () => {
     const { api } = scripted()
     await openDialog(api)

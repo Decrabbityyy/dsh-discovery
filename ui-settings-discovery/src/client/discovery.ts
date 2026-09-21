@@ -343,8 +343,8 @@ export interface DiscoveryApi {
   }
   readonly settings: {
     describe(): Promise<DiscoveryResponse<SettingsDescribeWireValue>>
-    /** Refused when the expected revision is stale. */
-    mutate(ns: string, ops: readonly SettingsWireOp[], expectedRevision: number): Promise<DiscoveryResponse<unknown>>
+    /** Refused when the expected revision is stale; the answer carries the written namespace view with its new revision. */
+    mutate(ns: string, ops: readonly SettingsWireOp[], expectedRevision: number): Promise<DiscoveryResponse<SettingsNamespaceWireView>>
   }
   readonly credentials: {
     set(ref: string, value: string): Promise<DiscoveryResponse<unknown>>
