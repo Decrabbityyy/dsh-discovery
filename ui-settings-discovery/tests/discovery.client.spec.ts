@@ -5,6 +5,7 @@ import { CUSTOM_PRESET, ENGINE_PRESETS, PROTOCOLS } from '../src/client/presets.
 import {
   catalogKeyCandidates, catalogIndexOf, catalogSearchSeed, CREDENTIAL_REF_PATTERN, declaredInput, deriveKeyRef,
   DISCOVERY_NS, DISCOVERY_PLUGIN, DYNAMIC_PLUGIN, isActivePlugin, matchCatalogEntry, messageOf, modelDeclaration,
+  boundLevels,
   PI_AI_NS, providerProfileOf, ROUTE_PATTERN,
 } from '../src/client/discovery.ts'
 import type { CatalogEntry } from '../src/client/discovery.ts'
@@ -208,12 +209,13 @@ describe('providerProfileOf', () => {
 
 describe('modelDeclaration', () => {
   const entry: CatalogEntry = { key: 'qwen2.5:7b', name: 'Qwen 2.5 7B', input: ['text', 'image'], levels: ['off', 'low'], sources: [] }
+  const auto = { key: 'qwen2.5:7b', entry, bound: false }
 
   it('writes the picked levels, the matched image claim, and the name the row displayed', () => {
     expect(modelDeclaration(
       { id: 'qwen2.5:7b', contextWindow: 32768 },
       new Set(['off', 'high']),
-      entry,
+      auto,
     )).toEqual({
       id: 'qwen2.5:7b',
       name: 'Qwen 2.5 7B',
@@ -235,8 +237,8 @@ describe('modelDeclaration', () => {
     })
   })
 
-  it('prefers what the endpoint disclosed over the entry it matched', () => {
-    expect(modelDeclaration({ id: 'qwen2.5:7b', name: 'Local Qwen', maxTokens: 4096 }, new Set(), entry)).toEqual({
+  it('prefers what the endpoint disclosed over the entry an id resolved to on its own', () => {
+    expect(modelDeclaration({ id: 'qwen2.5:7b', name: 'Local Qwen', maxTokens: 4096 }, new Set(), auto)).toEqual({
       id: 'qwen2.5:7b',
       name: 'Local Qwen',
       maxTokens: 4096,
@@ -244,9 +246,45 @@ describe('modelDeclaration', () => {
     })
   })
 
+  it('writes the entry the user pinned over the name and capacities the row carried', () => {
+    const rich: CatalogEntry = { ...entry, contextWindow: 262144, maxTokens: 32768 }
+    expect(modelDeclaration(
+      { id: 'qwen2.5:7b', name: 'Local Qwen', contextWindow: 4096 },
+      new Set(['low']),
+      { key: 'qwen2.5:7b', entry: rich, bound: true },
+    )).toEqual({
+      id: 'qwen2.5:7b',
+      name: 'Qwen 2.5 7B',
+      contextWindow: 262144,
+      maxTokens: 32768,
+      input: ['text', 'image'],
+      reasoningEfforts: { low: 'low' },
+    })
+  })
+
   it('writes no input when the entry records no image support', () => {
-    expect(modelDeclaration({ id: 'llama3.2:1b' }, new Set(), { key: 'llama3.2:1b', input: ['text'], levels: [], sources: [] }))
-      .toEqual({ id: 'llama3.2:1b' })
+    expect(modelDeclaration(
+      { id: 'llama3.2:1b' },
+      new Set(),
+      { key: 'llama3.2:1b', entry: { key: 'llama3.2:1b', input: ['text'], levels: [], sources: [] }, bound: false },
+    )).toEqual({ id: 'llama3.2:1b' })
+  })
+})
+
+describe('boundLevels', () => {
+  const plain: CatalogEntry = { key: 'a', input: [], levels: ['low'], sources: [] }
+  const rich: CatalogEntry = { key: 'b', input: [], levels: ['high', 'max'], sources: [] }
+
+  it('takes the new entry levels when the row had none', () => {
+    expect([...(boundLevels(undefined, undefined, rich) ?? [])]).toEqual(['high', 'max'])
+  })
+
+  it('follows a re-bind while the picks are still the previous entry s', () => {
+    expect([...(boundLevels(new Set(['low']), plain, rich) ?? [])]).toEqual(['high', 'max'])
+  })
+
+  it('keeps picks the user made by hand', () => {
+    expect(boundLevels(new Set(['off']), plain, rich)).toBeUndefined()
   })
 })
 

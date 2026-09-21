@@ -907,6 +907,60 @@ describe('adoption', () => {
     await waitFor(() => { expect(screen.getByText('写入失败')).toBeDefined() })
   })
 
+  it('follows a row re-bound to another catalog entry', async () => {
+    stubCatalog({ 'glm-5.2': ['high', 'max'], 'glm-5.2-air': ['low'] }, {
+      modalities: {
+        'glm-5.2': { input: ['text', 'image'], output: ['text'] },
+        'glm-5.2-air': { input: ['text'], output: ['text'] },
+      },
+      facts: {
+        'glm-5.2': { name: 'GLM-5.2', contextWindow: 200000, maxTokens: 128000 },
+        'glm-5.2-air': { name: 'GLM-5.2 Air', contextWindow: 128000, maxTokens: 64000 },
+      },
+    })
+    const { api } = scriptedFace({ models: [{ id: 'glm-5.2-fast-preview/cc' }] })
+    await renderLoaded(api)
+    await probeWith()
+    const entryButton = (): HTMLButtonElement =>
+      screen.getByRole('button', { name: 'glm-5.2-fast-preview/cc 的目录条目' }) as HTMLButtonElement
+    const row = (): HTMLElement => entryButton().closest('tr') as HTMLElement
+
+    fireEvent.click(entryButton())
+    fireEvent.click(screen.getByRole('button', { name: '把 glm-5.2-fast-preview/cc 匹配到 glm-5.2' }))
+    expect(within(row()).getByText('GLM-5.2')).toBeDefined()
+    expect(within(row()).getByText('文·图')).toBeDefined()
+
+    // 再点一次换到另一条：这一行显示的名称、容量与模态都要跟着走。
+    fireEvent.click(entryButton())
+    fireEvent.click(screen.getByRole('button', { name: '把 glm-5.2-fast-preview/cc 匹配到 glm-5.2-air' }))
+    expect(entryButton().title).toBe('手动匹配：glm-5.2-air')
+    expect(within(row()).getByText('GLM-5.2 Air')).toBeDefined()
+    expect(within(row()).getByText('128000')).toBeDefined()
+    expect(within(row()).getByText('文')).toBeDefined()
+  })
+
+  it('writes the pinned entry over the name and capacities the endpoint disclosed', async () => {
+    stubCatalog({ 'glm-5.2': ['high'] }, {
+      facts: { 'glm-5.2': { name: 'GLM-5.2', contextWindow: 200000, maxTokens: 128000 } },
+    })
+    const { api, mutate } = scriptedFace({ models: [{ id: 'glm-5.2-fast-preview/cc', name: '端点名', contextWindow: 4096 }] })
+    await renderLoaded(api)
+    await probeWith()
+    fireEvent.click(screen.getByRole('button', { name: 'glm-5.2-fast-preview/cc 的目录条目' }))
+    fireEvent.click(screen.getByRole('button', { name: '把 glm-5.2-fast-preview/cc 匹配到 glm-5.2' }))
+    typeRoute('local-glm')
+    fireEvent.click(adoptButton())
+    await waitFor(() => { expect(mutate.mock.calls).toHaveLength(1) })
+
+    const ops = mutate.mock.calls[0]?.[1] as readonly { readonly value: { readonly models: readonly Record<string, unknown>[] } }[]
+    expect(ops[0]?.value.models[0]).toMatchObject({
+      id: 'glm-5.2-fast-preview/cc',
+      name: 'GLM-5.2',
+      contextWindow: 200000,
+      maxTokens: 128000,
+    })
+  })
+
   it('shows the busy label while an adoption is in flight', async () => {
     let resolveMutate!: (response: DiscoveryResponse<unknown>) => void
     const { api, mutate } = scriptedFace({

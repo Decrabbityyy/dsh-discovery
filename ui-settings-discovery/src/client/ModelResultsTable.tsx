@@ -244,10 +244,11 @@ export function ModelResultsTable(props: ModelResultsTableProps): ReactNode {
                     {visible.map((model) => {
                       const match = matches.get(model.id)
                       const entry = match?.entry
-                      // The endpoint's own disclosure wins over the catalog's.
-                      const displayName = model.name ?? entry?.name
-                      const contextWindow = model.contextWindow ?? entry?.contextWindow
-                      const maxTokens = model.maxTokens ?? entry?.maxTokens
+                      // 手动指定的条目连名称与容量一起作数；自动解析的只在行没披露时补。
+                      const pinned = match?.bound === true
+                      const displayName = pinned ? entry?.name ?? model.name : model.name ?? entry?.name
+                      const contextWindow = pinned ? entry?.contextWindow ?? model.contextWindow : model.contextWindow ?? entry?.contextWindow
+                      const maxTokens = pinned ? entry?.maxTokens ?? model.maxTokens : model.maxTokens ?? entry?.maxTokens
                       // Recorded levels join the matched entry's: a model the
                       // catalog has never heard of still shows what the profile
                       // declares.

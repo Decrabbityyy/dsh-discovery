@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-api-remotes/client'
 import clsx from 'clsx'
 import {
-  CREDENTIAL_REF_PATTERN, deriveKeyRef, DISCOVERY_NS, DISCOVERY_PLUGIN, DYNAMIC_PLUGIN, isActivePlugin,
+  boundLevels, CREDENTIAL_REF_PATTERN, deriveKeyRef, DISCOVERY_NS, DISCOVERY_PLUGIN, DYNAMIC_PLUGIN, isActivePlugin,
   matchCatalogEntry, messageOf, modelDeclaration, PI_AI_NS, ROUTE_PATTERN,
 } from './discovery.ts'
 import { useCatalog } from './catalogStore.ts'
@@ -213,8 +213,9 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
     })
   }
 
-  /** Pin one row to a catalog entry, seeding its thinking levels from that entry when it has none picked yet: a row the user already tuned keeps its picks. */
+  /** Pin one row to a catalog entry; its levels follow the new entry unless the user picked their own. */
   const bindModel = (id: string, key: string | undefined): void => {
+    const lastBound = bindings[id]
     setBindings((current) => {
       const next = { ...current }
       if (key === undefined) delete next[id]
@@ -224,9 +225,11 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
     if (key === undefined) return
     const entry = catalogIndex.entryOf(key)
     if (entry === undefined) return
-    setModelLevels(current => (current[id]?.size ?? 0) === 0
-      ? { ...current, [id]: new Set(entry.levels) }
-      : current)
+    const previous = lastBound === undefined ? undefined : catalogIndex.entryOf(lastBound)
+    setModelLevels((current) => {
+      const next = boundLevels(current[id], previous, entry)
+      return next === undefined ? current : { ...current, [id]: next }
+    })
   }
 
   /** Probe the endpoint the form currently shows, then select every found model. */
@@ -302,7 +305,7 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
               return modelDeclaration(
                 model,
                 modelLevels[model.id] ?? new Set(),
-                matchCatalogEntry(model.id, catalogIndex, bindings)?.entry,
+                matchCatalogEntry(model.id, catalogIndex, bindings),
               )
             }),
           },

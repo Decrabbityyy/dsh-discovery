@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-api-remotes/client'
 import type { ProviderDirectoryEntry } from '@deepseek-ai/dsh-client-ui-settings-models/client'
 import {
-  matchCatalogEntry, messageOf, modelDeclaration, PI_AI_NS, providerProfileOf,
+  boundLevels, matchCatalogEntry, messageOf, modelDeclaration, PI_AI_NS, providerProfileOf,
 } from './discovery.ts'
 import { useCatalog } from './catalogStore.ts'
 import type { DiscoveryApi, ProfileModel, ProviderProfileDraft } from './discovery.ts'
@@ -172,8 +172,9 @@ function ProviderModelsDialog({ api, provider, onClose }: ProviderModelsDialogPr
     if (event.key === 'Escape') close()
   }
 
-  /** Pin one row to a catalog entry, seeding its thinking levels from that entry when the profile declared none: the picks are the user's, so a row that */
+  /** Pin one row to a catalog entry; its levels follow the new entry unless the user picked their own. */
   const bind = (id: string, key: string | undefined): void => {
+    const lastBound = bindings[id]
     setBindings((current) => {
       const next = { ...current }
       if (key === undefined) delete next[id]
@@ -183,9 +184,11 @@ function ProviderModelsDialog({ api, provider, onClose }: ProviderModelsDialogPr
     if (key === undefined) return
     const entry = index.entryOf(key)
     if (entry === undefined) return
-    setLevels(current => (current[id]?.size ?? 0) === 0
-      ? { ...current, [id]: new Set(entry.levels) }
-      : current)
+    const previous = lastBound === undefined ? undefined : index.entryOf(lastBound)
+    setLevels((current) => {
+      const next = boundLevels(current[id], previous, entry)
+      return next === undefined ? current : { ...current, [id]: next }
+    })
   }
 
   /** Ask the provider's own endpoint, through the host, for its model listing. */
@@ -247,7 +250,7 @@ function ProviderModelsDialog({ api, provider, onClose }: ProviderModelsDialogPr
       .map(row => modelDeclaration(
         row,
         levels[row.id] ?? new Set(),
-        matchCatalogEntry(row.id, index, bindings)?.entry,
+        matchCatalogEntry(row.id, index, bindings),
       ))
     if (models.length === 0) {
       setSaveError('至少选择一个模型：空列表会让该路由解析不出任何模型。')

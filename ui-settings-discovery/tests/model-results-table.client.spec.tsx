@@ -35,9 +35,10 @@ const MODELS: readonly LlmDiscoveredModel[] = [
 const noop = (): void => {}
 
 /** The table with the binding state its callers own. */
-function Harness({ bindings: initial = {}, tables = TABLES }: {
+function Harness({ bindings: initial = {}, tables = TABLES, models = MODELS }: {
   readonly bindings?: Readonly<Record<string, string>>
   readonly tables?: Tables
+  readonly models?: readonly LlmDiscoveredModel[]
 }): ReactNode {
   const [bindings, setBindings] = useState<Readonly<Record<string, string>>>(initial)
   return (
@@ -45,8 +46,8 @@ function Harness({ bindings: initial = {}, tables = TABLES }: {
       title="发现的模型"
       ariaLabel="发现的模型"
       emptyText="未发现任何模型"
-      models={MODELS}
-      picked={new Set(MODELS.map(model => model.id))}
+      models={models}
+      picked={new Set(models.map(model => model.id))}
       onToggle={noop}
       onSelectAll={noop}
       onSelectNone={noop}
@@ -114,6 +115,46 @@ describe('catalog matching', () => {
     expect(pinned.getByText('GLM-5.2')).toBeDefined()
     expect(pinned.getByText('文·图')).toBeDefined()
     expect(pinned.getByLabelText('glm-5.2-fast-preview/cc 档位 max')).toBeDefined()
+  })
+
+  it('follows a row re-bound from one entry to another', () => {
+    const tables: Tables = {
+      catalog: { 'glm-5.2': ['high', 'max'], 'glm-5.2-air': ['low'] },
+      modalities: { 'glm-5.2': { input: ['text', 'image'] }, 'glm-5.2-air': { input: ['text'] } },
+      facts: {
+        'glm-5.2': { name: 'GLM-5.2', contextWindow: 200000, maxTokens: 128000 },
+        'glm-5.2-air': { name: 'GLM-5.2 Air', contextWindow: 128000, maxTokens: 64000 },
+      },
+      sources: { 'glm-5.2': ['zai-org'], 'glm-5.2-air': ['zai-org'] },
+    }
+    render(<Harness tables={tables} />)
+    fireEvent.click(matchButton('glm-5.2-fast-preview/cc'))
+    fireEvent.click(screen.getByRole('button', { name: '把 glm-5.2-fast-preview/cc 匹配到 glm-5.2' }))
+    expect(within(rowOf('glm-5.2-fast-preview/cc')).getByText('GLM-5.2')).toBeDefined()
+    expect(within(rowOf('glm-5.2-fast-preview/cc')).getByText('文·图')).toBeDefined()
+
+    // 再开一次换到另一条：这一行的名称、容量与模态都要跟着走。
+    fireEvent.click(matchButton('glm-5.2-fast-preview/cc'))
+    fireEvent.click(screen.getByRole('button', { name: '把 glm-5.2-fast-preview/cc 匹配到 glm-5.2-air' }))
+    const rebound = within(rowOf('glm-5.2-fast-preview/cc'))
+    expect(rebound.getByText('GLM-5.2 Air')).toBeDefined()
+    expect(rebound.getByText('128000')).toBeDefined()
+    expect(rebound.getByText('文')).toBeDefined()
+    expect(rebound.getByLabelText('glm-5.2-fast-preview/cc 档位 low')).toBeDefined()
+    expect(matchButton('glm-5.2-fast-preview/cc').title).toBe('手动匹配：glm-5.2-air')
+  })
+
+  it('lets a pinned entry override what the row itself disclosed', () => {
+    render(<Harness models={[{ id: 'never-heard-of-it', name: '端点名', contextWindow: 4096, maxTokens: 1024 }]} />)
+    const row = (): HTMLElement => rowOf('never-heard-of-it')
+    expect(within(row()).getByText('端点名')).toBeDefined()
+
+    fireEvent.click(matchButton('never-heard-of-it'))
+    fireEvent.click(screen.getByRole('button', { name: '把 never-heard-of-it 匹配到 glm-5.2' }))
+    expect(within(row()).getByText('GLM-5.2')).toBeDefined()
+    expect(within(row()).getByText('200000')).toBeDefined()
+    expect(within(row()).getByText('128000')).toBeDefined()
+    expect(within(row()).getByText('文·图')).toBeDefined()
   })
 
   it('unpins a row the user had pinned', () => {

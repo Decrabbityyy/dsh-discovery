@@ -46,10 +46,12 @@ export interface CatalogIndex extends CatalogKeyIndex {
   entryOf(key: string): CatalogEntry | undefined
 }
 
-/** One row's resolved catalog entry: the key it matched and what that key records. */
+/** One row's resolved catalog entry: the key it matched, what that key records, and whether the user pinned it. */
 export interface CatalogMatch {
   readonly key: string
   readonly entry: CatalogEntry
+  /** 用户手动指定的条目：名称与容量以它为准，自动解析的只在行没披露时补。 */
+  readonly bound: boolean
 }
 
 /** Build the index every row lookup and the picker share. */
@@ -85,15 +87,30 @@ export function matchCatalogEntry(
   index: CatalogIndex,
   bindings: Readonly<Record<string, string>> = {},
 ): CatalogMatch | undefined {
-  const bound = bindings[modelId]
-  if (bound !== undefined) {
-    const entry = index.entryOf(bound)
-    return entry === undefined ? undefined : { key: bound, entry }
+  const pinned = bindings[modelId]
+  if (pinned !== undefined) {
+    const entry = index.entryOf(pinned)
+    return entry === undefined ? undefined : { key: pinned, entry, bound: true }
   }
   const key = resolveCatalogKey(modelId, index)
   if (key === undefined) return undefined
   const entry = index.entryOf(key)
-  return entry === undefined ? undefined : { key, entry }
+  return entry === undefined ? undefined : { key, entry, bound: false }
+}
+
+/**
+ * 绑定后这一行该有哪些档位：用户没动过（还是上一次匹配带出来的那套）就换成新条目的，
+ * 自己勾过就保留；返回 undefined 表示保持原样。
+ */
+export function boundLevels(
+  current: ReadonlySet<string> | undefined,
+  previous: CatalogEntry | undefined,
+  next: CatalogEntry,
+): ReadonlySet<string> | undefined {
+  const picked = current ?? new Set<string>()
+  if (picked.size === 0) return new Set(next.levels)
+  const before = previous?.levels ?? []
+  return [...picked].every(level => before.includes(level)) ? new Set(next.levels) : undefined
 }
 
 /** The longest catalog key one id spells, as the picker's opening search: a variant id like `deepseek-v4-flash-max` seeds `deepseek-v4-flash`, while an */
@@ -197,17 +214,19 @@ export function providerProfileOf(namespaceValue: unknown, routeId: string): Pro
   }
 }
 
-/** One model entry to write back. */
+/** One model entry to write back：手动指定的条目连名称与容量一起覆盖行上的值。 */
 export function modelDeclaration(
   row: ProfileModel,
   levels: ReadonlySet<string>,
-  entry: CatalogEntry | undefined,
+  match: CatalogMatch | undefined,
 ): ProfileModel {
+  const entry = match?.entry
+  const pinned = match?.bound === true
   const reasoningEfforts = reasoningEffortsOf(levels) ?? row.reasoningEfforts
   const input = declaredInput(entry) ?? row.input
-  const name = row.name ?? entry?.name
-  const contextWindow = row.contextWindow ?? entry?.contextWindow
-  const maxTokens = row.maxTokens ?? entry?.maxTokens
+  const name = pinned ? entry?.name ?? row.name : row.name ?? entry?.name
+  const contextWindow = pinned ? entry?.contextWindow ?? row.contextWindow : row.contextWindow ?? entry?.contextWindow
+  const maxTokens = pinned ? entry?.maxTokens ?? row.maxTokens : row.maxTokens ?? entry?.maxTokens
   return {
     id: row.id,
     ...name === undefined ? {} : { name },

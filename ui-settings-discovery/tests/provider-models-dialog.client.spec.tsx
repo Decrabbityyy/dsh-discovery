@@ -305,6 +305,45 @@ describe('provider models dialog', () => {
     }])
   })
 
+  it('saves the entry a row was re-bound to, over what the profile declared', async () => {
+    const { api, mutate } = scripted({
+      profile: {
+        baseURL: 'http://127.0.0.1:11434/v1',
+        api: 'openai-completions',
+        models: [{ id: 'glm-5.2-fast-preview/cc', name: '旧名', contextWindow: 4096 }],
+      },
+      envelope: {
+        catalog: { 'glm-5.2': ['high', 'max'], 'glm-5.2-air': ['low'] },
+        modalities: { 'glm-5.2': { input: ['text', 'image'] }, 'glm-5.2-air': { input: ['text'] } },
+        facts: {
+          'glm-5.2': { name: 'GLM-5.2', contextWindow: 200000, maxTokens: 128000 },
+          'glm-5.2-air': { name: 'GLM-5.2 Air', contextWindow: 128000, maxTokens: 64000 },
+        },
+      },
+    })
+    await openDialog(api)
+    const entry = (): HTMLElement => screen.getByRole('button', { name: 'glm-5.2-fast-preview/cc 的目录条目' })
+    fireEvent.click(entry())
+    fireEvent.click(screen.getByRole('button', { name: '把 glm-5.2-fast-preview/cc 匹配到 glm-5.2' }))
+    fireEvent.click(entry())
+    fireEvent.click(screen.getByRole('button', { name: '把 glm-5.2-fast-preview/cc 匹配到 glm-5.2-air' }))
+
+    fireEvent.click(saveButton())
+    await waitFor(() => { expect(mutate.mock.calls).toHaveLength(1) })
+    expect(mutate.mock.calls[0]?.[1]).toEqual([{
+      op: 'set',
+      path: ['providers', 'local-qwen', 'models'],
+      value: [{
+        id: 'glm-5.2-fast-preview/cc',
+        name: 'GLM-5.2 Air',
+        contextWindow: 128000,
+        maxTokens: 64000,
+        // 上一次绑定的档位是 glm-5.2 带出来的，换条之后跟着换成新的。
+        reasoningEfforts: { low: 'low' },
+      }],
+    }])
+  })
+
   it('closes the catalog picker on Escape without closing the dialog', async () => {
     const { api } = scripted()
     await openDialog(api)
