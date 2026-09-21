@@ -1,8 +1,7 @@
 /**
- * Model-discovery settings section plugin, browser half: registers the
- * 模型发现 section into the settings panel, the model editor its provider cards
- * open, and the 模型缓存 page of the Plugins section. Every half drives the
- * public settings, credentials, llm, and pluginInventory Remote faces.
+ * 模型发现 settings section plugin, browser half: registers the 模型发现 section
+ * into the settings panel, the model editor its provider cards open, and the
+ * 模型目录 page of the Plugins section.
  */
 // The browser half is an ordinary cordis plugin: its context type is cordis's
 // own (0.1.5 deleted the dsh-client-runtime facade that used to alias it).
@@ -20,7 +19,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-models/client'
 import { DiscoverySection } from './DiscoverySection.tsx'
 import type { DiscoverySectionInjected } from './DiscoverySection.tsx'
-import { ModelCacheTab } from './ModelCacheTab.tsx'
+import { ModelCatalogTab } from './ModelCatalogTab.tsx'
 import { ProviderModelsCard } from './ProviderModelsDialog.tsx'
 import type { ProviderModelsCardInjected } from './ProviderModelsDialog.tsx'
 import type { DiscoveryApi } from './discovery.ts'
@@ -37,9 +36,9 @@ export const SECTION_ID = 'model-discovery'
 const SECTION_LABEL = '模型发现'
 
 /** Nav id and label of the Plugins-section tab this plugin contributes. */
-const CACHE_TAB_ID = 'model-cache'
+const CACHE_TAB_ID = 'model-catalog'
 
-const CACHE_TAB_LABEL = '模型缓存'
+const CACHE_TAB_LABEL = '模型目录'
 
 /**
  * Required services. `remote` and its generated faces are the typed Remote
@@ -87,14 +86,11 @@ export function apply(ctx: ClientContext): void {
     key: PI_AI_NS,
     inject: cardInjected,
   }, ProviderModelsCard))
-  // The Plugins section's tab list: a feature's own page arrives here, after
-  // 插件配置 (0) and 插件列表 (10). `settings.plugin.item` would be the wrong
-  // seat — its cards edit a settings namespace, and that namespace belongs to
-  // the plugin serving it, while this page only reads another plugin's cache.
+  // 插件区自己的标签页：排在「插件配置」(0) 与「插件列表」(10) 之后。
   ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
     name: 'settings.plugins.tab',
     id: CACHE_TAB_ID,
     order: 20,
     label: () => CACHE_TAB_LABEL,
-  }, ModelCacheTab))
+  }, ModelCatalogTab))
 }

@@ -1,10 +1,7 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import { assertUsableApiKey, LlmError } from '@deepseek-ai/dsh-llm'
-import type { AdapterRegistrationHandle, LlmDiscoveredModel } from '@deepseek-ai/dsh-llm'
+import type { AdapterRegistrationHandle } from '@deepseek-ai/dsh-llm'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import { authContextFrom, credentialStoreFrom } from './auth.ts'
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
@@ -13,12 +10,12 @@ import type { LlmConfigurableProvider } from '@deepseek-ai/dsh-llm'
 import type { DirectoryRegistrationHandle } from '@deepseek-ai/dsh-llm'
 import type { Config, DynamicSection } from './config.ts'
 import { NamespaceConfig } from './config.ts'
-import { assembleProfile, discoverDynamicProviders, toModel } from './provider.ts'
+import { discoverDynamicProviders } from './provider.ts'
 import type { DynamicProviderProfile } from './provider.ts'
 import { catalogEntries, factsOfRow, openModelCatalog, refreshModelCatalog } from 'dsh-llm-discovery/catalog/service'
 import type { OpenedCatalog } from 'dsh-llm-discovery/catalog/service'
 import {
-  catalogInputModalities, catalogKeyIndexOf, catalogReasoningEfforts, discoverEndpoint, DYNAMIC_CACHE_PATH,
+  catalogInputModalities, catalogKeyIndexOf, catalogReasoningEfforts, discoverEndpoint, DYNAMIC_PROBE_PATH,
   enrichModels, MODELS_DEV_URL, parseModelFacts, resolveCatalogKey, resolveDiscoveryConfig,
 } from 'dsh-llm-discovery/engine'
 import type { ModelFacts } from 'dsh-llm-discovery/engine'
@@ -48,28 +45,12 @@ export const inject = ['llm', 'settings']
 // string validated by SettingsNamespaceInput at registration time.
 export const DYNAMIC_NS = 'llm-dynamic-provider' as SettingsNamespace
 
-/** The cache file name under the harness home. */
-const CACHE_FILE = 'llm-dynamic-provider-cache.json'
-
-/** The on-disk cache: the discovered model facts per route, keyed by route name. */
-interface DynamicCache {
-  readonly routes: Record<string, { readonly models: readonly LlmDiscoveredModel[] }>
-  /** When this file was last written; absent in a cache written before this field existed. */
-  readonly writtenAt?: number
-}
-
-/** What the models.dev facts were last loaded from, and when. */
+/** models.dev facts 的来源与时间；`storageError`/`error` 说明为什么没落在存储域、上次为什么失败。 */
 interface ModelsDevStatus {
   readonly entries: number
   readonly refreshedAt: number | null
   readonly source?: 'storage' | 'models.dev'
-  /**
-   * Why they are not coming from the storage domain, when they are not: the
-   * seam is absent, or opening it failed. The facts still load over the network,
-   * but the fallback is reported rather than looking like a deliberate choice.
-   */
   readonly storageError?: string
-  /** Why the last load failed; the facts of the previous one stay in place. */
   readonly error?: string
 }
 
@@ -81,59 +62,15 @@ interface RouteProbeReport {
   readonly error?: string
 }
 
-/** What the cache endpoint reports: the 模型缓存 tab renders exactly this. */
-export interface DynamicCacheStatus {
-  /** Declared routes, whether or not their probe succeeded. */
+/** 设置页「模型目录」读的状态：声明的路由数与 models.dev 目录状态。 */
+export interface DynamicRouteStatus {
   readonly routes: number
   readonly modelsDev: ModelsDevStatus
-  /** The catalog cache file, present only where the deployment caches. */
-  readonly cacheFile?: {
-    readonly path: string
-    readonly writtenAt: number | null
-    readonly routes: number
-  }
 }
 
-/** Read the persisted cache; absence and corruption both read as empty. */
-async function readCache(home: string): Promise<DynamicCache> {
-  try {
-    const raw = JSON.parse(await readFile(join(home, CACHE_FILE), 'utf8')) as DynamicCache
-    return typeof raw === 'object' && raw !== null && typeof raw.routes === 'object' ? raw : { routes: {} }
-  } catch {
-    return { routes: {} }
-  }
-}
-
-/**
- * Persist the discovered model facts behind the resolved profiles.
- * @returns the write timestamp the cache status reports.
- */
-async function writeCache(home: string, profiles: ReadonlyMap<string, DynamicProviderProfile>): Promise<number> {
-  const routes: DynamicCache['routes'] = {}
-  for (const [route, profile] of profiles) {
-    routes[route] = {
-      models: profile.piProvider.getModels().map((model: { id: string; name: string; contextWindow: number; maxTokens: number }) => ({
-        id: model.id,
-        name: model.name,
-        contextWindow: model.contextWindow,
-        maxTokens: model.maxTokens,
-      })),
-    }
-  }
-  const writtenAt = Date.now()
-  await mkdir(home, { recursive: true })
-  await writeFile(join(home, CACHE_FILE), JSON.stringify({ routes, writtenAt }, null, 2), 'utf8')
-  return writtenAt
-}
-
-/**
- * Mount the dynamic-provider adapter. Declared routes register on first
- * successful probe; with `cache` on, a cold boot registers from the persisted
- * catalog synchronously and lets the live probe refresh the registration.
- */
+/** Mount the dynamic-provider adapter: declared routes register on first successful probe. */
 export function apply(ctx: Context, config?: Config): void {
   ctx.settings.register(DYNAMIC_NS, NamespaceConfig, { base: { routes: config?.routes ?? {} } })
-  const home = config?.cache === true ? resolveDshHome() : undefined
 
   // models.dev facts by catalog key: the synchronous read path for enrichment
   // and modality lookups, backed by the storage domain when the composition
@@ -306,13 +243,9 @@ export function apply(ctx: Context, config?: Config): void {
     })
   })
 
-  // Live profiles the adapter reads per request; rebuilt on each reprobe, and
-  // seeded from the cache when enabled.
+  // Live profiles the adapter reads per request; rebuilt on each reprobe.
   let current = new Map<string, DynamicProviderProfile>()
   let registration: AdapterRegistrationHandle | undefined
-  // The on-disk cache as this process last saw it, for the cache tab's status.
-  let cacheWrittenAt: number | null = null
-  let cacheRoutes = 0
 
   const adapter = new PiAiAdapter({
     auth: { credentials: credentialStoreFrom(ctx), authContext: authContextFrom(ctx) },
@@ -379,31 +312,7 @@ export function apply(ctx: Context, config?: Config): void {
     }
   }
 
-  /** Register from the persisted cache, if enabled and present. */
-  const serveFromCache = async (): Promise<void> => {
-    if (home === undefined) return
-    const cache = await readCache(home)
-    cacheWrittenAt = cache.writtenAt ?? null
-    cacheRoutes = Object.keys(cache.routes).length
-    const routes = declaredRoutes()
-    const cached = new Map<string, DynamicProviderProfile>()
-    for (const [routeName, entry] of Object.entries(cache.routes)) {
-      const route = routes[routeName]
-      if (route === undefined) continue
-      try {
-        cached.set(routeName, assembleProfile(routeName, route, entry.models.map(model => toModel(routeName, route, model, modalitiesOf(model.id)))))
-      } catch {
-        // A stale cache entry that no longer assembles is dropped.
-      }
-    }
-    if (cached.size > 0) serve(cached)
-  }
-
-  /**
-   * Probe every declared route and swap in the freshly discovered profiles.
-   * @returns one report per declared route, for the refresh the cache tab asks
-   * for; the settings-update path ignores it.
-   */
+  /** Probe every declared route and swap in the freshly discovered profiles. */
   const reprobe = async (): Promise<readonly RouteProbeReport[]> => {
     const routes = declaredRoutes()
     const outcome = await discoverDynamicProviders(ctx, routes, config, { signal: undefined }, {
@@ -425,42 +334,25 @@ export function apply(ctx: Context, config?: Config): void {
     }
     for (const [name, profile] of outcome.discovered) next.set(name, profile)
     serve(next)
-    if (home !== undefined && outcome.discovered.size > 0) {
-      const writtenAt = await writeCache(home, outcome.discovered).catch((error: unknown) => {
-        ctx.logger.warn('llm-dynamic-provider: failed to persist the model cache')
-        ctx.logger.warn(error)
-        return undefined
-      })
-      if (writtenAt !== undefined) {
-        cacheWrittenAt = writtenAt
-        cacheRoutes = outcome.discovered.size
-      }
-    }
     return [
       ...[...outcome.discovered].map(([route, profile]) => ({ route, models: profile.piProvider.getModels().length })),
       ...outcome.failed.map(({ route, message }) => ({ route, error: message })),
     ]
   }
 
-  // The cache endpoint behind the 模型缓存 tab: GET is the status, POST
-  // re-reads the models.dev facts and re-probes every route — the two inputs the
-  // served profiles and the on-disk catalog are built from. Everything else the
-  // plugin keeps (the directory, the adapter registration) follows those two.
-  const cacheStatus = (): DynamicCacheStatus => ({
+  // 设置页「模型目录」读的端点：GET 报状态，POST 重读目录并重新探测所有路由。
+  const routeStatus = (): DynamicRouteStatus => ({
     routes: Object.keys(declaredRoutes()).length,
     modelsDev: factsStatus,
-    ...home === undefined
-      ? {}
-      : { cacheFile: { path: join(home, CACHE_FILE), writtenAt: cacheWrittenAt, routes: cacheRoutes } },
   })
   if (webServer !== undefined) {
     ctx.effect(() => webServer.register({
       kind: 'exact',
-      path: DYNAMIC_CACHE_PATH,
+      path: DYNAMIC_PROBE_PATH,
       handler: async (req, res) => {
         const method = (req as { method?: string }).method ?? 'GET'
         if (method === 'GET') {
-          sendJson(res, 200, cacheStatus())
+          sendJson(res, 200, routeStatus())
           return
         }
         if (method !== 'POST') {
@@ -469,9 +361,9 @@ export function apply(ctx: Context, config?: Config): void {
         }
         const modelsDev = await refreshFacts()
         const probes = await reprobe()
-        sendJson(res, 200, { ...cacheStatus(), modelsDev, probes })
+        sendJson(res, 200, { ...routeStatus(), modelsDev, probes })
       },
-    }), 'llm-dynamic-provider: cache endpoint')
+    }), 'llm-dynamic-provider: probe endpoint')
   }
 
   // Hot-edit: adding or editing a route reprobes without a restart, and removing
@@ -484,5 +376,5 @@ export function apply(ctx: Context, config?: Config): void {
   // Publish the namespace's exposure before serving: the directory is what
   // admits it to the proxy's exposed set.
   syncDirectory()
-  void serveFromCache().then(() => reprobe())
+  void reprobe()
 }

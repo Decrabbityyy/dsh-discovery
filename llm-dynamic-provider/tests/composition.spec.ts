@@ -1,20 +1,15 @@
 /**
  * Full-plugin composition: a real Cordis context mounts the llm seam and this
  * plugin, which probes a fake endpoint and registers the discovered routes on
- * `ctx.llm` — in memory, with no settings document. The cache round-trip is
- * covered by booting against a `$DSH_HOME` holding a persisted catalog with
- * the endpoint down: the routes still register from cache, then refresh once
- * the endpoint answers.
+ * `ctx.llm` — in memory, with no settings document. A route whose endpoint is
+ * down registers nothing until the endpoint answers and something reprobes.
  */
 
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
 import { SettingsProvider } from '@deepseek-ai/dsh-settings'
-import { DYNAMIC_CACHE_PATH } from 'dsh-llm-discovery/engine'
+import { DYNAMIC_PROBE_PATH } from 'dsh-llm-discovery/engine'
 import * as dynamicProvider from '../src/index.ts'
 import { startProbeServer } from './server.ts'
 import type { ProbeServer } from './server.ts'
@@ -44,18 +39,12 @@ class MemorySettings extends SettingsProvider {
 
 let ctx: Context | undefined
 let server: ProbeServer | undefined
-let home: string | undefined
-let savedHome: string | undefined
 
 afterEach(async () => {
   await ctx?.fiber.dispose()
   ctx = undefined
   if (server !== undefined) await server.close()
   server = undefined
-  if (savedHome === undefined) delete process.env['DSH_HOME']
-  else process.env['DSH_HOME'] = savedHome
-  if (home !== undefined) await rm(home, { recursive: true, force: true })
-  home = undefined
 })
 
 const LISTING = {
@@ -101,40 +90,26 @@ describe('plugin composition', () => {
     })
   })
 
-  it('keeps serving cached routes when the endpoint is down at boot, then refreshes live', { timeout: 30_000 }, async () => {
-    savedHome = process.env['DSH_HOME']
-    home = await mkdtemp(join(tmpdir(), 'dsh-dyn-cache-'))
-    process.env['DSH_HOME'] = home
+  it('registers a route only once its endpoint answers, and reprobes on a settings update', { timeout: 30_000 }, async () => {
+    // Boot against a dead endpoint: nothing registers.
+    const context = await boot({ routes: { upstream: { baseURL: 'http://127.0.0.1:1', api: 'openai-completions' } } })
+    await vi.waitFor(() => {
+      expect(context.llm.listConfigurableProviders().map(entry => entry.provider)).toContain('upstream')
+    })
+    expect(context.llm.listProviders().map(provider => provider.id)).not.toContain('upstream')
 
-    // First boot with the endpoint up: discovers and persists the cache.
+    // Point the route at a live endpoint; the settings update reprobes it.
     server = await startProbeServer({ '/models': { body: JSON.stringify(LISTING) } })
-    const firstUrl = server.url
-    let context = await boot({
-      cache: true,
-      routes: { upstream: { baseURL: firstUrl, api: 'openai-completions' } },
-    })
+    await context.settings.mutate('llm-dynamic-provider', [{
+      op: 'set',
+      path: ['routes', 'upstream'],
+      value: { baseURL: server.url, api: 'openai-completions' },
+    }])
     await vi.waitFor(() => {
       expect(context.llm.listProviders().map(provider => provider.id)).toContain('upstream')
     })
-    const cachePath = join(home, 'llm-dynamic-provider-cache.json')
-    await vi.waitFor(async () => {
-      expect(JSON.parse(await readFile(cachePath, 'utf8')).routes['upstream']).toBeDefined()
-    })
-    await ctx!.fiber.dispose()
-    ctx = undefined
-    await server.close()
-
-    // Second boot with the endpoint DOWN: the cache registers the route.
-    server = undefined
-    context = await boot({
-      cache: true,
-      routes: { upstream: { baseURL: firstUrl, api: 'openai-completions' } },
-    })
-    await vi.waitFor(() => {
-      expect(context.llm.listProviders().map(provider => provider.id)).toContain('upstream')
-    })
-    const cachedModels = await context.llm.listModels('upstream')
-    expect(cachedModels.map(model => model.id)).toContain('deepseek-v4-flash')
+    const models = await context.llm.listModels('upstream')
+    expect(models.map(model => model.id)).toEqual(['deepseek-v4-flash', 'acme-x'])
   })
 
   it('withdraws cleanly when the plugin fiber is disposed (HMR safety)', async () => {
@@ -167,7 +142,7 @@ describe('plugin composition', () => {
 
     const first = await fresh.plugin(dynamicProvider)
     expect(live.has('/llm-dynamic-provider/routes')).toBe(true)
-    expect(live.has(DYNAMIC_CACHE_PATH)).toBe(true)
+    expect(live.has(DYNAMIC_PROBE_PATH)).toBe(true)
     expect(live.size).toBe(2)
     await first.dispose()
     expect(live.size).toBe(0)

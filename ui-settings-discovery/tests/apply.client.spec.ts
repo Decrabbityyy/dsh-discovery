@@ -42,7 +42,7 @@ import { describe, expect, it } from 'vitest'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import { apply, inject, SECTION_ID } from 'dsh-client-ui-settings-discovery/client'
 import { DiscoverySection } from '../src/client/DiscoverySection.tsx'
-import { ModelCacheTab } from '../src/client/ModelCacheTab.tsx'
+import { ModelCatalogTab } from '../src/client/ModelCatalogTab.tsx'
 import { ProviderModelsCard } from '../src/client/ProviderModelsDialog.tsx'
 
 async function bench() {
@@ -155,15 +155,15 @@ describe('ui-settings-discovery apply', () => {
     expect(b.slots.entries('settings.models.provider-card')).toHaveLength(0)
   })
 
-  it('contributes the cache page to the Plugins section tab list', async () => {
+  it('contributes the catalog page to the Plugins section tab list', async () => {
     const b = await bench()
     declare(b.slots)
     const fiber = b.ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
     const entry = b.slots.entries('settings.plugins.tab')[0]!
-    expect(entry.component).toBe(ModelCacheTab)
-    expect(entry.options).toMatchObject({ id: 'model-cache', order: 20 })
-    expect(resolveSlotLabel(entry.options.label)).toBe('模型缓存')
+    expect(entry.component).toBe(ModelCatalogTab)
+    expect(entry.options).toMatchObject({ id: 'model-catalog', order: 20 })
+    expect(resolveSlotLabel(entry.options.label)).toBe('模型目录')
     await fiber.dispose()
     expect(b.slots.entries('settings.plugins.tab')).toHaveLength(0)
   })

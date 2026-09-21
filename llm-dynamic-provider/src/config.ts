@@ -39,12 +39,6 @@ export interface Config {
   maxResponseBytes?: number
   /** Fill undisclosed fields from the bundled catalog by exact id (default true). */
   enrichment?: boolean
-  /**
-   * Persist the last discovered catalog to `$DSH_HOME` so a cold boot can
-   * register routes from cache and refresh them in the background (default
-   * false: every boot probes synchronously and a failed probe yields no route).
-   */
-  cache?: boolean
 }
 
 export const Config: z<Config> = z.object({
@@ -52,7 +46,6 @@ export const Config: z<Config> = z.object({
   timeoutMs: z.number().step(1).min(1),
   maxResponseBytes: z.number().step(1).min(1024),
   enrichment: z.boolean(),
-  cache: z.boolean(),
 })
 
 /** The composition base merged with the user layer. */

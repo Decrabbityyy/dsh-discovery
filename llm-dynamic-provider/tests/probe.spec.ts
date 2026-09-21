@@ -1,18 +1,12 @@
 /**
- * The dynamic provider's cache endpoint — what 设置 → 插件 → 模型缓存 reads and
- * what its refresh button asks for: a status of the declared routes, the
- * models.dev facts they were enriched from, and the on-disk catalog; a POST
- * re-reads those facts, re-probes every route, and rewrites the cache.
+ * 动态路由插件自己的端点：设置 → 插件 → 模型目录读的状态，以及刷新按钮要的重探结果。
  */
 
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
 import { SettingsProvider } from '@deepseek-ai/dsh-settings'
-import { DYNAMIC_CACHE_PATH } from 'dsh-llm-discovery/engine'
+import { DYNAMIC_PROBE_PATH } from 'dsh-llm-discovery/engine'
 import * as dynamicProvider from '../src/index.ts'
 import { startProbeServer } from './server.ts'
 import type { ProbeServer } from './server.ts'
@@ -81,8 +75,6 @@ const LISTING = { data: [{ id: 'acme-x', context_window: 4096 }] }
 
 let ctx: Context | undefined
 let server: ProbeServer | undefined
-let home: string | undefined
-let savedHome: string | undefined
 
 afterEach(async () => {
   await ctx?.fiber.dispose()
@@ -90,10 +82,6 @@ afterEach(async () => {
   if (server !== undefined) await server.close()
   server = undefined
   vi.unstubAllGlobals()
-  if (savedHome === undefined) delete process.env['DSH_HOME']
-  else process.env['DSH_HOME'] = savedHome
-  if (home !== undefined) await rm(home, { recursive: true, force: true })
-  home = undefined
 })
 
 /**
@@ -122,7 +110,7 @@ function fakeStorage(): {
   return {
     records,
     open: () => Promise.resolve({
-      name: 'llm_dynamic_provider_models',
+      name: 'llm_models_dev_catalog',
       global: { get: () => ({}), set: () => Promise.resolve() },
       table: () => ({
         get: (key: string) => records.get(key),
@@ -149,24 +137,22 @@ async function boot(config?: dynamicProvider.Config, storage?: unknown): Promise
   return routes
 }
 
-describe('cache endpoint', () => {
+describe('probe endpoint', () => {
   it('reports the declared routes and where the facts came from', async () => {
     stubModelsDev()
     server = await startProbeServer({ '/models': { body: JSON.stringify(LISTING) } })
     const routes = await boot({ routes: { upstream: { baseURL: server.url, api: 'openai-completions' } } })
-    const cache = routes.get(DYNAMIC_CACHE_PATH)
+    const probe = routes.get(DYNAMIC_PROBE_PATH)
     expect(routes.has('/llm-dynamic-provider/routes')).toBe(true)
-    expect(cache).toBeDefined()
+    expect(probe).toBeDefined()
 
     // The boot-time load lands asynchronously; the status reports it once it has.
     await vi.waitFor(async () => {
-      const { body } = await answer(cache!, 'GET')
+      const { body } = await answer(probe!, 'GET')
       expect(body['modelsDev']).toMatchObject({ entries: 1, source: 'models.dev' })
     })
-    const { body } = await answer(cache!, 'GET')
+    const { body } = await answer(probe!, 'GET')
     expect(body['routes']).toBe(1)
-    // No DSH_HOME cache without `cache: true`.
-    expect(body['cacheFile']).toBeUndefined()
     // Nor a storage domain in this composition, which the status admits.
     expect(body['modelsDev']).toMatchObject({ storageError: 'no storage domain is mounted in this composition' })
   })
@@ -175,9 +161,9 @@ describe('cache endpoint', () => {
     stubModelsDev()
     const storage = fakeStorage()
     const routes = await boot(undefined, storage)
-    const cache = routes.get(DYNAMIC_CACHE_PATH)!
+    const probe = routes.get(DYNAMIC_PROBE_PATH)!
 
-    const { body } = await answer(cache, 'POST')
+    const { body } = await answer(probe, 'POST')
     expect(body['modelsDev']).toMatchObject({ entries: 1, source: 'storage' })
     expect((body['modelsDev'] as Record<string, unknown>)['storageError']).toBeUndefined()
     // The parsed catalog went through the domain as its one record.
@@ -188,9 +174,9 @@ describe('cache endpoint', () => {
   it('reports a storage domain that will not open instead of quietly using the network', async () => {
     stubModelsDev()
     const routes = await boot(undefined, { open: () => Promise.reject(new Error('no kv backend for this domain')) })
-    const cache = routes.get(DYNAMIC_CACHE_PATH)!
+    const probe = routes.get(DYNAMIC_PROBE_PATH)!
 
-    const { body } = await answer(cache, 'POST')
+    const { body } = await answer(probe, 'POST')
     expect(body['modelsDev']).toMatchObject({
       entries: 1,
       source: 'models.dev',
@@ -202,9 +188,9 @@ describe('cache endpoint', () => {
     stubModelsDev()
     server = await startProbeServer({ '/models': { body: JSON.stringify(LISTING) } })
     const routes = await boot({ routes: { upstream: { baseURL: server.url, api: 'openai-completions' } } })
-    const cache = routes.get(DYNAMIC_CACHE_PATH)!
+    const probe = routes.get(DYNAMIC_PROBE_PATH)!
 
-    const { body } = await answer(cache, 'POST')
+    const { body } = await answer(probe, 'POST')
     expect(body['probes']).toEqual([{ route: 'upstream', models: 1 }])
     expect(body['modelsDev']).toMatchObject({ entries: 1, source: 'models.dev' })
     // The refresh probed the endpoint again rather than reusing the boot pass.
@@ -214,9 +200,9 @@ describe('cache endpoint', () => {
   it('reports a facts load that failed and a route whose probe did', async () => {
     stubModelsDev('offline')
     const routes = await boot({ routes: { broken: { baseURL: 'http://127.0.0.1:1', api: 'openai-completions' } } })
-    const cache = routes.get(DYNAMIC_CACHE_PATH)!
+    const probe = routes.get(DYNAMIC_PROBE_PATH)!
 
-    const { body } = await answer(cache, 'POST')
+    const { body } = await answer(probe, 'POST')
     expect(body['modelsDev']).toMatchObject({ entries: 0, error: 'offline' })
     const probes = body['probes'] as Record<string, unknown>[]
     expect(probes[0]?.['route']).toBe('broken')
@@ -224,27 +210,10 @@ describe('cache endpoint', () => {
     expect(probes[0]?.['models']).toBeUndefined()
   })
 
-  it('reports the cache file it rewrote', async () => {
-    savedHome = process.env['DSH_HOME']
-    home = await mkdtemp(join(tmpdir(), 'dsh-dyn-cache-card-'))
-    process.env['DSH_HOME'] = home
-    stubModelsDev()
-    server = await startProbeServer({ '/models': { body: JSON.stringify(LISTING) } })
-    const routes = await boot({ cache: true, routes: { upstream: { baseURL: server.url, api: 'openai-completions' } } })
-    const cache = routes.get(DYNAMIC_CACHE_PATH)!
-
-    const { body } = await answer(cache, 'POST')
-    expect(body['cacheFile']).toMatchObject({ routes: 1 })
-    expect(typeof (body['cacheFile'] as Record<string, unknown>)['writtenAt']).toBe('number')
-    const written = JSON.parse(await readFile(join(home, 'llm-dynamic-provider-cache.json'), 'utf8')) as Record<string, unknown>
-    expect(written['writtenAt']).toBeGreaterThan(0)
-    expect((written['routes'] as Record<string, unknown>)['upstream']).toBeDefined()
-  })
-
   it('refuses a method it does not serve', async () => {
     stubModelsDev()
     const routes = await boot()
-    const refused = await answer(routes.get(DYNAMIC_CACHE_PATH)!, 'DELETE')
+    const refused = await answer(routes.get(DYNAMIC_PROBE_PATH)!, 'DELETE')
     expect(refused.status).toBe(405)
     expect(refused.body).toEqual({ error: 'method not allowed' })
   })

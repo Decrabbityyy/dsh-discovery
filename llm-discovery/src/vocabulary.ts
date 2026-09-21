@@ -141,12 +141,8 @@ export function messageOf(error: unknown): string {
  */
 export const UI_CATALOG_PATH = '/ui-settings-discovery/catalog'
 
-/**
- * The exact-path HTTP route the dynamic-provider plugin serves its catalog
- * cache on: `GET` reports what is cached and what it was last built from, and
- * `POST` re-reads the models.dev snapshot and re-probes every declared route.
- */
-export const DYNAMIC_CACHE_PATH = '/llm-dynamic-provider/cache'
+/** 动态路由插件自己的端点：GET 报状态，POST 重新探测所有声明路由。 */
+export const DYNAMIC_PROBE_PATH = '/llm-dynamic-provider/probe'
 
 /**
  * One model's models.dev fact set as the catalog envelope carries it. The host
