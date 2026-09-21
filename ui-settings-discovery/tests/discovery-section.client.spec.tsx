@@ -656,6 +656,47 @@ describe('adoption', () => {
     ])
   })
 
+  it('adopts a variant onto the catalog entry the user pinned it to', async () => {
+    stubCatalog({ 'glm-5.2': ['high', 'max'] }, {
+      modalities: { 'glm-5.2': { input: ['text', 'image'], output: ['text'] } },
+      facts: { 'glm-5.2': { name: 'GLM-5.2', contextWindow: 200000, maxTokens: 128000 } },
+    })
+    const { api, mutate } = scriptedFace({ models: [{ id: 'glm-5.2-fast-preview/cc' }] })
+    await renderLoaded(api)
+    await probeWith()
+    // The id spells no recorded key, so the row cannot resolve on its own.
+    const entry = screen.getByRole('button', { name: 'glm-5.2-fast-preview/cc 的目录条目' })
+    expect(entry.textContent).toBe('匹配目录')
+    fireEvent.click(entry)
+    expect(screen.getByLabelText<HTMLInputElement>('搜索目录条目：glm-5.2-fast-preview/cc').value).toBe('glm-5.2')
+    fireEvent.click(screen.getByRole('button', { name: '把 glm-5.2-fast-preview/cc 匹配到 glm-5.2' }))
+
+    typeRoute('local-glm')
+    fireEvent.click(adoptButton())
+    await waitFor(() => { expect(mutate.mock.calls).toHaveLength(1) })
+    expect(mutate.mock.calls[0]).toEqual([
+      'llm-pi-ai',
+      [{
+        op: 'set',
+        path: ['providers', 'local-glm'],
+        value: {
+          api: 'openai-completions',
+          baseURL: 'http://127.0.0.1:11434',
+          models: [{
+            id: 'glm-5.2-fast-preview/cc',
+            name: 'GLM-5.2',
+            contextWindow: 200000,
+            maxTokens: 128000,
+            input: ['text', 'image'],
+            // The pin also seeded this row's levels from the entry.
+            reasoningEfforts: { high: 'high', max: 'max' },
+          }],
+        },
+      }],
+      3,
+    ])
+  })
+
   it('lets a catalog route inherit reasoning and modalities, ignoring the picked levels', async () => {
     stubCatalog({}, {
       modalities: {

@@ -52,12 +52,66 @@ export function deriveKeyRef(provider: string): string {
 }
 
 /**
- * Normalize a model id to its canonical lookup key, dropping every
+ * Normalize a model id to its bare lookup name, dropping every
  * `/`-separated provider prefix.
  */
 export function normalizeModelName(id: string): string {
   const slash = id.lastIndexOf('/')
   return slash === -1 ? id : id.slice(slash + 1)
+}
+
+/**
+ * The catalog names one advertised model id may carry, widest first: the id
+ * itself, then the segment before its first `/`, then the one after its last.
+ * An endpoint spends a slash on both a vendor prefix (`z-ai/glm-5.2`) and a
+ * variant tag (`Gemini-3.7-Flash/Antigravity`), so both halves are offered.
+ */
+export function catalogKeyCandidates(modelId: string): readonly string[] {
+  const slash = modelId.indexOf('/')
+  const head = slash === -1 ? modelId : modelId.slice(0, slash)
+  const tail = normalizeModelName(modelId)
+  return [...new Set([modelId, head, tail])].filter(name => name.length > 0)
+}
+
+/** Case-insensitive view over one catalog's keys. */
+export interface CatalogKeyIndex {
+  /** Every stored key, in the order given, deduplicated. */
+  readonly keys: readonly string[]
+  /** The stored key one name resolves to, ignoring case. */
+  keyOf(name: string): string | undefined
+}
+
+/**
+ * Build the key view every catalog lookup shares. The first spelling of a name
+ * wins, mirroring the parsers' own first-model-wins rule.
+ */
+export function catalogKeyIndexOf(keys: Iterable<string>): CatalogKeyIndex {
+  const listed = [...new Set(keys)]
+  const byName = new Map<string, string>()
+  for (const key of listed) {
+    const name = key.toLowerCase()
+    if (!byName.has(name)) byName.set(name, key)
+  }
+  return { keys: listed, keyOf: name => byName.get(name.toLowerCase()) }
+}
+
+/**
+ * The key one advertised model id resolves to, or undefined. The id itself
+ * wins. Otherwise exactly one of its head/tail candidates has to be recorded:
+ * a surface that writes the facts it resolves must not guess between two
+ * models, because the `input` it writes is a claim about the endpoint.
+ */
+export function resolveCatalogKey(modelId: string, index: CatalogKeyIndex): string | undefined {
+  const exact = index.keyOf(modelId)
+  if (exact !== undefined) return exact
+  const found = new Set<string>()
+  for (const candidate of catalogKeyCandidates(modelId)) {
+    const key = index.keyOf(candidate)
+    if (key !== undefined) found.add(key)
+  }
+  const [only] = [...found]
+  if (found.size !== 1 || only === undefined) return undefined
+  return only
 }
 
 /** Route ids accepted by the adopt flow (lowercase letters, digits, hyphens). */
@@ -100,12 +154,17 @@ export interface CatalogFact {
   readonly displayName?: string
   readonly contextWindow?: number
   readonly maxTokens?: number
+  /** Provider ids that record this model, in file order; the first supplied the facts. */
+  readonly sources?: readonly string[]
 }
 
 /**
- * The models.dev index a Host plugin serves to a settings surface, keyed by
- * bare model name. A model absent from `modalities` is unknown rather than
- * text-only, which is what keeps an unlisted id from being frozen as text.
+ * The models.dev index a Host plugin serves to a settings surface. Keys are the
+ * ids models.dev records — `glm-5.2` under `zai-org`, `x-ai/grok-4.6` under
+ * `openrouter` — plus, for every id carrying a `/`, its bare name, so an
+ * endpoint that omits the vendor prefix still resolves. A model absent from
+ * `modalities` is unknown rather than text-only, which is what keeps an
+ * unlisted id from being frozen as text.
  */
 export interface CatalogEnvelope {
   /** Reasoning levels per model, for preselecting the thinking-level picker. */
@@ -114,32 +173,43 @@ export interface CatalogEnvelope {
   readonly modalities: Record<string, { readonly input: readonly string[]; readonly output: readonly string[] }>
   /** Display name and capacities per model, for one the pi-ai catalog does not describe. */
   readonly facts: Record<string, { readonly name?: string; readonly contextWindow?: number; readonly maxTokens?: number }>
+  /**
+   * Which providers record each key, in file order. Several providers serve the
+   * same model under different ids and disagree about its capacities, so a
+   * surface that lets the user pick a key has to be able to say whose numbers
+   * those are. Absent until a parser records one, which keeps the envelope a
+   * surface merging an older body backward compatible.
+   */
+  readonly sources?: Record<string, readonly string[]>
 }
 
 /**
  * Build the envelope both Host catalog endpoints answer with: a fact with no
- * levels, no modalities, and no capacities contributes no entry at all.
+ * levels, no modalities, and no capacities contributes no entry at all, and a
+ * snapshot whose parser recorded no provider contributes no `sources` table.
  */
 export function catalogEnvelope(entries: Iterable<readonly [string, CatalogFact]>): CatalogEnvelope {
-  const envelope: {
-    catalog: Record<string, readonly string[]>
-    modalities: Record<string, { readonly input: readonly string[]; readonly output: readonly string[] }>
-    facts: Record<string, { readonly name?: string; readonly contextWindow?: number; readonly maxTokens?: number }>
-  } = { catalog: {}, modalities: {}, facts: {} }
+  const catalog: Record<string, readonly string[]> = {}
+  const modalities: Record<string, { readonly input: readonly string[]; readonly output: readonly string[] }> = {}
+  const facts: Record<string, { readonly name?: string; readonly contextWindow?: number; readonly maxTokens?: number }> = {}
+  const sources: Record<string, readonly string[]> = {}
   for (const [name, fact] of entries) {
-    if (fact.levels !== undefined) envelope.catalog[name] = fact.levels
+    if (fact.levels !== undefined) catalog[name] = fact.levels
     if (fact.inputModalities !== undefined || fact.outputModalities !== undefined) {
-      envelope.modalities[name] = { input: fact.inputModalities ?? [], output: fact.outputModalities ?? [] }
+      modalities[name] = { input: fact.inputModalities ?? [], output: fact.outputModalities ?? [] }
     }
     if (fact.displayName !== undefined || fact.contextWindow !== undefined || fact.maxTokens !== undefined) {
-      envelope.facts[name] = {
+      facts[name] = {
         ...fact.displayName === undefined ? {} : { name: fact.displayName },
         ...fact.contextWindow === undefined ? {} : { contextWindow: fact.contextWindow },
         ...fact.maxTokens === undefined ? {} : { maxTokens: fact.maxTokens },
       }
     }
+    if (fact.sources !== undefined && fact.sources.length > 0) sources[name] = fact.sources
   }
-  return envelope
+  return Object.keys(sources).length === 0
+    ? { catalog, modalities, facts }
+    : { catalog, modalities, facts, sources }
 }
 
 /** One plain-object view of an unknown value, or undefined for anything else. */
@@ -160,35 +230,47 @@ function stringsOf(value: unknown): string[] {
  * malformed body or entry contributes nothing, so a surface merging a failed
  * endpoint with a live one still renders the live answer.
  */
+/**
+ * Merge parsed catalog bodies into one envelope in source order: the first
+ * body carrying a key keeps it, and later bodies only fill what is missing. A
+ * malformed body or entry contributes nothing, so a surface merging a failed
+ * endpoint with a live one still renders the live answer. A body that carries
+ * no provider list at all leaves the merged envelope without one.
+ */
 export function mergeCatalogEnvelopes(bodies: readonly unknown[]): CatalogEnvelope {
-  const envelope: {
-    catalog: Record<string, readonly string[]>
-    modalities: Record<string, { readonly input: readonly string[]; readonly output: readonly string[] }>
-    facts: Record<string, { readonly name?: string; readonly contextWindow?: number; readonly maxTokens?: number }>
-  } = { catalog: {}, modalities: {}, facts: {} }
+  const catalog: Record<string, readonly string[]> = {}
+  const modalities: Record<string, { readonly input: readonly string[]; readonly output: readonly string[] }> = {}
+  const facts: Record<string, { readonly name?: string; readonly contextWindow?: number; readonly maxTokens?: number }> = {}
+  const sources: Record<string, readonly string[]> = {}
   for (const body of bodies) {
     const parsed = entryRecordOf(body)
     if (parsed === undefined) continue
     for (const [name, levels] of Object.entries(entryRecordOf(parsed['catalog']) ?? {})) {
-      if (name in envelope.catalog) continue
-      envelope.catalog[name] = stringsOf(levels)
+      if (name in catalog) continue
+      catalog[name] = stringsOf(levels)
     }
     for (const [name, value] of Object.entries(entryRecordOf(parsed['modalities']) ?? {})) {
-      if (name in envelope.modalities) continue
-      const modalities = entryRecordOf(value)
-      if (modalities === undefined) continue
-      envelope.modalities[name] = { input: stringsOf(modalities['input']), output: stringsOf(modalities['output']) }
+      if (name in modalities) continue
+      const entry = entryRecordOf(value)
+      if (entry === undefined) continue
+      modalities[name] = { input: stringsOf(entry['input']), output: stringsOf(entry['output']) }
     }
     for (const [name, value] of Object.entries(entryRecordOf(parsed['facts']) ?? {})) {
-      if (name in envelope.facts) continue
+      if (name in facts) continue
       const fact = entryRecordOf(value)
       if (fact === undefined) continue
-      envelope.facts[name] = {
+      facts[name] = {
         ...typeof fact['name'] === 'string' ? { name: fact['name'] } : {},
         ...typeof fact['contextWindow'] === 'number' ? { contextWindow: fact['contextWindow'] } : {},
         ...typeof fact['maxTokens'] === 'number' ? { maxTokens: fact['maxTokens'] } : {},
       }
     }
+    for (const [name, value] of Object.entries(entryRecordOf(parsed['sources']) ?? {})) {
+      if (name in sources) continue
+      sources[name] = stringsOf(value)
+    }
   }
-  return envelope
+  return Object.keys(sources).length === 0
+    ? { catalog, modalities, facts }
+    : { catalog, modalities, facts, sources }
 }

@@ -42,6 +42,7 @@ import { describe, expect, it } from 'vitest'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import { apply, inject, SECTION_ID } from 'dsh-client-ui-settings-discovery/client'
 import { DiscoverySection } from '../src/client/DiscoverySection.tsx'
+import { ProviderModelsCard } from '../src/client/ProviderModelsDialog.tsx'
 
 async function bench() {
   const ctx = new Context()
@@ -69,6 +70,7 @@ function declare(slots: Slots): () => void {
       name: 'root',
       children: {
         'settings.section': { kind: 'list', scope: 'root' },
+        'settings.models.provider-card': { kind: 'keyed', scope: 'root' },
       },
     } as never,
     () => null,
@@ -133,5 +135,21 @@ describe('ui-settings-discovery apply', () => {
     expect(b.slots.entries('settings.section')).toHaveLength(1)
     await fiber.dispose()
     expect(b.slots.entries('settings.section')).toHaveLength(0)
+  })
+
+  it('claims the llm-pi-ai provider-card cell for the model editor', async () => {
+    const b = await bench()
+    declare(b.slots)
+    const fiber = b.ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+    const entry = b.slots.entries('settings.models.provider-card')[0]!
+    expect(entry.component).toBe(ProviderModelsCard)
+    expect(entry.options.key).toBe('llm-pi-ai')
+    const injected = (
+      entry.inject as unknown as () => import('../src/client/ProviderModelsDialog.tsx').ProviderModelsCardInjected
+    )()
+    expect(injected.api).toBeDefined()
+    await fiber.dispose()
+    expect(b.slots.entries('settings.models.provider-card')).toHaveLength(0)
   })
 })

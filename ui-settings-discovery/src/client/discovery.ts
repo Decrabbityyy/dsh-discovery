@@ -1,13 +1,13 @@
 import type { LlmDiscoveredModel, LlmModelDiscoveryRequest, RpcResponse } from '@deepseek-ai/dsh-api-remotes/client'
 import {
-  CREDENTIAL_REF_PATTERN, DISCOVERY_NS, DYNAMIC_NS, mergeCatalogEnvelopes, normalizeModelName, PI_AI_NS, ROUTE_PATTERN,
-  UI_CATALOG_PATH, deriveKeyRef, messageOf,
+  catalogKeyCandidates, catalogKeyIndexOf, CREDENTIAL_REF_PATTERN, DISCOVERY_NS, DYNAMIC_NS, mergeCatalogEnvelopes,
+  PI_AI_NS, ROUTE_PATTERN, resolveCatalogKey, UI_CATALOG_PATH, deriveKeyRef, messageOf,
 } from 'dsh-llm-endpoint-base/vocabulary'
-import type { CatalogEnvelope } from 'dsh-llm-endpoint-base/vocabulary'
+import type { CatalogEnvelope, CatalogKeyIndex } from 'dsh-llm-endpoint-base/vocabulary'
 import { reasoningEffortsOf } from './presets.ts'
 
 export {
-  CREDENTIAL_REF_PATTERN, DISCOVERY_NS, DYNAMIC_NS, mergeCatalogEnvelopes, normalizeModelName, PI_AI_NS, ROUTE_PATTERN,
+  catalogKeyCandidates, CREDENTIAL_REF_PATTERN, DISCOVERY_NS, DYNAMIC_NS, mergeCatalogEnvelopes, PI_AI_NS, ROUTE_PATTERN,
   UI_CATALOG_PATH, deriveKeyRef, messageOf,
 }
 export type { CatalogEnvelope }
@@ -15,22 +15,122 @@ export type { CatalogEnvelope }
 /** Modalities one model's catalog entry records, keyed by bare model name. */
 export type ModelModalities = CatalogEnvelope['modalities'][string]
 
+/** The catalog tables one snapshot serves, keyed by catalog key. */
+export interface CatalogTables {
+  readonly catalog: Readonly<Record<string, readonly string[]>>
+  readonly modalities: Readonly<Record<string, { readonly input?: readonly string[]; readonly output?: readonly string[] }>>
+  readonly facts: Readonly<Record<string, { readonly name?: string; readonly contextWindow?: number; readonly maxTokens?: number }>>
+  /** Providers behind each key, in file order; absent in a legacy body. */
+  readonly sources?: Readonly<Record<string, readonly string[]>>
+}
+
+/** Everything the catalog records for one entry. */
+export interface CatalogEntry {
+  /** The key the catalog stores the entry under. */
+  readonly key: string
+  readonly name?: string
+  readonly contextWindow?: number
+  readonly maxTokens?: number
+  /** Inputs the pi-ai wire carries, deduplicated; empty when none are recorded. */
+  readonly input: readonly string[]
+  /** Thinking levels the entry records; empty when it records none. */
+  readonly levels: readonly string[]
+  /** Providers that record this key, in file order; the first supplied the rest. */
+  readonly sources: readonly string[]
+}
+
+/** One snapshot's tables, indexed for case-insensitive lookup by key. */
+export interface CatalogIndex extends CatalogKeyIndex {
+  /** The entry one stored key reads, or undefined for a key no table carries. */
+  entryOf(key: string): CatalogEntry | undefined
+}
+
+/** One row's resolved catalog entry: the key it matched and what that key records. */
+export interface CatalogMatch {
+  readonly key: string
+  readonly entry: CatalogEntry
+}
+
 /**
- * The per-model `input` declaration to write for one adopted model, or
- * undefined when the catalog records nothing for it or no image support.
+ * Build the index every row lookup and the picker share. Keys come from the
+ * union of the three data tables: an entry may carry levels without capacities,
+ * or modalities without levels, and the row it belongs to must still resolve.
+ */
+export function catalogIndexOf(tables: CatalogTables): CatalogIndex {
+  const keys = catalogKeyIndexOf([
+    ...Object.keys(tables.catalog),
+    ...Object.keys(tables.modalities),
+    ...Object.keys(tables.facts),
+  ])
+  return {
+    ...keys,
+    entryOf: (key) => {
+      const levels = tables.catalog[key]
+      const modalities = tables.modalities[key]
+      const facts = tables.facts[key]
+      if (levels === undefined && modalities === undefined && facts === undefined) return undefined
+      return {
+        key,
+        ...facts?.name === undefined ? {} : { name: facts.name },
+        ...facts?.contextWindow === undefined ? {} : { contextWindow: facts.contextWindow },
+        ...facts?.maxTokens === undefined ? {} : { maxTokens: facts.maxTokens },
+        input: [...new Set((modalities?.input ?? []).filter(value => value === 'text' || value === 'image'))],
+        levels: levels ?? [],
+        sources: tables.sources?.[key] ?? [],
+      }
+    },
+  }
+}
+
+/**
+ * The entry one row reads its facts from: the key the user pinned when there is
+ * one, else the key its id resolves to. A key the pinned name no longer carries
+ * falls back to resolution rather than losing the row's facts.
+ */
+export function matchCatalogEntry(
+  modelId: string,
+  index: CatalogIndex,
+  bindings: Readonly<Record<string, string>> = {},
+): CatalogMatch | undefined {
+  const bound = bindings[modelId]
+  if (bound !== undefined) {
+    const entry = index.entryOf(bound)
+    return entry === undefined ? undefined : { key: bound, entry }
+  }
+  const key = resolveCatalogKey(modelId, index)
+  if (key === undefined) return undefined
+  const entry = index.entryOf(key)
+  return entry === undefined ? undefined : { key, entry }
+}
+
+/**
+ * The longest catalog key one id spells, as the picker's opening search: a
+ * variant id like `deepseek-v4-flash-max` seeds `deepseek-v4-flash`, while an
+ * id the catalog has never heard of seeds nothing and lists every entry.
+ */
+export function catalogSearchSeed(modelId: string, index: CatalogIndex): string {
+  for (const candidate of catalogKeyCandidates(modelId)) {
+    const exact = index.keyOf(candidate)
+    if (exact !== undefined) return exact
+    for (let cut = candidate.lastIndexOf('-'); cut > 0; cut = candidate.lastIndexOf('-', cut - 1)) {
+      const prefix = index.keyOf(candidate.slice(0, cut))
+      if (prefix !== undefined) return prefix
+    }
+  }
+  return ''
+}
+
+/**
+ * The per-model `input` declaration to write for one entry, or undefined when
+ * the catalog records nothing for it or no image support.
  *
  * Only a positive image claim is written. `input` has no settings-surface
  * editor, so writing `['text']` for a model the catalog still lists without
  * modalities would freeze it as text-only with no way back when the catalog
  * learns it accepts images; an unwritten field stays inheritable.
  */
-export function declaredInputOf(
-  modalities: Readonly<Record<string, { readonly input?: readonly string[] }>>,
-  modelId: string,
-): readonly string[] | undefined {
-  const recorded = modalities[normalizeModelName(modelId)]?.input ?? []
-  const accepted = [...new Set(recorded.filter(value => value === 'text' || value === 'image'))]
-  return accepted.includes('image') ? accepted : undefined
+export function declaredInput(entry: CatalogEntry | undefined): readonly string[] | undefined {
+  return entry !== undefined && entry.input.includes('image') ? entry.input : undefined
 }
 
 /** One model read back out of a stored profile, plus the options it already declares. */
@@ -122,22 +222,27 @@ export function providerProfileOf(namespaceValue: unknown, routeId: string): Pro
 }
 
 /**
- * One model entry to write back. The picked levels and the catalog's image
- * claim win; a field neither supplies keeps what the stored profile already
- * declared, so an edit that does not touch it cannot silently drop it.
+ * One model entry to write back. The picked levels and the catalog entry the
+ * row matched win; a field neither supplies keeps what the stored profile
+ * already declared, so an edit that does not touch it cannot silently drop it.
+ * The name and capacities a row displays but its endpoint never disclosed come
+ * from the catalog the same way, which is what makes them survive the write.
  */
 export function modelDeclaration(
   row: ProfileModel,
   levels: ReadonlySet<string>,
-  modalities: Readonly<Record<string, { readonly input?: readonly string[] }>>,
+  entry: CatalogEntry | undefined,
 ): ProfileModel {
   const reasoningEfforts = reasoningEffortsOf(levels) ?? row.reasoningEfforts
-  const input = declaredInputOf(modalities, row.id) ?? row.input
+  const input = declaredInput(entry) ?? row.input
+  const name = row.name ?? entry?.name
+  const contextWindow = row.contextWindow ?? entry?.contextWindow
+  const maxTokens = row.maxTokens ?? entry?.maxTokens
   return {
     id: row.id,
-    ...row.name === undefined ? {} : { name: row.name },
-    ...row.contextWindow === undefined ? {} : { contextWindow: row.contextWindow },
-    ...row.maxTokens === undefined ? {} : { maxTokens: row.maxTokens },
+    ...name === undefined ? {} : { name },
+    ...contextWindow === undefined ? {} : { contextWindow },
+    ...maxTokens === undefined ? {} : { maxTokens },
     ...input === undefined ? {} : { input },
     ...reasoningEfforts === undefined ? {} : { reasoningEfforts },
   }

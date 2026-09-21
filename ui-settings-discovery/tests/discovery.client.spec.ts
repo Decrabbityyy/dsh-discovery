@@ -3,9 +3,11 @@ import { describe, expect, it } from 'vitest'
 import { UI_CATALOG_PATH } from 'dsh-llm-endpoint-base/vocabulary'
 import { CUSTOM_PRESET, ENGINE_PRESETS, PROTOCOLS } from '../src/client/presets.ts'
 import {
-  CREDENTIAL_REF_PATTERN, declaredInputOf, deriveKeyRef, DISCOVERY_NS, DISCOVERY_PLUGIN, DYNAMIC_PLUGIN,
-  isActivePlugin, messageOf, modelDeclaration, PI_AI_NS, providerProfileOf, ROUTE_PATTERN,
+  catalogKeyCandidates, catalogIndexOf, catalogSearchSeed, CREDENTIAL_REF_PATTERN, declaredInput, deriveKeyRef,
+  DISCOVERY_NS, DISCOVERY_PLUGIN, DYNAMIC_PLUGIN, isActivePlugin, matchCatalogEntry, messageOf, modelDeclaration,
+  PI_AI_NS, providerProfileOf, ROUTE_PATTERN,
 } from '../src/client/discovery.ts'
+import type { CatalogEntry } from '../src/client/discovery.ts'
 
 describe('discovery wire constants', () => {
   it('pins the fixed namespaces of the OMP wire', () => {
@@ -56,34 +58,90 @@ describe('catalog path', () => {
   })
 })
 
-describe('declaredInputOf', () => {
-  // Envelope keys are bare model names, exactly as parseModelFacts stores them.
-  const table = {
-    'qwen2.5:7b': { input: ['text', 'image'] },
-    'vision-1': { input: ['image'] },
-    'llama3.2:1b': { input: ['text'] },
-    'audio-only': { input: ['audio', 'video'] },
+describe('catalog resolution', () => {
+  // Envelope keys are the ids models.dev records, plus their bare names.
+  const tables = {
+    catalog: { 'qwen2.5:7b': ['off', 'high'], 'glm-5.2': ['high', 'max'] },
+    modalities: {
+      'qwen2.5:7b': { input: ['text', 'image'] },
+      'vision-1': { input: ['image'] },
+      'llama3.2:1b': { input: ['text'] },
+      'audio-only': { input: ['audio', 'video'] },
+    },
+    facts: { 'qwen2.5:7b': { name: 'Qwen 2.5 7B', contextWindow: 32768 }, 'glm-5.2': { name: 'GLM-5.2' } },
+    sources: { 'glm-5.2': ['zai-org', 'fireworks'] },
   }
+  const index = catalogIndexOf(tables)
 
-  it('declares the recorded modalities when the catalog records image input', () => {
-    expect(declaredInputOf(table, 'qwen2.5:7b')).toEqual(['text', 'image'])
-    expect(declaredInputOf(table, 'acme/vision-1')).toEqual(['image'])
+  it('keys the union of the tables, case-insensitively', () => {
+    expect(index.keyOf('GLM-5.2')).toBe('glm-5.2')
+    expect(index.keyOf('ANTHROPIC/CLAUDE')).toBeUndefined()
+    expect(index.entryOf('llama3.2:1b')?.levels).toEqual([])
+    expect(index.entryOf('never-heard-of-it')).toBeUndefined()
   })
 
   it('resolves a provider-prefixed id onto its bare-name entry', () => {
-    expect(declaredInputOf(table, 'openrouter/qwen2.5:7b')).toEqual(['text', 'image'])
-    expect(declaredInputOf(table, 'x/acme/vision-1')).toEqual(['image'])
+    expect(matchCatalogEntry('openrouter/qwen2.5:7b', index)?.entry.input).toEqual(['text', 'image'])
+    expect(matchCatalogEntry('x/acme/vision-1', index)?.key).toBe('vision-1')
   })
 
-  it('declares nothing for a text-only, non-raster, or unknown model', () => {
-    expect(declaredInputOf(table, 'llama3.2:1b')).toBeUndefined()
-    expect(declaredInputOf(table, 'audio-only')).toBeUndefined()
-    expect(declaredInputOf(table, 'never-heard-of-it')).toBeUndefined()
-    expect(declaredInputOf({}, 'qwen2.5:7b')).toBeUndefined()
+  it('offers both halves of a slash before giving up', () => {
+    // A variant tag after the slash is not a vendor prefix.
+    expect(catalogKeyCandidates('Gemini-3.7-Flash/Antigravity')).toEqual([
+      'Gemini-3.7-Flash/Antigravity', 'Gemini-3.7-Flash', 'Antigravity',
+    ])
+    expect(matchCatalogEntry('glm-5.2/GLM-5.2', index)?.key).toBe('glm-5.2')
   })
 
-  it('drops values the pi-ai field cannot carry and any duplicate', () => {
-    expect(declaredInputOf({ m: { input: ['image', 'image', 'audio'] } }, 'm')).toEqual(['image'])
+  it('keeps the id a provider records when its bare name is recorded too', () => {
+    const split = catalogIndexOf({
+      catalog: {},
+      modalities: {},
+      facts: { 'x-ai/grok-4.6': { name: 'Grok 4.6 · openrouter' }, 'grok-4.6': { name: 'Grok 4.6 · xai' } },
+      sources: { 'x-ai/grok-4.6': ['openrouter'], 'grok-4.6': ['xai', 'openrouter'] },
+    })
+    // The exact id wins over the bare name the tail candidate would reach.
+    expect(matchCatalogEntry('x-ai/grok-4.6', split)?.entry.name).toBe('Grok 4.6 · openrouter')
+    expect(matchCatalogEntry('grok-4.6', split)?.entry.name).toBe('Grok 4.6 · xai')
+    // A third segment only ever prefixes, so the bare name is all that is left.
+    expect(matchCatalogEntry('openrouter/x-ai/grok-4.6', split)?.key).toBe('grok-4.6')
+  })
+
+  it('carries the providers behind an entry', () => {
+    expect(index.entryOf('glm-5.2')?.sources).toEqual(['zai-org', 'fireworks'])
+    expect(index.entryOf('llama3.2:1b')?.sources).toEqual([])
+  })
+
+  it('resolves nothing while two candidates name a recorded model', () => {
+    const ambiguous = catalogIndexOf({
+      catalog: {},
+      modalities: {},
+      facts: { left: { name: 'Left' }, right: { name: 'Right' } },
+    })
+    expect(matchCatalogEntry('left/right', ambiguous)).toBeUndefined()
+    // The user's own pin is what settles it.
+    expect(matchCatalogEntry('left/right', ambiguous, { 'left/right': 'right' })?.key).toBe('right')
+  })
+
+  it('leaves a variant id unresolved and seeds the picker with its base', () => {
+    expect(matchCatalogEntry('glm-5.2-fast-preview/cc', index)).toBeUndefined()
+    expect(catalogSearchSeed('glm-5.2-fast-preview/cc', index)).toBe('glm-5.2')
+    expect(catalogSearchSeed('deepseek-v4-flash-max', index)).toBe('')
+  })
+})
+
+describe('declaredInput', () => {
+  const entryOf = (input: readonly string[]): CatalogEntry => ({ key: 'm', input, levels: [], sources: [] })
+
+  it('declares the recorded modalities when the entry records image input', () => {
+    expect(declaredInput(entryOf(['text', 'image']))).toEqual(['text', 'image'])
+    expect(declaredInput(entryOf(['image']))).toEqual(['image'])
+  })
+
+  it('declares nothing for a text-only entry, an unresolved row, or nothing recorded', () => {
+    expect(declaredInput(entryOf(['text']))).toBeUndefined()
+    expect(declaredInput(entryOf([]))).toBeUndefined()
+    expect(declaredInput(undefined)).toBeUndefined()
   })
 })
 
@@ -149,13 +207,13 @@ describe('providerProfileOf', () => {
 })
 
 describe('modelDeclaration', () => {
-  const catalogModalities = { 'qwen2.5:7b': { input: ['text', 'image'] } }
+  const entry: CatalogEntry = { key: 'qwen2.5:7b', name: 'Qwen 2.5 7B', input: ['text', 'image'], levels: ['off', 'low'], sources: [] }
 
-  it('writes the picked levels and the catalog image claim', () => {
+  it('writes the picked levels, the matched image claim, and the name the row displayed', () => {
     expect(modelDeclaration(
-      { id: 'qwen2.5:7b', name: 'Qwen 2.5 7B', contextWindow: 32768 },
+      { id: 'qwen2.5:7b', contextWindow: 32768 },
       new Set(['off', 'high']),
-      catalogModalities,
+      entry,
     )).toEqual({
       id: 'qwen2.5:7b',
       name: 'Qwen 2.5 7B',
@@ -169,7 +227,7 @@ describe('modelDeclaration', () => {
     expect(modelDeclaration(
       { id: 'private-vl', input: ['text', 'image'], reasoningEfforts: { high: 'high' } },
       new Set(),
-      {},
+      undefined,
     )).toEqual({
       id: 'private-vl',
       input: ['text', 'image'],
@@ -177,8 +235,17 @@ describe('modelDeclaration', () => {
     })
   })
 
-  it('writes no input when the catalog records no image support', () => {
-    expect(modelDeclaration({ id: 'llama3.2:1b' }, new Set(), catalogModalities))
+  it('prefers what the endpoint disclosed over the entry it matched', () => {
+    expect(modelDeclaration({ id: 'qwen2.5:7b', name: 'Local Qwen', maxTokens: 4096 }, new Set(), entry)).toEqual({
+      id: 'qwen2.5:7b',
+      name: 'Local Qwen',
+      maxTokens: 4096,
+      input: ['text', 'image'],
+    })
+  })
+
+  it('writes no input when the entry records no image support', () => {
+    expect(modelDeclaration({ id: 'llama3.2:1b' }, new Set(), { key: 'llama3.2:1b', input: ['text'], levels: [], sources: [] }))
       .toEqual({ id: 'llama3.2:1b' })
   })
 })

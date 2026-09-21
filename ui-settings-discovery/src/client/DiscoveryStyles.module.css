@@ -136,6 +136,7 @@
 
 .actions {
   display: flex;
+  align-items: center;
   justify-content: flex-start;
   gap: 8px;
 }
@@ -166,6 +167,39 @@
 }
 
 .primaryButton:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--dsw-alias-border-l3);
+}
+
+/* The primary button's peer in an action row: same capsule geometry so the two
+   line up. `.toolButton` stays the compact 28px chip — it belongs to the
+   results toolbar, beside that toolbar's own 28px search field. */
+.secondaryButton {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 18px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  line-height: 22px;
+  cursor: pointer;
+}
+
+.secondaryButton:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.secondaryButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.secondaryButton:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--dsw-alias-border-l3);
 }
@@ -303,6 +337,136 @@
 
 .resultId {
   font-family: var(--ds-font-family-code);
+}
+
+/* The 名称 cell: the resolved name, then the control that pins a catalog entry. */
+.nameCell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.matchButton {
+  box-sizing: border-box;
+  flex: none;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 11px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 16px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.matchButton:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+/* A row the user pinned: the entry is their choice, not a resolution. */
+.matchButtonBound {
+  border-color: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-label-primary);
+}
+
+.matchButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* The catalog picker, expanded under the row it belongs to. */
+.pickerCell {
+  padding: 0 0 10px;
+}
+
+.pickerPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--dsw-alias-bg-module-platform);
+  border-radius: 10px;
+}
+
+.pickerList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pickerItem {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pickerItem:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.pickerKey {
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.pickerName {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* Whose capacities this entry carries: several providers serve one model. */
+.pickerSource {
+  flex: none;
+  padding: 0 6px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 9px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.pickerSource:empty {
+  display: none;
+}
+
+.pickerMeta {
+  margin-left: auto;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+}
+
+.pickerFoot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pickerCount {
+  margin-right: auto;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
 }
 
 .adoptCard {

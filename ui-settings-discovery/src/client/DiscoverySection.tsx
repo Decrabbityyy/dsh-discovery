@@ -10,18 +10,18 @@
  * `models` key at all, which serves the route's whole catalog.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-api-remotes/client'
 import clsx from 'clsx'
 import {
-  CREDENTIAL_REF_PATTERN, declaredInputOf, deriveKeyRef, DISCOVERY_NS, DISCOVERY_PLUGIN, DYNAMIC_PLUGIN, isActivePlugin,
-  mergeCatalogEnvelopes, messageOf, normalizeModelName, PI_AI_NS, ROUTE_PATTERN, UI_CATALOG_PATH,
+  catalogIndexOf, CREDENTIAL_REF_PATTERN, deriveKeyRef, DISCOVERY_NS, DISCOVERY_PLUGIN, DYNAMIC_PLUGIN, isActivePlugin,
+  matchCatalogEntry, mergeCatalogEnvelopes, messageOf, modelDeclaration, PI_AI_NS, ROUTE_PATTERN, UI_CATALOG_PATH,
 } from './discovery.ts'
 import type { DiscoveryApi, DiscoveryResponse } from './discovery.ts'
 import { DynamicRoutes } from './DynamicRoutes.tsx'
 import { ModelResultsTable } from './ModelResultsTable.tsx'
-import { CUSTOM_PRESET, ENGINE_PRESETS, PROTOCOLS, reasoningEffortsOf } from './presets.ts'
+import { CUSTOM_PRESET, ENGINE_PRESETS, PROTOCOLS } from './presets.ts'
 import type { EnginePreset } from './presets.ts'
 import styles from './DiscoveryStyles.module.css'
 
@@ -72,6 +72,17 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
   // bundled pi-ai catalog only, so these fill in a model it has not catalogued
   // yet, and the modalities decide what an adopted model may accept.
   const [facts, setFacts] = useState<Readonly<Record<string, { name?: string; contextWindow?: number; maxTokens?: number }>>>({})
+  // Which providers record each key: the picker labels an entry with them.
+  const [sources, setSources] = useState<Readonly<Record<string, readonly string[]>>>({})
+  // Catalog keys the user pinned per row for ids the tables cannot resolve on
+  // their own; the table and the adoption read them through the same lookup.
+  const [bindings, setBindings] = useState<Readonly<Record<string, string>>>({})
+  // One index per catalog snapshot: every row lookup, the picker's list, and
+  // the write path share it.
+  const catalogIndex = useMemo(
+    () => catalogIndexOf({ catalog, modalities, facts, sources }),
+    [catalog, modalities, facts, sources],
+  )
   // Whether the route id names an installed-catalog pi-ai provider; such a
   // route inherits each known model's reasoning, so the picker disables itself.
   const [isCatalogRoute, setIsCatalogRoute] = useState(false)
@@ -117,6 +128,7 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
         setCatalog(merged.catalog)
         setModalities(merged.modalities)
         setFacts(merged.facts)
+        setSources(merged.sources ?? {})
       })
     return () => {
       cancelled = true
@@ -124,7 +136,7 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
   }, [])
 
   // Backfills defaults for models the probe initialized empty once the catalog
-  // lands; a model with any pick already keeps it.
+  // lands or a row is pinned; a model with any pick already keeps it.
   const probedIds = candidates === undefined ? undefined : candidates.map(model => model.id).join('\0')
   useEffect(() => {
     if (probedIds === undefined) return
@@ -132,7 +144,7 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
       const next: Record<string, ReadonlySet<string>> = { ...current }
       let changed = false
       for (const id of probedIds.split('\0')) {
-        const recorded = catalog[normalizeModelName(id)] ?? []
+        const recorded = matchCatalogEntry(id, catalogIndex, bindings)?.entry.levels ?? []
         if ((next[id]?.size ?? 0) === 0 && recorded.length > 0) {
           next[id] = new Set(recorded)
           changed = true
@@ -141,7 +153,7 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
       return changed ? next : current
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- probedIds captures the candidate set identity.
-  }, [catalog, probedIds])
+  }, [catalogIndex, bindings, probedIds])
 
   const keyValue = apiKey.trim()
   const routeId = route.trim()
@@ -248,6 +260,27 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
     })
   }
 
+  /**
+   * Pin one row to a catalog entry, seeding its thinking levels from that entry
+   * when it has none picked yet: a row the user already tuned keeps its picks.
+   * The pins live as long as the page does, so a re-probe of the same ids keeps
+   * them.
+   */
+  const bindModel = (id: string, key: string | undefined): void => {
+    setBindings((current) => {
+      const next = { ...current }
+      if (key === undefined) delete next[id]
+      else next[id] = key
+      return next
+    })
+    if (key === undefined) return
+    const entry = catalogIndex.entryOf(key)
+    if (entry === undefined) return
+    setModelLevels(current => (current[id]?.size ?? 0) === 0
+      ? { ...current, [id]: new Set(entry.levels) }
+      : current)
+  }
+
   /** Probe the endpoint the form currently shows, then select every found model. */
   const probe = async (): Promise<void> => {
     setProbing(true)
@@ -268,10 +301,13 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
       setProbeToken(token => token + 1)
       // Everything found starts checked.
       setPicked(new Set(found.map(model => model.id)))
-      // Each model starts at the levels the catalog records for it; an unknown
-      // id gets no default. The catalog keys bare names, so a provider-prefixed
-      // id resolves to the same entry the table shows.
-      setModelLevels(Object.fromEntries(found.map(model => [model.id, new Set(catalog[normalizeModelName(model.id)] ?? [])])))
+      // Each model starts at the levels the entry it resolves to records; an
+      // unresolved id gets no default, and the row's picker is where the user
+      // names its entry.
+      setModelLevels(Object.fromEntries(found.map(model => [
+        model.id,
+        new Set(matchCatalogEntry(model.id, catalogIndex, bindings)?.entry.levels ?? []),
+      ])))
     } catch (error) {
       // The transport rejected instead of answering.
       setProbeError(messageOf(error))
@@ -306,7 +342,6 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
     }
     /* v8 ignore next -- the adopt button only renders above a non-empty candidate list */
     const selected = candidates === undefined ? [] : candidates.filter(model => picked.has(model.id))
-    // A catalog route inherits reasoning from the catalog, so its models write none.
     const profile = {
       ...displayName.trim().length === 0 ? {} : { displayName: displayName.trim() },
       ...storesKey ? { apiKeyEnv: keyRef } : {},
@@ -317,18 +352,17 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
       ...selected.length === 0
         ? {}
         : {
-            models: selected.map(model => {
-              const efforts = isCatalogRoute ? undefined : reasoningEffortsOf(modelLevels[model.id] ?? new Set())
-              // A catalog route inherits the installed catalog's modalities the
-              // way it inherits reasoning; a hand-declared route needs the
-              // per-model declaration written here, because nothing below it
-              // but the route-wide text-only default would answer.
-              const input = isCatalogRoute ? undefined : declaredInputOf(modalities, model.id)
-              return {
-                ...model,
-                ...efforts === undefined ? {} : { reasoningEfforts: efforts },
-                ...input === undefined ? {} : { input },
-              }
+            models: selected.map((model) => {
+              // A catalog route inherits the installed catalog's reasoning and
+              // modalities; a hand-declared route needs the per-model
+              // declaration written here, because nothing below it but the
+              // route-wide text-only default would answer.
+              if (isCatalogRoute) return { ...model }
+              return modelDeclaration(
+                model,
+                modelLevels[model.id] ?? new Set(),
+                matchCatalogEntry(model.id, catalogIndex, bindings)?.entry,
+              )
             }),
           },
     }
@@ -461,6 +495,9 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
               levelsDisabled={isCatalogRoute}
               facts={facts}
               modalities={modalities}
+              sources={sources}
+              bindings={bindings}
+              onBind={bindModel}
               resetToken={probeToken}
             />
             {/* Nothing found means nothing to adopt, so the card stays away. */}
