@@ -69,8 +69,10 @@ function capacity(value: number | undefined): number | undefined {
 /** The facts one models.dev model records, without the provider that recorded them. */
 function factsOf(model: ModelsDevModel): ModelFacts {
   const effort = model.reasoning_options?.find(option => option.type === 'effort')
-  const levels = effort?.values !== undefined && effort.values.length > 0
-    ? effort.values.map(normalizeLevel)
+  // models.dev 的 values 里会混进 null（Sarvam 两条），当作没记录这一档。
+  const values = (effort?.values ?? []).filter((value): value is string => typeof value === 'string')
+  const levels = values.length > 0
+    ? values.map(normalizeLevel)
     : model.reasoning === true ? [] : undefined
   const inputModalities = keepSupported(model.modalities?.input)
   const outputModalities = keepSupported(model.modalities?.output)

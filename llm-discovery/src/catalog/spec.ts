@@ -3,7 +3,8 @@ import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 
 const modelRowSchema = z.object({
   displayName: z.string().optional(),
-  levels: z.array(z.string()).optional(),
+  // 同样容错：早期解析器把 models.dev 的 null 档位原样存了过来，读回「未声明」。
+  levels: z.array(z.string()).optional().catch(undefined),
   inputModalities: z.array(z.string()).optional(),
   outputModalities: z.array(z.string()).optional(),
   // models.dev 用 0 表示「不知道」，早期解析器把这个 0 存了进来：读回「未声明」，而不是让整条记录读不过去。

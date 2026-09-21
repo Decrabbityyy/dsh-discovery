@@ -248,17 +248,26 @@ describe('the catalog domain declaration', () => {
     })
   })
 
+  it('reads a row that recorded a null reasoning level as unstated', () => {
+    // models.dev 的 values 里混进过 null（Sarvam 两条）：整份目录是一条记录，一条读不过去就整份打不开。
+    const row = modelCatalogDomainSpec.tables.catalog.valueSchema.parse({
+      entries: { 'sarvam-105b': { displayName: 'Sarvam-105B', levels: [null, 'low', 'high'] } },
+    })
+    expect(row.entries['sarvam-105b']).toEqual({ displayName: 'Sarvam-105B' })
+  })
+
   it('only parses entries that the record schema can read back', () => {
     const recordSchema = modelCatalogDomainSpec.tables.catalog.valueSchema
     const parsed = parseModelFacts({
       acme: {
         models: {
           'unknown-window': { name: 'Unknown Window', limit: { context: 0, output: 0 } },
+          'null-effort': { name: 'Null Effort', reasoning_options: [{ type: 'effort', values: [null, 'low'] as unknown as readonly string[] }] },
           'known-window': { name: 'Known Window', modalities: { input: ['text'], output: ['text'] }, limit: { context: 4096, output: 1024 } },
         },
       },
     })
-    expect(parsed.size).toBe(2)
+    expect(parsed.size).toBe(3)
     for (const [key, facts] of parsed) {
       const stored = recordSchema.safeParse({ entries: { [key]: facts } })
       expect(stored.success, `${key} must be storable`).toBe(true)
