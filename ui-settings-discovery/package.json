@@ -52,6 +52,7 @@
     "build": "tsc -b tsconfig.json && tsdown",
     "prepack": "tsdown",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "prepublishOnly": "pnpm run test && pnpm run build"
   },
   "dependencies": {

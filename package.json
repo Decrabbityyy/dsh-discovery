@@ -5,6 +5,7 @@
   "scripts": {
     "build": "pnpm -r run build",
     "test": "pnpm -r run test",
+    "coverage": "pnpm -r run test:coverage",
     "check": "node scripts/compat/check.mjs",
     "check:types": "node scripts/compat/check.mjs --only types",
     "check:host": "node scripts/compat/check.mjs --only surface,host-types",
@@ -18,12 +19,13 @@
     "@testing-library/react": "^16.3.2",
     "@types/node": "^26.2.0",
     "@types/react": "~18.3.1",
+    "@vitest/coverage-v8": "^4.1.11",
     "jsdom": "29.1.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "tsdown": "^0.22.2",
     "typescript": "^6.0.3",
     "vite-tsconfig-paths": "^6.1.1",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.11"
   }
 }

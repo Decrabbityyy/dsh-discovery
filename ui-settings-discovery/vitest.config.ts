@@ -25,5 +25,11 @@ export default defineConfig({
   },
   test: {
     include: ['tests/**/*.spec.ts', 'tests/**/*.spec.tsx'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text'],
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: ['src/**/*.d.ts'],
+    },
   },
 })
