@@ -23,7 +23,9 @@
     "noUnusedParameters": true,
     "types": ["node"],
     "rootDir": "src",
-    "outDir": "lib/types"
+    "outDir": "lib/types",
+    // 增量信息放在 lib 之外：files 把整个 lib 都发出去，留在里面会进发布产物。
+    "tsBuildInfoFile": "./.tsbuildinfo/tsconfig.tsbuildinfo"
   },
   "include": [
     "src"

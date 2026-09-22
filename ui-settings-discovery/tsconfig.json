@@ -26,7 +26,9 @@
     "jsx": "react-jsx",
     "lib": ["ES2024", "DOM", "DOM.Iterable"],
     "rootDir": "src",
-    "outDir": "lib/types"
+    "outDir": "lib/types",
+    // 增量信息放在 lib 之外：发布产物只该有 JS 与声明。
+    "tsBuildInfoFile": "./.tsbuildinfo/tsconfig.tsbuildinfo"
   },
   "include": [
     "src"

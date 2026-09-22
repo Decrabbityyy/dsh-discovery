@@ -54,8 +54,8 @@
   ],
   "license": "MIT",
   "scripts": {
-    "build": "tsc -b tsconfig.json && tsdown",
-    "prepack": "tsdown",
+    "build": "node -e \"require('node:fs').rmSync('lib',{recursive:true,force:true})\" && tsc -b tsconfig.json --force && tsdown",
+    "prepack": "pnpm run build",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "prepublishOnly": "pnpm run test && pnpm run build"
