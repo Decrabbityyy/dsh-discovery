@@ -1,7 +1,7 @@
 {
   "name": "dsh-llm-discovery",
   "description": "Endpoint model discovery, the models.dev catalog service, and the primitives the discovery plugins share",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "keywords": [
     "deepseek-harness",
     "dsh",

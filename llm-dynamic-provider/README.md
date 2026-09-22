@@ -4,16 +4,19 @@
 
 发现的模型目录不会写入 `settings.yaml`。你只需要保存端点和协议；每次启动时插件会重新读取模型列表。
 
+本插件依赖 `dsh-llm-discovery`：它提供 models.dev 目录服务。没装它时本插件的宿主行不会激活（模型选择器里也就没有动态路由）。
+
 ## 安装
 
-从 npmjs 安装到目标 profile：
+`dsh-llm-discovery` 是本插件的前置依赖，先装它，再装本插件：
 
 ```sh
+dsh plugin --profile <name> add dsh-llm-discovery
 dsh plugin --profile <name> add dsh-llm-dynamic-provider
 dsh --profile <name> --dump-config
 ```
 
-`--dump-config` 中应出现 `llm-dynamic-provider`。
+`--dump-config` 中应同时出现 `llm-discovery` 和 `llm-dynamic-provider`。
 
 ## 配置一个动态路由
 
@@ -59,7 +62,6 @@ UPSTREAM_API_KEY=你的密钥
 ```yaml
 - id: llm-dynamic-provider
   config:
-    cache: true
     timeoutMs: 10000
     maxResponseBytes: 4194304
     enrichment: true
@@ -67,10 +69,12 @@ UPSTREAM_API_KEY=你的密钥
 
 | 字段 | 默认值 | 说明 |
 |---|---:|---|
-| `cache` | `false` | 保存上一次成功发现的目录；端点暂时不可用时仍可启动旧目录 |
+| `routes` | `{}` | 路由声明的底稿层；`settings.yaml` 里的同名路由覆盖它 |
 | `timeoutMs` | `10000` | 每次探测请求的超时时间，单位毫秒 |
 | `maxResponseBytes` | `4194304` | 模型列表响应的最大字节数 |
 | `enrichment` | `true` | 用内置模型目录补全端点未提供的名称和容量 |
+
+`config.routes` 适合随 profile 分发一组默认端点；用户在 `settings.yaml` 里改动或新增的路由写在同一份命名空间的用户层上。
 
 修改 profile patch 后需要重启。安装了 `dsh-client-ui-settings-discovery` 时，也可以在「模型发现」页面的「动态路由」区域新增、编辑和删除路由；页面写入的也是同一份用户 settings。
 
@@ -87,12 +91,18 @@ UPSTREAM_API_KEY=你的密钥
 
 ## 启动和失败行为
 
-- 每次启动都会重新探测所有路由。
+- 每次启动都会重新探测所有路由：端点不可达、认证失败或返回空列表的路由这一轮不注册，端点恢复后随下一次探测（改设置或手动刷新）注册。
+- 已经探测成功过的路由，某一轮探测失败时继续沿用上一次的模型清单；只有从未成功过的路由才完全不出现。
 - `settings.yaml` 中的路由发生变化时会自动重新探测，不需要重启。
 - 探测成功后，端点返回的模型会出现在模型选择器中。
-- 未启用缓存时，不可达、认证失败或返回空列表的路由不会注册。
-- 启用缓存后，启动时先使用上一次成功目录，再尝试刷新。
-- 端点返回的容量优先；缺失字段可由内置目录或路由默认值补全。
+- 端点返回的容量优先；缺失字段可由路由默认值补全。
+- 缺失的名称与容量由 `dsh-llm-discovery` 提供的 models.dev 目录补齐，缓存与刷新由该插件负责。
+
+## 手动刷新
+
+不用重启也可以重新读一遍目录并重新探测：安装 `dsh-client-ui-settings-discovery` 后，打开「设置」→「插件」→「模型目录」。页面显示声明路由数、models.dev 目录的条数、刷新时间与来源，按钮「刷新目录与路由」会重新读取目录、重新探测所有声明路由，并把结果逐条列出来（每条路由的模型数，或它的失败原因）。
+
+插件自己的 HTTP 端点：`GET`/`POST /llm-dynamic-provider/probe` 读状态或触发一次全量刷新，`GET`/`POST /llm-dynamic-provider/routes` 读路由列表、按 `set` / `unset` 写入路由。两者只在挂了 Web 服务器时注册，随插件卸载撤销。
 
 ## 常见问题
 
@@ -115,6 +125,7 @@ UPSTREAM_API_KEY=你的密钥
 ## 已知限制
 
 - Anthropic 和 Gemini 每次最多读取 1000 个模型，不继续读取后续分页。
+- 用页面编辑已有路由时只写回路由 ID、协议、端点地址、显示名称与密钥；`defaultContextWindow` 与 `defaultMaxTokens` 需要在 `settings.yaml` 里维护。
 - 连续快速编辑同一路由可能产生重叠探测；一次保存后请等待探测完成再继续修改。
 - 使用 Web 动态路由管理时，只应把 DSH Web 服务暴露给可信用户和可信网络。
 

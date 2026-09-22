@@ -1,6 +1,6 @@
 {
   "name": "dsh-llm-dynamic-provider",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Runtime-discovered pi-ai provider routes: probe an endpoint at boot, register its models into the in-memory LLM registry — nothing written to settings",
   "keywords": [
     "deepseek-harness",

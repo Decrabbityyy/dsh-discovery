@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Pre-runtime compatibility gate. Run it after any dependency bump, before
+ * Pre-runtime compatibility checks. Run them after any dependency bump, before
  * starting the harness.
  *
  * Exit 0 = compatible (warnings allowed), 1 = a check failed, 2 = bad arguments
@@ -60,7 +60,7 @@ for (const pkg of packages) {
   }
 }
 
-console.log('dsh plugin compatibility gate')
+console.log('dsh plugin compatibility checks')
 console.log('  workspace  ' + packages.length + ' package(s): ' + packages.map((pkg) => pkg.name).join(', '))
 const compileSummary = [...compileVersions.entries()].map(([name, versions]) => name.replace('@deepseek-ai/', '') + ' ' + [...versions].join('/'))
 console.log('  compiled   ' + (compileSummary.length > 0 ? compileSummary.join(' · ') : '(nothing installed — run pnpm install)'))

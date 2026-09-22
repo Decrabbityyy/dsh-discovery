@@ -1,7 +1,7 @@
 /**
- * Shared plumbing for the pre-runtime compatibility gate (pnpm run check).
+ * Shared plumbing for the pre-runtime compatibility checks (pnpm run check).
  * Deliberately dependency-free: the workspace ships neither semver nor a YAML
- * parser, and the gate has to run against a lockfile that was just rewritten.
+ * parser, and the checks have to run against a lockfile that was just rewritten.
  */
 
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, statSync } from 'node:fs'
@@ -13,7 +13,7 @@ import { spawnSync } from 'node:child_process'
 /** Repository root (the pnpm workspace holding the plugin packages). */
 export const WORKSPACE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
-/** Scratch directory for generated gate artifacts (git-ignored). */
+/** Scratch directory for generated check artifacts (git-ignored). */
 export const REPORT_DIR = join(WORKSPACE_ROOT, '.compat')
 
 /** The scope whose packages the harness host injects into a plugin at runtime. */
@@ -417,8 +417,8 @@ export function tscBin() {
 
 /**
  * Run a child process and capture its output through a log FILE rather than a
- * pipe: piped stdio is unavailable under some sandboxes, and the gate must never
- * confuse "could not run the compiler" with "compiles cleanly".
+ * pipe: piped stdio is unavailable under some sandboxes, and the checks must
+ * never confuse "could not run the compiler" with "compiles cleanly".
  */
 export function spawnCapture(command, args, cwd = WORKSPACE_ROOT) {
   mkdirSync(REPORT_DIR, { recursive: true })

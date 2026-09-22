@@ -1,6 +1,6 @@
 {
   "name": "dsh-client-ui-settings-discovery",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Model discovery settings section: probe local-engine and custom endpoints and adopt their models into a pi-ai provider profile",
   "keywords": [
     "deepseek-harness",
