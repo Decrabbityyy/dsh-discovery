@@ -90,13 +90,14 @@ const BODY = {
 const contexts: Context[] = []
 
 /** 挂上可选的存储域与 fetch 之后建目录。 */
-function boot(options: { storage?: unknown; fetchFn?: typeof fetch; offline?: boolean } = {}): ReturnType<typeof provideModelCatalog> {
+function boot(options: { storage?: unknown; fetchFn?: typeof fetch; offline?: boolean; refreshIntervalMs?: number } = {}): ReturnType<typeof provideModelCatalog> {
   const ctx = new Context()
   contexts.push(ctx)
   if (options.storage !== undefined) ctx.provide('storageDomain', options.storage)
   return provideModelCatalog(ctx, {
     ...options.fetchFn === undefined ? {} : { fetchFn: options.fetchFn },
     ...options.offline === undefined ? {} : { offline: options.offline },
+    ...options.refreshIntervalMs === undefined ? {} : { refreshIntervalMs: options.refreshIntervalMs },
     now: () => 1000,
   })
 }
@@ -143,6 +144,8 @@ describe('model catalog service', () => {
     const catalog = boot({ storage, fetchFn })
     await catalog.ready()
 
+    // 挂载时的后台校验先落地，再手动刷一次：两次请求都带存储里的 ETag。
+    await vi.waitFor(() => { expect(catalog.status().refreshedAt).toBe(1000) })
     expect((await catalog.refresh()).refreshedAt).toBe(1000)
     expect(ifNoneMatch).toEqual(['W/"v1"', 'W/"v1"'])
     expect(storage.puts).toHaveLength(0)
@@ -221,6 +224,60 @@ describe('model catalog service', () => {
     expect(first.facts['grok-4.6']).toMatchObject({ name: 'Grok 4.6' })
     await catalog.refresh()
     expect(catalog.envelope()).toBe(first)
+  })
+
+  it('refreshes on the configured interval, and stops with the fiber', async () => {
+    const storage = fakeStorageDomain({ 'grok-4.6': { displayName: 'Grok 4.6' } }, { etag: 'W/"v1"' })
+    const { fetchFn, calls } = scriptedFetch([{ status: 304 }])
+    const catalog = boot({ storage, fetchFn, refreshIntervalMs: 20 })
+    await catalog.ready()
+
+    await vi.waitFor(() => { expect(calls()).toBeGreaterThanOrEqual(2) })
+    const ctx = contexts.pop()!
+    await ctx.fiber.dispose()
+
+    const settled = calls()
+    await new Promise(resolve => setTimeout(resolve, 80))
+    // 定时器属于插件 fiber：卸载之后不该再写存储。
+    expect(calls()).toBe(settled)
+  })
+
+  it('refreshes once when no interval is configured', async () => {
+    const storage = fakeStorageDomain({ 'grok-4.6': { displayName: 'Grok 4.6' } }, { etag: 'W/"v1"' })
+    const { fetchFn, calls } = scriptedFetch([{ status: 304 }])
+    const catalog = boot({ storage, fetchFn })
+    await catalog.ready()
+
+    await vi.waitFor(() => { expect(calls()).toBe(1) })
+    await new Promise(resolve => setTimeout(resolve, 80))
+    expect(calls()).toBe(1)
+  })
+
+  it('coalesces concurrent refreshes into one request', async () => {
+    const storage = fakeStorageDomain({ 'grok-4.6': { displayName: 'Grok 4.6' } }, { etag: 'W/"v1"' })
+    const gate = Promise.withResolvers<void>()
+    let calls = 0
+    const fetchFn = (() => {
+      calls += 1
+      return gate.promise.then(() => ({
+        status: 200,
+        ok: true,
+        json: () => Promise.resolve(BODY),
+        headers: { get: () => null },
+      }))
+    }) as unknown as typeof fetch
+    const catalog = boot({ storage, fetchFn })
+    await catalog.ready()
+
+    // 上一轮还没回来：第二个调用加入它，而不是再发一轮。
+    const first = catalog.refresh()
+    const second = catalog.refresh()
+    await Promise.resolve()
+    expect(calls).toBe(1)
+
+    gate.resolve()
+    await Promise.all([first, second])
+    expect(calls).toBe(1)
   })
 
   it('registers itself under the catalog service name and refuses a second one', () => {

@@ -33,7 +33,10 @@ export function enrichModelsFromCatalog(
 export function apply(ctx: Context, config?: Config): void {
   const resolved = resolveDiscoveryConfig(config)
   // 目录是另外两个插件的硬依赖，所以这个开关只管本插件：关掉时只用本地已有的目录、不联网刷新、也不补全探测回复。
-  const catalog = provideModelCatalog(ctx, { offline: !resolved.enrichment })
+  const catalog = provideModelCatalog(ctx, {
+    offline: !resolved.enrichment,
+    refreshIntervalMs: resolved.catalogRefreshIntervalMs,
+  })
   ctx.llm.registerModelDiscovery(DISCOVERY_NAMESPACE, async (request) => {
     const [raw] = await Promise.all([discoverEndpoint(request, resolved), catalog.ready()])
     const bundled = resolved.enrichment ? enrichModels(raw) : [...raw]

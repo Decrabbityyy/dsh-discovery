@@ -38,16 +38,18 @@ describe('resolveDiscoveryConfig', () => {
       timeoutMs: 10_000,
       maxResponseBytes: 4 * 1024 * 1024,
       enrichment: true,
+      catalogRefreshIntervalMs: 0,
       ollamaDefaultContextWindow: 128_000,
       engines: { ollama: true, litellm: true, openaiModels: true },
     })
   })
 
   it('keeps explicit values and fills the rest', () => {
-    expect(resolveDiscoveryConfig({ timeoutMs: 5_000, engines: { ollama: false } })).toEqual({
+    expect(resolveDiscoveryConfig({ timeoutMs: 5_000, catalogRefreshIntervalMs: 3_600_000, engines: { ollama: false } })).toEqual({
       timeoutMs: 5_000,
       maxResponseBytes: 4 * 1024 * 1024,
       enrichment: true,
+      catalogRefreshIntervalMs: 3_600_000,
       ollamaDefaultContextWindow: 128_000,
       engines: { ollama: false, litellm: true, openaiModels: true },
     })

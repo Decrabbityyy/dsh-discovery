@@ -22,6 +22,8 @@ export interface CatalogOptions {
   readonly timeoutMs?: number
   /** 只读本地已有的目录，不联网刷新（发现插件的 `enrichment: false`）。 */
   readonly offline?: boolean
+  /** 定时刷新间隔；0（默认）表示只在挂载时刷一次。offline 时不排定时器。 */
+  readonly refreshIntervalMs?: number
   readonly now?: () => number
 }
 
@@ -34,6 +36,7 @@ export function provideModelCatalog(ctx: Context, options: CatalogOptions = {}):
   const now = options.now ?? Date.now
   const timeoutMs = options.timeoutMs ?? 15_000
   const offline = options.offline === true
+  const refreshIntervalMs = options.refreshIntervalMs ?? 0
 
   let domain: Domain<typeof modelCatalogDomainSpec> | undefined
   /** 没有存储域时的快照；有存储域时直接读那条记录，不再复制一份。 */
@@ -94,7 +97,7 @@ export function provideModelCatalog(ctx: Context, options: CatalogOptions = {}):
     }
   }
 
-  const refresh = async (): Promise<CatalogStatus> => {
+  const runRefresh = async (): Promise<CatalogStatus> => {
     await openDomain()
     if (offline) {
       adopt()
@@ -127,6 +130,15 @@ export function provideModelCatalog(ctx: Context, options: CatalogOptions = {}):
       adopt()
       return report({ error: error instanceof Error ? error.message : String(error) })
     }
+  }
+
+  /** 一次只跑一轮：定时器与调用方同时问也只发一轮请求。 */
+  let running: Promise<CatalogStatus> | undefined
+  const refresh = (): Promise<CatalogStatus> => {
+    running ??= runRefresh().finally(() => {
+      running = undefined
+    })
+    return running
   }
 
   const init = async (): Promise<void> => {
@@ -166,5 +178,14 @@ export function provideModelCatalog(ctx: Context, options: CatalogOptions = {}):
   }
   ctx.provide(CATALOG_SERVICE, catalog)
   void init()
+  // 挂了定时器就随插件卸载一起停：后台刷新不该在插件已经收回之后再写存储。
+  if (!offline && refreshIntervalMs > 0) {
+    ctx.effect(() => {
+      // 刻意不 unref：unref 过的定时器在事件循环没有别的事时会放进程提前退出，
+      // 在 vitest 的 worker 里表现为随机的 "Worker exited unexpectedly"。
+      const timer = setInterval(() => { void refresh() }, refreshIntervalMs)
+      return () => { clearInterval(timer) }
+    }, 'llm-discovery: catalog refresh interval')
+  }
   return catalog
 }
