@@ -82,22 +82,17 @@
   color: var(--dsw-alias-label-secondary);
 }
 
-/* The thinking-level group: one wrapped row of compact checkbox chips. */
-.levels {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 14px;
+/* 档位方块：六个固定宽度的小格，■ 亮 / □ 暗；选择器与结果表共用。 */
+.levelMarks {
+  display: inline-flex;
+  gap: 1px;
 }
 
-.levelItem {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 12px;
-  line-height: 18px;
-  font-family: var(--ds-font-family-code);
-  color: var(--dsw-alias-label-primary);
-  cursor: pointer;
+/* 每块等宽居中：■ 与 □ 的字形宽度不同，靠固定盒子把它们对在同一列上。 */
+.levelMark {
+  display: inline-block;
+  width: 9px;
+  text-align: center;
 }
 
 .input {
@@ -421,8 +416,7 @@
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
-/* 行上只有名字，所以它是主角：长了截断而不是换行，标签紧跟其后。 */
-.pickerName {
+/* 行上只有名字，所以它是主角：长了截断而不是换行，标签紧跟其后。 */.pickerName {
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -467,18 +461,6 @@
 
 .pickerModality {
   width: 32px;
-  text-align: center;
-}
-
-.pickerLevels {
-  display: inline-flex;
-  gap: 1px;
-}
-
-/* 每块等宽居中：■ 与 □ 的字形宽度不同，靠固定盒子把它们对在同一列上。 */
-.levelMark {
-  display: inline-block;
-  width: 9px;
   text-align: center;
 }
 

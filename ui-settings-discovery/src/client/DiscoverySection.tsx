@@ -5,8 +5,8 @@ import type { ReactNode } from 'react'
 import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-api-remotes/client'
 import clsx from 'clsx'
 import {
-  boundLevels, CREDENTIAL_REF_PATTERN, deriveKeyRef, DISCOVERY_NS, DISCOVERY_PLUGIN, DYNAMIC_PLUGIN, isActivePlugin,
-  matchCatalogEntry, messageOf, modelDeclaration, PI_AI_NS, ROUTE_PATTERN,
+  CREDENTIAL_REF_PATTERN, deriveKeyRef, DISCOVERY_NS, DISCOVERY_PLUGIN, DYNAMIC_PLUGIN,
+  isActivePlugin, matchCatalogEntry, messageOf, modelDeclaration, PI_AI_NS, ROUTE_PATTERN,
 } from './discovery.ts'
 import { useCatalog } from './catalogStore.ts'
 import type { DiscoveryApi, DiscoveryResponse } from './discovery.ts'
@@ -48,10 +48,6 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
   const [adopting, setAdopting] = useState(false)
   const [adoptError, setAdoptError] = useState<string | undefined>(undefined)
   const [adoptedRoute, setAdoptedRoute] = useState<string | undefined>(undefined)
-  // Thinking levels picked per adopted model id. A model absent from the map
-  // carries no reasoningEfforts, which lets a catalog route inherit while a
-  // hand-declared route stays non-reasoning.
-  const [modelLevels, setModelLevels] = useState<Readonly<Record<string, ReadonlySet<string>>>>({})
   // 目录在页面会话内共用一份：两个消费者只抓一次、只建一份索引。
   const { tables, index: catalogIndex } = useCatalog()
   const { catalog, modalities, facts, sources = {} } = tables
@@ -87,26 +83,6 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
       cancelled = true
     }
   }, [api])
-
-  // Backfills defaults for models the probe initialized empty once the catalog
-  // lands or a row is pinned; a model with any pick already keeps it.
-  const probedIds = candidates === undefined ? undefined : candidates.map(model => model.id).join('\0')
-  useEffect(() => {
-    if (probedIds === undefined) return
-    setModelLevels(current => {
-      const next: Record<string, ReadonlySet<string>> = { ...current }
-      let changed = false
-      for (const id of probedIds.split('\0')) {
-        const recorded = matchCatalogEntry(id, catalogIndex, bindings)?.entry.levels ?? []
-        if ((next[id]?.size ?? 0) === 0 && recorded.length > 0) {
-          next[id] = new Set(recorded)
-          changed = true
-        }
-      }
-      return changed ? next : current
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- probedIds captures the candidate set identity.
-  }, [catalogIndex, bindings, probedIds])
 
   const keyValue = apiKey.trim()
   const routeId = route.trim()
@@ -204,31 +180,13 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
     })
   }
 
-  /** Toggle one thinking level on one model. */
-  const toggleModelLevel = (id: string, level: string): void => {
-    setModelLevels((current) => {
-      const next = new Set(current[id] ?? [])
-      if (!next.delete(level)) next.add(level)
-      return { ...current, [id]: next }
-    })
-  }
-
-  /** Pin one row to a catalog entry; its levels follow the new entry unless the user picked their own. */
+  /** Pin one row to a catalog entry: 档位不让人挑，写入时按条目全量带上。 */
   const bindModel = (id: string, key: string | undefined): void => {
-    const lastBound = bindings[id]
     setBindings((current) => {
       const next = { ...current }
       if (key === undefined) delete next[id]
       else next[id] = key
       return next
-    })
-    if (key === undefined) return
-    const entry = catalogIndex.entryOf(key)
-    if (entry === undefined) return
-    const previous = lastBound === undefined ? undefined : catalogIndex.entryOf(lastBound)
-    setModelLevels((current) => {
-      const next = boundLevels(current[id], previous, entry)
-      return next === undefined ? current : { ...current, [id]: next }
     })
   }
 
@@ -252,13 +210,6 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
       setProbeToken(token => token + 1)
       // Everything found starts checked.
       setPicked(new Set(found.map(model => model.id)))
-      // Each model starts at the levels the entry it resolves to records; an
-      // unresolved id gets no default, and the row's picker is where the user
-      // names its entry.
-      setModelLevels(Object.fromEntries(found.map(model => [
-        model.id,
-        new Set(matchCatalogEntry(model.id, catalogIndex, bindings)?.entry.levels ?? []),
-      ])))
     } catch (error) {
       // The transport rejected instead of answering.
       setProbeError(messageOf(error))
@@ -302,11 +253,9 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
             models: selected.map((model) => {
               // A catalog route inherits the installed catalog's reasoning and modalities;
               if (isCatalogRoute) return { ...model }
-              return modelDeclaration(
-                model,
-                modelLevels[model.id] ?? new Set(),
-                matchCatalogEntry(model.id, catalogIndex, bindings),
-              )
+              const match = matchCatalogEntry(model.id, catalogIndex, bindings)
+              // 档位不让人挑：写入时按条目全量带上。
+              return modelDeclaration(model, new Set(match?.entry.levels ?? []), match)
             }),
           },
     }
@@ -434,9 +383,6 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
               onInvert={invertSelection}
               disabled={adopting}
               catalog={catalog}
-              levels={modelLevels}
-              onToggleLevel={toggleModelLevel}
-              levelsDisabled={isCatalogRoute}
               facts={facts}
               modalities={modalities}
               sources={sources}

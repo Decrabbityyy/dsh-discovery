@@ -5,11 +5,11 @@ import { CUSTOM_PRESET, ENGINE_PRESETS, PROTOCOLS } from '../src/client/presets.
 import {
   catalogKeyCandidates, catalogIndexOf, catalogSearchSeed, CREDENTIAL_REF_PATTERN, declaredInput, deriveKeyRef,
   DISCOVERY_NS, DISCOVERY_PLUGIN, DYNAMIC_PLUGIN, entryId, isActivePlugin, matchCatalogEntry, matchesPickerQuery,
-  messageOf, modelDeclaration, parsePickerQuery, boundLevels,
+  messageOf, modelDeclaration, parsePickerQuery,
   PI_AI_NS, providerProfileOf, ROUTE_PATTERN,
 } from '../src/client/discovery.ts'
 import type { CatalogEntry } from '../src/client/discovery.ts'
-import { formatCapacity, formatCapacityPair, levelMarks } from '../src/client/format.ts'
+import { formatCapacity, formatCapacityPair, levelMarks, orderedLevels } from '../src/client/format.ts'
 
 describe('discovery wire constants', () => {
   it('pins the fixed namespaces of the OMP wire', () => {
@@ -272,23 +272,6 @@ describe('modelDeclaration', () => {
   })
 })
 
-describe('boundLevels', () => {
-  const plain: CatalogEntry = { key: 'a', input: [], levels: ['low'], sources: [] }
-  const rich: CatalogEntry = { key: 'b', input: [], levels: ['high', 'max'], sources: [] }
-
-  it('takes the new entry levels when the row had none', () => {
-    expect([...(boundLevels(undefined, undefined, rich) ?? [])]).toEqual(['high', 'max'])
-  })
-
-  it('follows a re-bind while the picks are still the previous entry s', () => {
-    expect([...(boundLevels(new Set(['low']), plain, rich) ?? [])]).toEqual(['high', 'max'])
-  })
-
-  it('keeps picks the user made by hand', () => {
-    expect(boundLevels(new Set(['off']), plain, rich)).toBeUndefined()
-  })
-})
-
 describe('formatCapacity', () => {
   it('abbreviates thousands and millions', () => {
     expect(formatCapacity(272_000)).toBe('272k')
@@ -316,6 +299,17 @@ describe('formatCapacityPair', () => {
     expect(formatCapacityPair(256_000, undefined)).toBe('256k')
     expect(formatCapacityPair(undefined, 32_768)).toBe('33k')
     expect(formatCapacityPair(undefined, undefined)).toBe('—')
+  })
+})
+
+describe('orderedLevels', () => {
+  it('puts the vocabulary order first, whatever order they arrived in', () => {
+    expect(orderedLevels(['max', 'off', 'high'])).toEqual(['off', 'high', 'max'])
+    expect(orderedLevels(['low', 'off'])).toEqual(['off', 'low'])
+  })
+
+  it('drops duplicates and appends a value the vocabulary does not know', () => {
+    expect(orderedLevels(['high', 'high', 'default'])).toEqual(['high', 'default'])
   })
 })
 

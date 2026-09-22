@@ -1,7 +1,18 @@
 /** 目录条目的展示格式：容量缩写与档位方块。 */
 
+import { THINKING_LEVELS } from './presets.ts'
+
 /** 方块代表的档位，从左到右；`off` 不占格（它是「可以关掉思考」，不是一档能力）。 */
 const SQUARE_LEVELS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
+
+/** 词表里每个档位的位次，用来把「条目记的 + 配置声明的」排回固定顺序。 */
+const LEVEL_RANK = new Map<string, number>(THINKING_LEVELS.map((level, index) => [level, index]))
+
+/** 档位按词表的顺序排：off / minimal / low / medium / high / xhigh / max，词表外的值排在最后。 */
+export function orderedLevels(levels: readonly string[]): readonly string[] {
+  const rank = (level: string): number => LEVEL_RANK.get(level) ?? THINKING_LEVELS.length
+  return [...new Set(levels)].sort((left, right) => rank(left) - rank(right))
+}
 
 /** 容量的紧凑写法：`272k`、`1m`；小于一千写原值，非正数当没有。 */
 export function formatCapacity(value: number | undefined): string | undefined {

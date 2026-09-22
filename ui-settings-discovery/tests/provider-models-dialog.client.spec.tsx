@@ -193,10 +193,8 @@ describe('provider models dialog', () => {
     // The provider owns its id and credential, so neither is editable here.
     expect(screen.queryByLabelText('路由 ID')).toBeNull()
     expect(screen.queryByLabelText('API 密钥（可选）')).toBeNull()
-    // The profile's own level is preselected; the catalog's extra one is not.
-    expect(screen.getByLabelText<HTMLInputElement>('qwen2.5:7b 档位 low').checked).toBe(true)
-    expect(screen.getByLabelText<HTMLInputElement>('qwen2.5:7b 档位 off').checked).toBe(true)
-    expect(screen.getByLabelText<HTMLInputElement>('qwen2.5:7b 档位 high').checked).toBe(false)
+    // 档位不给勾选：profile 声明的与目录记录的合起来标注成「支持的档位」。
+    expect(screen.getByText('off/low/high')).toBeDefined()
   })
 
   it('probes the stored endpoint without a key and adds advertised models unchecked', async () => {
@@ -217,11 +215,10 @@ describe('provider models dialog', () => {
     expect(screen.getByLabelText<HTMLInputElement>('选择 qwen3-vl:8b').checked).toBe(false)
   })
 
-  it('writes the picked models, their levels, and the catalog image claim to the provider path', async () => {
+  it('writes the picked models, every supported level, and the catalog image claim to the provider path', async () => {
     const { api, mutate } = scripted()
     await openDialog(api)
-    // Add a level the profile did not declare.
-    fireEvent.click(screen.getByLabelText('qwen2.5:7b 档位 high'))
+    // 档位按「profile 声明的 + 目录记录的」全量写入，不需要先勾一下。
     fireEvent.click(saveButton())
     await waitFor(() => { expect(mutate.mock.calls).toHaveLength(1) })
     expect(mutate.mock.calls[0]).toEqual([
@@ -338,7 +335,7 @@ describe('provider models dialog', () => {
         name: 'GLM-5.2 Air',
         contextWindow: 128000,
         maxTokens: 64000,
-        // 上一次绑定的档位是 glm-5.2 带出来的，换条之后跟着换成新的。
+        // 档位按换到的那条全量写入。
         reasoningEfforts: { low: 'low' },
       }],
     }])

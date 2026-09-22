@@ -101,21 +101,6 @@ export function matchCatalogEntry(
   return entry === undefined ? undefined : { key, entry, bound: false }
 }
 
-/**
- * 绑定后这一行该有哪些档位：用户没动过（还是上一次匹配带出来的那套）就换成新条目的，
- * 自己勾过就保留；返回 undefined 表示保持原样。
- */
-export function boundLevels(
-  current: ReadonlySet<string> | undefined,
-  previous: CatalogEntry | undefined,
-  next: CatalogEntry,
-): ReadonlySet<string> | undefined {
-  const picked = current ?? new Set<string>()
-  if (picked.size === 0) return new Set(next.levels)
-  const before = previous?.levels ?? []
-  return [...picked].every(level => before.includes(level)) ? new Set(next.levels) : undefined
-}
-
 /** The longest catalog key one id spells, as the picker's opening search: a variant id like `deepseek-v4-flash-max` seeds `deepseek-v4-flash`, while an */
 export function catalogSearchSeed(modelId: string, index: CatalogIndex): string {
   for (const candidate of catalogKeyCandidates(modelId)) {

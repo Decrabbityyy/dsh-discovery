@@ -5,7 +5,7 @@ import type { ReactNode } from 'react'
 import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-api-remotes/client'
 import type { ProviderDirectoryEntry } from '@deepseek-ai/dsh-client-ui-settings-models/client'
 import {
-  boundLevels, matchCatalogEntry, messageOf, modelDeclaration, PI_AI_NS, providerProfileOf,
+  matchCatalogEntry, messageOf, modelDeclaration, PI_AI_NS, providerProfileOf,
 } from './discovery.ts'
 import { useCatalog } from './catalogStore.ts'
 import type { DiscoveryApi, ProfileModel, ProviderProfileDraft } from './discovery.ts'
@@ -115,7 +115,6 @@ function ProviderModelsDialog({ api, provider, onClose }: ProviderModelsDialogPr
   // The rows to write: the stored models plus whatever a probe added.
   const [rows, setRows] = useState<readonly ProfileModel[]>([])
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set())
-  const [levels, setLevels] = useState<Readonly<Record<string, ReadonlySet<string>>>>({})
   // 目录与发现页共用同一份快照，只提供默认值。
   const { tables, index } = useCatalog()
   const { catalog, facts, modalities, sources = {} } = tables
@@ -148,10 +147,6 @@ function ProviderModelsDialog({ api, provider, onClose }: ProviderModelsDialogPr
       setProfile(draft)
       setRows(draft.models)
       setPicked(new Set(draft.models.map(model => model.id)))
-      setLevels(Object.fromEntries(draft.models.map(model => [
-        model.id,
-        new Set(Object.keys(model.reasoningEfforts ?? {})),
-      ])))
       setRevision(namespace.revision)
       setReady(true)
     }).catch((error: unknown) => {
@@ -172,22 +167,13 @@ function ProviderModelsDialog({ api, provider, onClose }: ProviderModelsDialogPr
     if (event.key === 'Escape') close()
   }
 
-  /** Pin one row to a catalog entry; its levels follow the new entry unless the user picked their own. */
+  /** Pin one row to a catalog entry: 档位不让人挑，写入时按条目全量带上。 */
   const bind = (id: string, key: string | undefined): void => {
-    const lastBound = bindings[id]
     setBindings((current) => {
       const next = { ...current }
       if (key === undefined) delete next[id]
       else next[id] = key
       return next
-    })
-    if (key === undefined) return
-    const entry = index.entryOf(key)
-    if (entry === undefined) return
-    const previous = lastBound === undefined ? undefined : index.entryOf(lastBound)
-    setLevels((current) => {
-      const next = boundLevels(current[id], previous, entry)
-      return next === undefined ? current : { ...current, [id]: next }
     })
   }
 
@@ -211,13 +197,6 @@ function ProviderModelsDialog({ api, provider, onClose }: ProviderModelsDialogPr
       // so it arrives unchecked: the user picks what to add.
       const added: readonly LlmDiscoveredModel[] = response.value.filter(model => !known.has(model.id))
       setRows(current => [...current, ...added])
-      setLevels(current => ({
-        ...current,
-        ...Object.fromEntries(added.map(model => [
-          model.id,
-          new Set(matchCatalogEntry(model.id, index, bindings)?.entry.levels ?? []),
-        ])),
-      }))
       setProbeToken(token => token + 1)
     } catch (error) {
       setProbeError(messageOf(error))
@@ -234,24 +213,17 @@ function ProviderModelsDialog({ api, provider, onClose }: ProviderModelsDialogPr
     })
   }
 
-  const toggleLevel = (id: string, level: string): void => {
-    setLevels((current) => {
-      const next = new Set(current[id] ?? [])
-      if (!next.delete(level)) next.add(level)
-      return { ...current, [id]: next }
-    })
-  }
-
   /** Write the picked models back into the profile the card belongs to. */
   const save = async (): Promise<void> => {
     if (revision === undefined) return
     const models = rows
       .filter(row => picked.has(row.id))
-      .map(row => modelDeclaration(
-        row,
-        levels[row.id] ?? new Set(),
-        matchCatalogEntry(row.id, index, bindings),
-      ))
+      .map((row) => {
+        const match = matchCatalogEntry(row.id, index, bindings)
+        // 档位不让人挑：条目记录的加上这一行本来就声明的，一起写进去。
+        const levels = new Set([...Object.keys(row.reasoningEfforts ?? {}), ...(match?.entry.levels ?? [])])
+        return modelDeclaration(row, levels, match)
+      })
     if (models.length === 0) {
       setSaveError('至少选择一个模型：空列表会让该路由解析不出任何模型。')
       return
@@ -362,9 +334,6 @@ function ProviderModelsDialog({ api, provider, onClose }: ProviderModelsDialogPr
                 disabled={busy}
                 catalog={catalog}
                 extraLevels={Object.fromEntries(rows.map(row => [row.id, Object.keys(row.reasoningEfforts ?? {})]))}
-                levels={levels}
-                onToggleLevel={toggleLevel}
-                levelsDisabled={false}
                 facts={facts}
                 modalities={modalities}
                 sources={sources}

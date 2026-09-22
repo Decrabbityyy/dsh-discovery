@@ -8,7 +8,7 @@ import {
   catalogIndexOf, catalogSearchSeed, entryId, matchCatalogEntry, matchesPickerQuery, parsePickerQuery,
 } from './discovery.ts'
 import type { CatalogEntry, CatalogIndex, CatalogMatch } from './discovery.ts'
-import { formatCapacity, formatCapacityPair, levelMarks } from './format.ts'
+import { formatCapacity, formatCapacityPair, levelMarks, orderedLevels } from './format.ts'
 import styles from './styles.module.css'
 
 /** The facts column sources, keyed by bare model name. */
@@ -47,11 +47,6 @@ export interface ModelResultsTableProps {
   readonly catalog: Readonly<Record<string, readonly string[]>>
   /** Levels that exist only in the edited profile, by model id. */
   readonly extraLevels?: Readonly<Record<string, readonly string[]>>
-  /** Picked levels per model id. */
-  readonly levels: Readonly<Record<string, ReadonlySet<string>>>
-  readonly onToggleLevel: (id: string, level: string) => void
-  /** Whether the level checkboxes are read-only (a catalog route inherits). */
-  readonly levelsDisabled: boolean
   /** Bare-name facts filling what the endpoint left undisclosed. */
   readonly facts: Readonly<Record<string, ModelTableFacts>>
   /** 模态列用的裸名模态表。 */
@@ -80,7 +75,7 @@ function PickerMeta({ entry }: { readonly entry: CatalogEntry }): ReactNode {
     <span className={styles['pickerMeta']} title={pickerTitle(entry)}>
       <span className={styles['pickerCapacity']}>{formatCapacityPair(entry.contextWindow, entry.maxTokens)}</span>
       <span className={styles['pickerModality']}>{entry.input.length === 0 ? '' : modalityLabel(entry.input)}</span>
-      <span className={styles['pickerLevels']}>
+      <span className={styles['levelMarks']} title={levelsTitle(entry.levels)}>
         {levelMarks(entry.levels).map((on, index) => (
           // 每块等宽居中：■ 与 □ 的字形宽度不同，靠固定盒子把它们对在同一列上。
           <span key={index} className={styles['levelMark']} aria-hidden="true">{on ? '■' : '□'}</span>
@@ -95,7 +90,7 @@ function pickerTitle(entry: CatalogEntry): string {
   return [
     entry.contextWindow === undefined ? undefined : `上下文窗口 ${entry.contextWindow}`,
     entry.maxTokens === undefined ? undefined : `最大输出 ${entry.maxTokens}`,
-    entry.levels.length === 0 ? '未记录思考档位' : `思考档位 ${entry.levels.join('/')}`,
+    entry.levels.length === 0 ? '未记录思考档位' : `思考档位 ${orderedLevels(entry.levels).join('/')}`,
   ].filter(part => part !== undefined).join(' · ')
 }
 
@@ -109,6 +104,11 @@ function pickerSource(entry: CatalogEntry): string {
 /** 悬停那一格时把收录它的 provider 全列出来（格子里只写「首家 等 N 家」）。 */
 function sourceTitle(entry: CatalogEntry): string | undefined {
   return entry.sources.length === 0 ? undefined : `收录它的 provider：${entry.sources.join('、')}`
+}
+
+/** 悬停说明：这条记录的全部思考档位。 */
+function levelsTitle(levels: readonly string[]): string | undefined {
+  return levels.length === 0 ? undefined : `思考档位 ${orderedLevels(levels).join('/')}`
 }
 
 /** 行上不给 id，悬停时补上：真正对应的那个，加内部键（不一样时才写）。 */
@@ -151,8 +151,7 @@ function MatchCell(props: {
 export function ModelResultsTable(props: ModelResultsTableProps): ReactNode {
   const {
     title, ariaLabel, emptyText, models, picked, onToggle, onSelectAll, onSelectNone, onInvert,
-    disabled, catalog, extraLevels, levels, onToggleLevel, levelsDisabled, facts, modalities,
-    sources, bindings, onBind, resetToken,
+    disabled, catalog, extraLevels, facts, modalities, sources, bindings, onBind, resetToken,
   } = props
   const [query, setQuery] = useState('')
   // The row whose catalog picker is open, and what it is searching for.
@@ -266,7 +265,7 @@ export function ModelResultsTable(props: ModelResultsTableProps): ReactNode {
                       <th className={styles['resultHead']}>上下文窗口</th>
                       <th className={styles['resultHead']}>最大输出</th>
                       <th className={styles['resultHead']}>模态</th>
-                      <th className={styles['resultHead']}>思考档位</th>
+                      <th className={styles['resultHead']} title="匹配到的条目记录的全部档位，保存时一并写入">思考档位</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -278,11 +277,9 @@ export function ModelResultsTable(props: ModelResultsTableProps): ReactNode {
                       const displayName = pinned ? entry?.name ?? model.name : model.name ?? entry?.name
                       const contextWindow = pinned ? entry?.contextWindow ?? model.contextWindow : model.contextWindow ?? entry?.contextWindow
                       const maxTokens = pinned ? entry?.maxTokens ?? model.maxTokens : model.maxTokens ?? entry?.maxTokens
-                      // Recorded levels join the matched entry's: a model the
-                      // catalog has never heard of still shows what the profile
-                      // declares.
-                      const available = [...new Set([...(entry?.levels ?? []), ...(extraLevels?.[model.id] ?? [])])]
-                      const chosen = levels[model.id] ?? new Set<string>()
+                      // 目录记录的档位与 profile 已声明的一起算「支持的档位」：
+                      // 它只用来标注，写入时全量带上，不由用户逐档挑；显示按词表顺序。
+                      const available = orderedLevels([...(entry?.levels ?? []), ...(extraLevels?.[model.id] ?? [])])
                       return (
                         <Fragment key={model.id}>
                           <tr className={styles['resultRow']}>
@@ -315,25 +312,9 @@ export function ModelResultsTable(props: ModelResultsTableProps): ReactNode {
                             <td className={styles['resultCell']} title={contextWindow === undefined ? undefined : String(contextWindow)}>{formatCapacity(contextWindow) ?? '—'}</td>
                             <td className={styles['resultCell']} title={maxTokens === undefined ? undefined : String(maxTokens)}>{formatCapacity(maxTokens) ?? '—'}</td>
                             <td className={styles['resultCell']}>{modalityLabel(entry?.input)}</td>
+                            {/* 这一列给文字：表格有位置，方块留给空间紧张的选择器。 */}
                             <td className={styles['resultCell']}>
-                              {available.length === 0
-                                ? '—'
-                                : (
-                                  <div className={styles['levels']} role="group" aria-label={`${model.id} 思考档位`}>
-                                    {available.map(level => (
-                                      <label key={level} className={styles['levelItem']}>
-                                        <input
-                                          type="checkbox"
-                                          checked={chosen.has(level)}
-                                          aria-label={`${model.id} 档位 ${level}`}
-                                          disabled={disabled || levelsDisabled}
-                                          onChange={() => { onToggleLevel(model.id, level) }}
-                                        />
-                                        {level}
-                                      </label>
-                                    ))}
-                                  </div>
-                                )}
+                              {available.length === 0 ? '—' : available.join('/')}
                             </td>
                           </tr>
                           {pickerFor === model.id

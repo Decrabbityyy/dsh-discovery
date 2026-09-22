@@ -35,10 +35,11 @@ const MODELS: readonly LlmDiscoveredModel[] = [
 const noop = (): void => {}
 
 /** The table with the binding state its callers own. */
-function Harness({ bindings: initial = {}, tables = TABLES, models = MODELS }: {
+function Harness({ bindings: initial = {}, tables = TABLES, models = MODELS, extraLevels }: {
   readonly bindings?: Readonly<Record<string, string>>
   readonly tables?: Tables
   readonly models?: readonly LlmDiscoveredModel[]
+  readonly extraLevels?: Readonly<Record<string, readonly string[]>>
 }): ReactNode {
   const [bindings, setBindings] = useState<Readonly<Record<string, string>>>(initial)
   return (
@@ -54,9 +55,7 @@ function Harness({ bindings: initial = {}, tables = TABLES, models = MODELS }: {
       onInvert={noop}
       disabled={false}
       catalog={tables.catalog}
-      levels={{}}
-      onToggleLevel={noop}
-      levelsDisabled={false}
+      {...extraLevels === undefined ? {} : { extraLevels }}
       facts={tables.facts}
       modalities={tables.modalities}
       sources={tables.sources}
@@ -96,9 +95,16 @@ describe('catalog matching', () => {
     expect(resolved.getByText('200k')).toBeDefined()
     expect(resolved.getByText('128k')).toBeDefined()
     expect(resolved.getByText('文·图')).toBeDefined()
-    expect(resolved.getByLabelText('glm-5.2 档位 high')).toBeDefined()
+    // 档位只标注支持的档，不给勾选。
+    expect(resolved.getByText('high/max')).toBeDefined()
     // The variant shows nothing until the user names its entry.
     expect(within(rowOf('glm-5.2-fast-preview/cc')).queryByText('文·图')).toBeNull()
+  })
+
+  it('lists the levels in vocabulary order even when the profile supplies off', () => {
+    // `off` 只来自 profile 的声明；拼在后面会读成「off 是一档能力」。
+    render(<Harness extraLevels={{ 'glm-5.2': ['off'] }} />)
+    expect(within(rowOf('glm-5.2')).getByText('off/high/max')).toBeDefined()
   })
 
   it('opens the picker on the longest recorded prefix and pins the chosen entry', () => {
@@ -119,7 +125,7 @@ describe('catalog matching', () => {
     const pinned = within(rowOf('glm-5.2-fast-preview/cc'))
     expect(pinned.getByText('GLM-5.2')).toBeDefined()
     expect(pinned.getByText('文·图')).toBeDefined()
-    expect(pinned.getByLabelText('glm-5.2-fast-preview/cc 档位 max')).toBeDefined()
+    expect(pinned.getByText('high/max')).toBeDefined()
   })
 
   it('follows a row re-bound from one entry to another', () => {
@@ -145,7 +151,7 @@ describe('catalog matching', () => {
     expect(rebound.getByText('GLM-5.2 Air')).toBeDefined()
     expect(rebound.getByText('128k')).toBeDefined()
     expect(rebound.getByText('文')).toBeDefined()
-    expect(rebound.getByLabelText('glm-5.2-fast-preview/cc 档位 low')).toBeDefined()
+    expect(rebound.getByText('low')).toBeDefined()
     expect(matchButton('glm-5.2-fast-preview/cc').title).toBe('手动匹配：glm-5.2-air')
   })
 
