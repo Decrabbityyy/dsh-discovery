@@ -429,7 +429,7 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
                   <p className={styles['hint']}>
                     {isCatalogRoute
                       ? '该路由是 catalog 提供方：已知模型的思考能力自动继承，无需勾选。'
-                      : '每个模型的思考档位已在表格中按目录默认勾选；勾选的写入该模型的 reasoningEfforts。'}
+                      : '思考档位与模态按每行匹配到的目录条目写入，不需要逐档选择。'}
                   </p>
                   <div className={styles['actions']}>
                     <button

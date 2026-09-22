@@ -243,7 +243,7 @@ export function DynamicRoutes({ api }: { api: DiscoveryApi }): ReactNode {
             type="password"
             autoComplete="off"
             value={draft.apiKey}
-            placeholder={editingExisting ? '留空保持不变' : 'sk-…'}
+            placeholder={editingExisting ? '留空则不保存密钥' : 'sk-…'}
             aria-label="API 密钥（可选）"
             disabled={busy}
             onChange={(event) => { setDraft({ ...draft, apiKey: event.target.value }) }}

@@ -55,12 +55,6 @@ interface RouteProbeReport {
   readonly error?: string
 }
 
-/** 设置页「模型目录」读的状态：声明的路由数与 models.dev 目录状态。 */
-export interface DynamicRouteStatus {
-  readonly routes: number
-  readonly modelsDev: CatalogStatus
-}
-
 /** Mount the dynamic-provider adapter: declared routes register on first successful probe. */
 export function apply(ctx: Context, config?: Config): void {
   ctx.settings.register(DYNAMIC_NS, NamespaceConfig, { base: { routes: config?.routes ?? {} } })

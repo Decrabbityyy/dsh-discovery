@@ -343,7 +343,7 @@ function ProviderModelsDialog({ api, provider, onClose }: ProviderModelsDialogPr
                 resetToken={probeToken}
               />
               <p className={styles['hint']}>
-                勾选的思考档位写入该模型的 reasoningEfforts；一个档位都不勾选时保留配置里已有的值。
+                思考档位按匹配到的目录条目与配置里已声明的档位合并后写入，不需要逐档选择。
                 模态声明按 models.dev 的记录写入。
               </p>
             </>
