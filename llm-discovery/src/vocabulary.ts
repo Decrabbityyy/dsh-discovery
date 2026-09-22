@@ -10,8 +10,14 @@ export const ROUTE_PROTOCOLS = [
 
 export type RouteProtocol = (typeof ROUTE_PROTOCOLS)[number]
 
-/** The namespace whose host offer serves ad-hoc endpoint discovery. */
+/** The namespace this plugin owns: the ad-hoc endpoint-discovery offer and, under the same name, its user-editable settings. */
 export const DISCOVERY_NS = 'llm-discovery'
+
+/** User-editable settings of the discovery plugin; an absent field falls back to the composition base. */
+export interface DiscoverySettingsSection {
+  /** Catalog auto-refresh interval in minutes; 0 reads the catalog once at mount. */
+  catalogRefreshIntervalMinutes?: number
+}
 
 /** The namespace adopted provider profiles are written into. */
 export const PI_AI_NS = 'llm-pi-ai'
@@ -229,6 +235,10 @@ export interface CatalogStatus {
   readonly source: 'storage' | 'models.dev'
   readonly storageError?: string
   readonly error?: string
+  /** 生效的定时刷新间隔，毫秒；0 表示只在挂载时刷一次，页面据此决定还要不要再问。 */
+  readonly refreshIntervalMs?: number
+  /** 下一次定时刷新的时刻（毫秒时间戳）；没有定时器时为 null。 */
+  readonly nextRefreshAt?: number | null
 }
 
 /** 三面共用的 models.dev 目录：由 dsh-llm-discovery 提供，其余插件只读它。 */

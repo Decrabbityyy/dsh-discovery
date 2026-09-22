@@ -17,8 +17,8 @@ export interface Config {
   maxResponseBytes?: number
   /** Fill fields an endpoint leaves undisclosed from the bundled pi-ai catalog, matched by exact model id (default true). */
   enrichment?: boolean
-  /** How often to poll models.dev for changes, in milliseconds. 0 (default) refreshes once at mount. */
-  catalogRefreshIntervalMs?: number
+  /** How often to poll models.dev for changes, in minutes. 0 (default) refreshes once at mount; 1440 is a day. */
+  catalogRefreshIntervalMinutes?: number
   /** Context window for an Ollama model whose `/api/show` metadata carries no `*.context_length` (default 128,000). */
   ollamaDefaultContextWindow?: number
   /** Per-engine kill switches; an engine omitted from the map stays enabled. */
@@ -29,7 +29,7 @@ export const Config: z<Config> = z.object({
   timeoutMs: z.number().step(1).min(1),
   maxResponseBytes: z.number().step(1).min(1024),
   enrichment: z.boolean(),
-  catalogRefreshIntervalMs: z.number().step(1).min(0),
+  catalogRefreshIntervalMinutes: z.number().step(1).min(0),
   ollamaDefaultContextWindow: z.number().step(1).min(1),
   engines: z.object({
     ollama: z.boolean(),
@@ -43,7 +43,7 @@ export interface ResolvedDiscoveryConfig {
   timeoutMs: number
   maxResponseBytes: number
   enrichment: boolean
-  catalogRefreshIntervalMs: number
+  catalogRefreshIntervalMinutes: number
   ollamaDefaultContextWindow: number
   engines: Required<EngineSwitches>
 }
@@ -54,7 +54,7 @@ export function resolveDiscoveryConfig(config: Config | undefined): ResolvedDisc
     timeoutMs: config?.timeoutMs ?? 10_000,
     maxResponseBytes: config?.maxResponseBytes ?? 4 * 1024 * 1024,
     enrichment: config?.enrichment ?? true,
-    catalogRefreshIntervalMs: config?.catalogRefreshIntervalMs ?? 0,
+    catalogRefreshIntervalMinutes: config?.catalogRefreshIntervalMinutes ?? 0,
     ollamaDefaultContextWindow: config?.ollamaDefaultContextWindow ?? 128_000,
     engines: {
       ollama: config?.engines?.ollama ?? true,

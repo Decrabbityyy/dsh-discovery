@@ -18,11 +18,12 @@ import type { DiscoverySectionInjected } from './DiscoverySection.tsx'
 import { ModelCatalogTab } from './ModelCatalogTab.tsx'
 import { ProviderModelsCard } from './ProviderModelsDialog.tsx'
 import type { ProviderModelsCardInjected } from './ProviderModelsDialog.tsx'
-import type { DiscoveryApi } from './discovery.ts'
-import { PI_AI_NS } from './discovery.ts'
+import type { DiscoveryApi, DiscoverySettingsSection } from './discovery.ts'
+import { DISCOVERY_NS, PI_AI_NS } from './discovery.ts'
 
 export type { DiscoverySectionInjected, DiscoverySectionProps } from './DiscoverySection.tsx'
 export type { ProviderModelsCardInjected, ProviderModelsCardProps } from './ProviderModelsDialog.tsx'
+export type { ModelCatalogTabProps } from './ModelCatalogTab.tsx'
 export type { DiscoveryApi } from './discovery.ts'
 
 /** Settings nav id of this section; it drives `only` filtering. */
@@ -57,6 +58,8 @@ export function apply(ctx: ClientContext): void {
   const api = ctx.remote as unknown as DiscoveryApi
   const injected = (): DiscoverySectionInjected => ({ api })
   const cardInjected = (): ProviderModelsCardInjected => ({ api })
+  // 设置命名空间与探测 offer 同名；这一页只读写它，宿主半边据此重排目录定时器。
+  const settingsScope = ctx.settingsScope.bind<DiscoverySettingsSection>({ namespace: DISCOVERY_NS })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: SECTION_ID,
@@ -74,10 +77,12 @@ export function apply(ctx: ClientContext): void {
     inject: cardInjected,
   }, ProviderModelsCard))
   // 插件区自己的标签页：排在「插件配置」(0) 与「插件列表」(10) 之后。
+  // 目录刷新间隔就长在这一页上，改完由宿主半边重排定时器，不用重启。
   ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
     name: 'settings.plugins.tab',
     id: CACHE_TAB_ID,
     order: 20,
     label: () => CACHE_TAB_LABEL,
+    inject: () => ({ scope: settingsScope }),
   }, ModelCatalogTab))
 }

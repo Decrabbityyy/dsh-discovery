@@ -226,6 +226,22 @@ describe('model catalog service', () => {
     expect(catalog.envelope()).toBe(first)
   })
 
+  it('reports the timer facts a status reader schedules its next read on', async () => {
+    const storage = fakeStorageDomain({ 'grok-4.6': { displayName: 'Grok 4.6' } }, { etag: 'W/"v1"' })
+    const { fetchFn } = scriptedFetch([{ status: 304 }])
+    const catalog = boot({ storage, fetchFn })
+    await catalog.ready()
+
+    // 默认没有定时器：读状态的页面据此知道不必再来问。
+    expect(catalog.status()).toMatchObject({ refreshIntervalMs: 0, nextRefreshAt: null })
+
+    catalog.setRefreshIntervalMs(60_000)
+    expect(catalog.status()).toMatchObject({ refreshIntervalMs: 60_000, nextRefreshAt: 1000 + 60_000 })
+
+    catalog.setRefreshIntervalMs(0)
+    expect(catalog.status()).toMatchObject({ refreshIntervalMs: 0, nextRefreshAt: null })
+  })
+
   it('refreshes on the configured interval, and stops with the fiber', async () => {
     const storage = fakeStorageDomain({ 'grok-4.6': { displayName: 'Grok 4.6' } }, { etag: 'W/"v1"' })
     const { fetchFn, calls } = scriptedFetch([{ status: 304 }])
@@ -278,6 +294,21 @@ describe('model catalog service', () => {
     gate.resolve()
     await Promise.all([first, second])
     expect(calls).toBe(1)
+  })
+
+  it('reschedules and clears the refresh timer on demand', async () => {
+    const storage = fakeStorageDomain({ 'grok-4.6': { displayName: 'Grok 4.6' } }, { etag: 'W/"v1"' })
+    const { fetchFn, calls } = scriptedFetch([{ status: 304 }])
+    const catalog = boot({ storage, fetchFn })
+    await catalog.ready()
+
+    catalog.setRefreshIntervalMs(20)
+    await vi.waitFor(() => { expect(calls()).toBeGreaterThanOrEqual(3) })
+
+    catalog.setRefreshIntervalMs(0)
+    const settled = calls()
+    await new Promise(resolve => setTimeout(resolve, 80))
+    expect(calls()).toBe(settled)
   })
 
   it('registers itself under the catalog service name and refuses a second one', () => {

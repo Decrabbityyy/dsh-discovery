@@ -36,6 +36,27 @@ import { DiscoverySection } from '../src/client/DiscoverySection.tsx'
 import { ModelCatalogTab } from '../src/client/ModelCatalogTab.tsx'
 import { ProviderModelsCard } from '../src/client/ProviderModelsDialog.tsx'
 
+/** 设置 scope 的桩：只记录被绑定的命名空间，页面本身的行为由它自己的用例覆盖。 */
+function fakeScopeBinder(): { bound: string[]; binder: unknown } {
+  const bound: string[] = []
+  const scope = {
+    getSnapshot: () => ({ status: 'ready', value: {}, base: {}, user: {}, revision: 1, writable: true, mode: 'host' }),
+    subscribe: () => () => {},
+    mutate: () => Promise.resolve(),
+    set: () => Promise.resolve(),
+    unset: () => Promise.resolve(),
+  }
+  return {
+    bound,
+    binder: {
+      bind: (spec: { namespace: string }) => {
+        bound.push(spec.namespace)
+        return scope
+      },
+    },
+  }
+}
+
 async function bench() {
   const ctx = new Context()
   await ctx.plugin(SlotRegistry).await()
@@ -49,8 +70,9 @@ async function bench() {
   ctx.provide('remote.credentials', {} as never)
   ctx.provide('remote.pluginInventory', {} as never)
   ctx.provide('locale', {} as never)
-  ctx.provide('settingsScope', {} as never)
-  return { ctx, slots: ctx.get('slots') as Slots }
+  const settingsScope = fakeScopeBinder()
+  ctx.provide('settingsScope', settingsScope.binder as never)
+  return { ctx, slots: ctx.get('slots') as Slots, scopeBound: settingsScope.bound }
 }
 
 function declare(slots: Slots): () => void {
@@ -143,7 +165,7 @@ describe('ui-settings-discovery apply', () => {
     expect(b.slots.entries('settings.models.provider-card')).toHaveLength(0)
   })
 
-  it('contributes the catalog page to the Plugins section tab list', async () => {
+  it('contributes the catalog page bound to the discovery settings namespace', async () => {
     const b = await bench()
     declare(b.slots)
     const fiber = b.ctx.plugin({ inject: [...inject], apply })
@@ -152,6 +174,12 @@ describe('ui-settings-discovery apply', () => {
     expect(entry.component).toBe(ModelCatalogTab)
     expect(entry.options).toMatchObject({ id: 'model-catalog', order: 20 })
     expect(resolveSlotLabel(entry.options.label)).toBe('模型目录')
+    // 这一页上长着目录刷新间隔，所以它拿到绑定到设置命名空间的 scope。
+    expect(b.scopeBound).toEqual(['llm-discovery'])
+    const injected = (
+      entry.inject as unknown as () => import('../src/client/ModelCatalogTab.tsx').ModelCatalogTabProps
+    )()
+    expect(injected.scope).toBeDefined()
     await fiber.dispose()
     expect(b.slots.entries('settings.plugins.tab')).toHaveLength(0)
   })

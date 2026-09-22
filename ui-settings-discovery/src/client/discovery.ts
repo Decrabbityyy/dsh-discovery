@@ -12,6 +12,7 @@ export {
   PI_AI_NS, ROUTE_PATTERN, UI_CATALOG_PATH, UI_CATALOG_STATUS_PATH, deriveKeyRef, messageOf,
 }
 export type { CatalogEnvelope }
+export type { DiscoverySettingsSection } from 'dsh-llm-discovery/vocabulary'
 
 /** Modalities one model's catalog entry records, keyed by bare model name. */
 export type ModelModalities = CatalogEnvelope['modalities'][string]
@@ -320,6 +321,10 @@ export interface CatalogStatus {
   readonly source?: 'storage' | 'models.dev'
   readonly storageError?: string
   readonly error?: string
+  /** 生效的定时刷新间隔，毫秒；0 表示只在挂载时刷一次。 */
+  readonly refreshIntervalMs?: number
+  /** 下一次定时刷新的时刻；没有定时器时为 null。 */
+  readonly nextRefreshAt?: number | null
 }
 
 /** The Remote call shape every consumed method answers with: `ok` narrows to either `value` or `error`. */

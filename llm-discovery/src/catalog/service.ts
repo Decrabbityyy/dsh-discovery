@@ -30,8 +30,14 @@ export interface CatalogOptions {
 /** 整份目录在那张表里的键。 */
 const CATALOG_RECORD = 'models'
 
+/** 目录服务交给本插件 owner 的那一面；其他插件读到的只是 {@link SharedCatalog}。 */
+export interface ModelCatalogHandle extends SharedCatalog {
+  /** 重排定时刷新，单位毫秒；`0` 或 offline 时停掉定时器。间隔没变就什么都不做。 */
+  setRefreshIntervalMs(intervalMs: number): void
+}
+
 /** 建目录、启动首次加载、把服务注册进组合；名字被占用时由 cordis 原样报错。 */
-export function provideModelCatalog(ctx: Context, options: CatalogOptions = {}): SharedCatalog {
+export function provideModelCatalog(ctx: Context, options: CatalogOptions = {}): ModelCatalogHandle {
   const fetchFn = options.fetchFn ?? fetch
   const now = options.now ?? Date.now
   const timeoutMs = options.timeoutMs ?? 15_000
@@ -141,6 +147,37 @@ export function provideModelCatalog(ctx: Context, options: CatalogOptions = {}):
     return running
   }
 
+  /** 排或重排定时刷新：旧定时器先停，同样的间隔不重排，改间隔与插件卸载都不会留下两套。 */
+  let stopTimer: (() => void) | undefined
+  let armedMs = -1
+  /** 下一次定时刷新的时刻；没有定时器时为 null。读状态的页面据此决定什么时候再来问。 */
+  let nextAt: number | null = null
+  const schedule = (intervalMs: number): void => {
+    const next = offline || intervalMs <= 0 ? 0 : intervalMs
+    if (next === armedMs) return
+    stopTimer?.()
+    stopTimer = undefined
+    armedMs = next
+    if (next === 0) {
+      nextAt = null
+      return
+    }
+    // 刻意不 unref：unref 过的定时器在事件循环没有别的事时会放进程提前退出，
+    // 在 vitest 的 worker 里表现为随机的 "Worker exited unexpectedly"。
+    const timer = setInterval(() => {
+      nextAt = now() + next
+      void refresh()
+    }, next)
+    nextAt = now() + next
+    stopTimer = () => { clearInterval(timer) }
+  }
+  ctx.effect(() => () => {
+    stopTimer?.()
+    stopTimer = undefined
+    armedMs = -1
+    nextAt = null
+  }, 'llm-discovery: catalog refresh timer')
+
   const init = async (): Promise<void> => {
     await openDomain()
     if (domain !== undefined && Object.keys(stored()).length > 0) {
@@ -161,7 +198,7 @@ export function provideModelCatalog(ctx: Context, options: CatalogOptions = {}):
     ready.resolve()
   }
 
-  const catalog: SharedCatalog = {
+  const catalog: ModelCatalogHandle = {
     factsOf: (modelId) => {
       const key = resolveCatalogKey(modelId, index)
       return key === undefined ? undefined : byKey(key)
@@ -172,20 +209,17 @@ export function provideModelCatalog(ctx: Context, options: CatalogOptions = {}):
       return catalogInputModalities(modelId)
     },
     envelope: () => (envelope ??= catalogEnvelope(keys.map(key => [key, byKey(key) as ModelFacts]))),
-    status: () => status,
+    status: () => ({
+      ...status,
+      refreshIntervalMs: armedMs > 0 ? armedMs : 0,
+      nextRefreshAt: nextAt,
+    }),
     refresh,
     ready: () => ready.promise,
+    setRefreshIntervalMs: schedule,
   }
   ctx.provide(CATALOG_SERVICE, catalog)
   void init()
-  // 挂了定时器就随插件卸载一起停：后台刷新不该在插件已经收回之后再写存储。
-  if (!offline && refreshIntervalMs > 0) {
-    ctx.effect(() => {
-      // 刻意不 unref：unref 过的定时器在事件循环没有别的事时会放进程提前退出，
-      // 在 vitest 的 worker 里表现为随机的 "Worker exited unexpectedly"。
-      const timer = setInterval(() => { void refresh() }, refreshIntervalMs)
-      return () => { clearInterval(timer) }
-    }, 'llm-discovery: catalog refresh interval')
-  }
+  schedule(refreshIntervalMs)
   return catalog
 }
