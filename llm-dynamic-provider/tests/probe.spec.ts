@@ -133,12 +133,17 @@ describe('probe endpoint', () => {
     server = await startProbeServer({ '/models': { body: JSON.stringify(LISTING) } })
     const routes = await boot({ routes: { upstream: { baseURL: server.url, api: 'openai-completions' } } }, fake.catalog)
     const probe = routes.get(DYNAMIC_PROBE_PATH)!
+    const probed = (): number => server!.requests.filter(request => request.path === '/models').length
+
+    // 挂载时的探测是后台起的：先等它落地，再拿它当基线，计数才不受调度顺序影响。
+    await vi.waitFor(() => { expect(probed()).toBe(1) })
+    const before = probed()
 
     const { body } = await answer(probe, 'POST')
     expect(fake.refreshes()).toBe(1)
     expect(body['probes']).toEqual([{ route: 'upstream', models: 1 }])
     // The refresh probed the endpoint again rather than reusing the boot pass.
-    expect(server.requests.filter(request => request.path === '/models').length).toBeGreaterThanOrEqual(2)
+    expect(probed()).toBeGreaterThan(before)
   })
 
   it('reports a route whose probe failed', async () => {
