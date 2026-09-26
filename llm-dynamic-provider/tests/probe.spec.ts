@@ -4,35 +4,13 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import type { Fiber } from '@deepseek-ai/cordis'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
-import { SettingsProvider } from '@deepseek-ai/dsh-settings'
-import { CATALOG_SERVICE, DYNAMIC_PROBE_PATH } from 'dsh-llm-discovery/vocabulary'
+import { CATALOG_SERVICE, DYNAMIC_PROBE_PATH, DYNAMIC_ROUTES_PATH } from 'dsh-llm-discovery/vocabulary'
 import * as dynamicProvider from '../src/index.ts'
+import { formsStub, legacySettingsStub } from './settings-stub.ts'
 import { startProbeServer } from './server.ts'
 import type { ProbeServer } from './server.ts'
-
-/** The smallest real SettingsProvider: an in-memory document. */
-class MemorySettings extends SettingsProvider {
-  doc: Record<string, unknown>
-
-  constructor(ctx: ConstructorParameters<typeof SettingsProvider>[0], options?: { doc?: Record<string, unknown> }) {
-    super(ctx)
-    this.doc = structuredClone(options?.doc ?? {})
-  }
-
-  get writable(): boolean {
-    return true
-  }
-
-  protected load(): Promise<Record<string, unknown>> {
-    return Promise.resolve(structuredClone(this.doc))
-  }
-
-  protected persist(ns: string, section: Record<string, unknown>): Promise<void> {
-    this.doc[ns] = structuredClone(section)
-    return Promise.resolve()
-  }
-}
 
 interface ResponseStub {
   statusCode: number
@@ -65,6 +43,25 @@ async function answer(route: RegisteredRoute, method: string): Promise<{ status:
     end: (value: string) => { body = value },
   }
   await route.handler({ method }, res)
+  return { status: res.statusCode, body: body.length === 0 ? {} : JSON.parse(body) as Record<string, unknown> }
+}
+
+/** POST 一个 JSON body：端点只读 stream 的 data/end 事件。 */
+async function postJson(route: RegisteredRoute, payload: unknown): Promise<{ status: number; body: Record<string, unknown> }> {
+  let body = ''
+  const res: ResponseStub = {
+    statusCode: 200,
+    setHeader: () => {},
+    end: (value: string) => { body = value },
+  }
+  const request = {
+    method: 'POST',
+    on(event: string, listener: (chunk?: unknown) => void): void {
+      if (event === 'data') listener(Buffer.from(JSON.stringify(payload)))
+      else if (event === 'end') listener()
+    },
+  }
+  await route.handler(request, res)
   return { status: res.statusCode, body: body.length === 0 ? {} : JSON.parse(body) as Record<string, unknown> }
 }
 
@@ -105,14 +102,20 @@ afterEach(async () => {
 })
 
 /** Mount the seams plus the plugin over one config, capturing its endpoints. */
-async function boot(config?: dynamicProvider.Config, catalog: unknown = fakeCatalog().catalog): Promise<Map<string, RegisteredRoute>> {
+async function boot(
+  config?: dynamicProvider.Config,
+  catalog: unknown = fakeCatalog().catalog,
+  line: 'legacy' | 'forms' = 'legacy',
+): Promise<Map<string, RegisteredRoute>> {
   const routes = new Map<string, RegisteredRoute>()
+  const forms = formsStub()
   ctx = new Context()
   await ctx.plugin(LlmRuntime)
-  await ctx.plugin(MemorySettings)
+  ctx.provide('settings', (line === 'legacy' ? legacySettingsStub(ctx) : forms.service) as never)
   ctx.provide('webServer', fakeWebServer(routes))
   ctx.provide(CATALOG_SERVICE, catalog)
-  await ctx.plugin(dynamicProvider, config)
+  const fiber: Fiber = await ctx.plugin(dynamicProvider, config).await()
+  if (line === 'forms') forms.attach(fiber)
   return routes
 }
 
@@ -176,5 +179,26 @@ describe('probe endpoint', () => {
     const refused = await answer(routes.get(DYNAMIC_PROBE_PATH)!, 'DELETE')
     expect(refused.status).toBe(405)
     expect(refused.body).toEqual({ error: 'method not allowed' })
+  })
+})
+
+describe('routes endpoint on the volatile settings line (0.1.7)', () => {
+  it('writes a route through the settings service, reprobes it, and reads it back', async () => {
+    server = await startProbeServer({ '/models': { body: JSON.stringify(LISTING) } })
+    const routes = await boot({ routes: {} }, fakeCatalog().catalog, 'forms')
+    const write = routes.get(DYNAMIC_ROUTES_PATH)!
+
+    const written = await postJson(write, {
+      op: 'set',
+      routeId: 'upstream',
+      route: { baseURL: server.url, api: 'openai-completions' },
+    })
+    expect(written.status).toBe(200)
+    // 写进去的路由立刻能在 LLM 注册表上看到：Loader 点更 volatile 值后插件重探了一轮。
+    await vi.waitFor(() => {
+      expect(ctx!.llm.listProviders().map(provider => provider.id)).toContain('upstream')
+    })
+    const read = await answer(write, 'GET')
+    expect(Object.keys(read.body['routes'] as Record<string, unknown>)).toEqual(['upstream'])
   })
 })

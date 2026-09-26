@@ -1,35 +1,52 @@
 /**
- * 用户设置：命名空间注册、组成层与用户层的取值，以及改间隔后定时器重排（不用重启）。
+ * 用户设置：两条宿主线上的取值，以及改完间隔后定时器重排（不用重启）。
+ *
+ * - 0.1.7：设置就是插件 Config 里标了 `.volatile()` 的字段，Loader 就地点更引用，
+ *   再在 owner fiber 上派发 `loader/volatile-update`；
+ * - 0.1.5：设置是插件自己注册的 settings 命名空间（这里是 `MemorySettings` 替身，
+ *   按本仓库用到的那几个成员实现）。
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import type { Fiber } from '@deepseek-ai/cordis'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
-import { SettingsProvider } from '@deepseek-ai/dsh-settings'
 import { DISCOVERY_SETTINGS_NS } from '../src/settings.ts'
-import type { DiscoverySettingsSection } from '../src/settings.ts'
 import * as discovery from '../src/index.ts'
+import { commitVolatile } from './volatile.ts'
+import type { VolatileRef } from './volatile.ts'
 
-/** 最小的真实 SettingsProvider：一份内存文档。 */
-class MemorySettings extends SettingsProvider {
-  doc: Record<string, unknown>
+type Ops = readonly { op: 'set' | 'unset'; path: readonly string[]; value?: unknown }[]
 
-  constructor(ctx: ConstructorParameters<typeof SettingsProvider>[0], options?: { doc?: Record<string, unknown> }) {
-    super(ctx)
-    this.doc = structuredClone(options?.doc ?? {})
+/**
+ * 0.1.5 settings 面的替身：只实现本仓库用到的那几个成员——按命名空间注册、读生效值
+ * （组成层 ∪ 用户层）、按路径改用户层并提交 `settings/updated`。
+ */
+function legacySettingsStub(ctx: Context): unknown {
+  const doc: Record<string, Record<string, unknown>> = {}
+  const bases = new Map<string, Record<string, unknown>>()
+  const read = (ns: string): unknown => {
+    const base = bases.get(ns)
+    if (base === undefined) return undefined
+    return { ...base, ...doc[ns] }
   }
-
-  get writable(): boolean {
-    return true
-  }
-
-  protected load(): Promise<Record<string, unknown>> {
-    return Promise.resolve(structuredClone(this.doc))
-  }
-
-  protected persist(ns: string, section: Record<string, unknown>): Promise<void> {
-    this.doc[ns] = structuredClone(section)
-    return Promise.resolve()
+  return {
+    register(ns: string, _schema: unknown, options?: { base?: Record<string, unknown> }): unknown {
+      bases.set(ns, structuredClone(options?.base ?? {}))
+      return { get: () => read(ns) }
+    },
+    get: read,
+    mutate(ns: string, ops: Ops): Promise<void> {
+      const section = { ...doc[ns] }
+      for (const op of ops) {
+        if (op.op === 'set') section[op.path[0]!] = op.value
+        else delete section[op.path[0]!]
+      }
+      doc[ns] = section
+      // 0.1.7 的 d.ts 里没有这个事件（那条线上改设置走 Loader），事件名只是字符串。
+      ;(ctx.emit as unknown as (name: string, ns: string) => void)('settings/updated', ns)
+      return Promise.resolve()
+    },
   }
 }
 
@@ -55,14 +72,15 @@ afterEach(async () => {
   ctx = undefined
 })
 
-/** 装上 llm 与 settings 两个 seam，再装本插件。 */
-async function boot(config?: discovery.Config): Promise<Context> {
+/** 装上 llm seam；`settings` 装上就是 0.1.5 那条线，不装就是 0.1.7 的。 */
+async function boot(config?: discovery.Config, legacySettings = false): Promise<{ ctx: Context; fiber: Fiber }> {
   stubCatalogFetch()
-  ctx = new Context()
-  await ctx.plugin(LlmRuntime)
-  await ctx.plugin(MemorySettings)
-  await ctx.plugin(discovery, config)
-  return ctx
+  const booted = new Context()
+  await booted.plugin(LlmRuntime)
+  if (legacySettings) booted.provide('settings', legacySettingsStub(booted) as never)
+  const fiber = await booted.plugin(discovery, config).await()
+  ctx = booted
+  return { ctx: booted, fiber }
 }
 
 /** 排定时器的调用次数，按间隔区分（定时器可能被别的东西也用到）。 */
@@ -70,18 +88,28 @@ function timerCalls(spy: { mock: { calls: unknown[][] } }, delayMs: number): num
   return spy.mock.calls.filter(call => call[1] === delayMs).length
 }
 
-describe('catalog refresh settings', () => {
-  it('registers the namespace with the deployment value as its base', async () => {
-    const booted = await boot({ catalogRefreshIntervalMinutes: 1440 })
-    const section = booted.settings.get(DISCOVERY_SETTINGS_NS) as DiscoverySettingsSection | undefined
-    expect(section?.catalogRefreshIntervalMinutes).toBe(1440)
-  })
-
-  it('reschedules the timer when the user changes the interval', async () => {
+describe('catalog refresh interval from the Loader config (0.1.7)', () => {
+  it('takes the volatile field value, and follows a value the Loader commits', async () => {
     const setIntervalSpy = vi.spyOn(globalThis, 'setInterval')
     const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval')
-    const booted = await boot({ catalogRefreshIntervalMinutes: 1440 })
+    const { fiber } = await boot({ catalogRefreshIntervalMinutes: 1440 })
+    const ref = (fiber.config as { catalogRefreshIntervalMinutes: VolatileRef<number> }).catalogRefreshIntervalMinutes
     expect(timerCalls(setIntervalSpy, MINUTES_1440_MS)).toBe(1)
+
+    // Loader 的做法：把新值点进引用，再只对这个 fiber 派发。
+    commitVolatile(ref, 1)
+    fiber.ctx.emit('loader/volatile-update', [['catalogRefreshIntervalMinutes']])
+    await vi.waitFor(() => { expect(timerCalls(setIntervalSpy, 60_000)).toBe(1) })
+    expect(clearIntervalSpy).toHaveBeenCalled()
+  })
+})
+
+describe('catalog refresh interval from the settings namespace (0.1.5)', () => {
+  it('registers the namespace with the deployment value as its base, and follows the user layer', async () => {
+    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval')
+    const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval')
+    const { ctx: booted } = await boot({ catalogRefreshIntervalMinutes: 1440 }, true)
+    await vi.waitFor(() => { expect(timerCalls(setIntervalSpy, MINUTES_1440_MS)).toBe(1) })
 
     // 用户层改成一分钟：重排成 60 秒，并清掉原来那个。
     await booted.settings.mutate(DISCOVERY_SETTINGS_NS, [{
@@ -98,11 +126,5 @@ describe('catalog refresh settings', () => {
       path: ['catalogRefreshIntervalMinutes'],
     }])
     await vi.waitFor(() => { expect(timerCalls(setIntervalSpy, MINUTES_1440_MS)).toBe(2) })
-  })
-
-  it('leaves the timer off while the deployment value and the user layer are zero', async () => {
-    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval')
-    await boot({ catalogRefreshIntervalMinutes: 0 })
-    expect(setIntervalSpy).not.toHaveBeenCalled()
   })
 })

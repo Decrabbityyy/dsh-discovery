@@ -115,7 +115,7 @@ dsh --profile web --dump-config
 
 删除动态路由会移除该路由注册的模型，但不会删除凭证存储中已经保存的密钥。
 
-编辑已有动态路由时，如果它使用凭证，请重新输入 API 密钥；当前版本不会在编辑表单中回显旧密钥，留空保存等于让该路由不带凭证。表单里也没有 `defaultContextWindow` 与 `defaultMaxTokens`，用页面编辑会清掉这两个值，需要它们时请在 `settings.yaml` 里维护。
+编辑已有动态路由时，如果它使用凭证，请重新输入 API 密钥；当前版本不会在编辑表单中回显旧密钥，留空保存等于让该路由不带凭证。表单里也没有 `defaultContextWindow` 与 `defaultMaxTokens`，用页面编辑会清掉这两个值，需要它们时请在用户配置里维护。
 
 ## 常见问题
 
@@ -141,6 +141,9 @@ dsh --profile web --dump-config
 
 ## 已知限制
 
+下文提到「手工编辑配置」时，落点随宿主线而变：0.1.5 线是 `$DSH_HOME/settings.yaml` 里对应命名空间的用户层，0.1.7 线是 profile patch（`cordis.patch.yml`）里该插件行的 `config`。下面写 `settings.yaml` 的地方，0.1.7 线上按 profile patch 理解。
+
+- 「模型目录」页按插件名取设置命名空间（0.1.7 线上命名空间就是 Loader entry id，也就是 profile patch 里那一行的 `id`）。如果你把 `dsh-llm-discovery` 那一行的 `id` 改成了别的名字，这一页读不到它，刷新间隔输入框不会出现。
 - 页面创建 Provider 后，只能到「模型」设置页继续编辑。
 - 「模型与选项」保存的是该提供方的显式 `models` 列表：对模型全部由安装目录提供的路由（例如 `anthropic`）来说，这等于把清单固化下来，之后安装目录新增的模型不会自动生效。
 - 档位不能收窄：写进配置的 `reasoningEfforts` 是「匹配到的条目记录的全集 + 原配置里已声明的」，界面上不提供逐档开关；要收窄只能编辑 `settings.yaml`。

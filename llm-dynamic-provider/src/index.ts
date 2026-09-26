@@ -12,6 +12,7 @@ import type { Config, DynamicSection } from './config.ts'
 import { NamespaceConfig } from './config.ts'
 import { discoverDynamicProviders } from './provider.ts'
 import type { DynamicProviderProfile } from './provider.ts'
+import { configValue, legacySettings, loaderEntryId, onSettingsCommit, onVolatileUpdate } from 'dsh-llm-discovery/compat'
 import { catalogReasoningEfforts, discoverEndpoint, enrichModels, resolveDiscoveryConfig } from 'dsh-llm-discovery/engine'
 import { CATALOG_SERVICE, DYNAMIC_PROBE_PATH, DYNAMIC_ROUTES_PATH } from 'dsh-llm-discovery/vocabulary'
 import type { CatalogStatus, SharedCatalog } from 'dsh-llm-discovery/vocabulary'
@@ -57,7 +58,15 @@ interface RouteProbeReport {
 
 /** Mount the dynamic-provider adapter: declared routes register on first successful probe. */
 export function apply(ctx: Context, config?: Config): void {
-  ctx.settings.register(DYNAMIC_NS, NamespaceConfig, { base: { routes: config?.routes ?? {} } })
+  // 0.1.5 兼容：那条线上用户层住在插件自己注册的 settings 命名空间里，组成层是这里的
+  // `config.routes`。0.1.7 的 `ctx.settings` 换成了 SettingsForms，没有按命名空间注册
+  // 这回事——路由表就是本插件 Config 里标了 `.volatile()` 的那一格。
+  const legacy = legacySettings(ctx)
+  // `configValue` 在两条线上都要走一遍：0.1.7 交下来的是引用，`base` 要的是普通值。
+  legacy?.register(DYNAMIC_NS, NamespaceConfig, { base: { routes: configValue(config?.routes) ?? {} } })
+
+  /** 0.1.5 写命名空间常量；0.1.7 写自己的 Loader entry id（命名空间就是它）。 */
+  const settingsTarget = (): string => (legacy === undefined ? loaderEntryId(ctx, DYNAMIC_NS) : DYNAMIC_NS)
 
   // 目录由 dsh-llm-discovery 提供（`inject` 保证它在）：facts 查询、模态与状态都读它。
   const catalog = ctx.get(CATALOG_SERVICE) as SharedCatalog
@@ -90,8 +99,7 @@ export function apply(ctx: Context, config?: Config): void {
       handler: async (req, res) => {
         const method = (req as { method?: string }).method ?? 'GET'
         if (method === 'GET') {
-          const section = ctx.settings.get(DYNAMIC_NS) as DynamicSection | undefined
-          sendJson(res, 200, { routes: section?.routes ?? {} })
+          sendJson(res, 200, { routes: declaredRoutes() })
           return
         }
         if (method !== 'POST') {
@@ -112,9 +120,9 @@ export function apply(ctx: Context, config?: Config): void {
         }
         try {
           if (body.op === 'set') {
-            await ctx.settings.mutate(DYNAMIC_NS, [{ op: 'set', path: ['routes', routeId], value: body.route }])
+            await ctx.settings.mutate(settingsTarget(), [{ op: 'set', path: ['routes', routeId], value: body.route }])
           } else if (body.op === 'unset') {
-            await ctx.settings.mutate(DYNAMIC_NS, [{ op: 'unset', path: ['routes', routeId] }])
+            await ctx.settings.mutate(settingsTarget(), [{ op: 'unset', path: ['routes', routeId] }])
           } else {
             sendJson(res, 400, { error: 'op must be set or unset' })
             return
@@ -123,8 +131,7 @@ export function apply(ctx: Context, config?: Config): void {
           sendJson(res, 422, { error: error instanceof Error ? error.message : String(error) })
           return
         }
-        const section = ctx.settings.get(DYNAMIC_NS) as DynamicSection | undefined
-        sendJson(res, 200, { routes: section?.routes ?? {} })
+        sendJson(res, 200, { routes: declaredRoutes() })
       },
     }), 'llm-dynamic-provider: routes endpoint')
   }
@@ -184,10 +191,12 @@ export function apply(ctx: Context, config?: Config): void {
     }
   }
 
-  /** The declared routes: the namespace's merged composition base + user layer. */
+  /** The declared routes: the user layer over the composition base, wherever this host keeps it. */
   const declaredRoutes = (): Record<string, import('./config.ts').RouteProfile> => {
-    const section = ctx.settings.get(DYNAMIC_NS) as DynamicSection | undefined
-    return section?.routes ?? {}
+    // 0.1.5 兼容：组成层 `base` 与用户层都由 settings 命名空间合并后交回。
+    if (legacy !== undefined) return (legacy.get(DYNAMIC_NS) as DynamicSection | undefined)?.routes ?? {}
+    // 0.1.7：整格路由表是 Config 里的一个 volatile 引用，Loader 就地点更它。
+    return configValue(config?.routes) ?? {}
   }
 
   /** Mirror the declared routes into the LLM configurable-provider directory. */
@@ -196,7 +205,7 @@ export function apply(ctx: Context, config?: Config): void {
     const entries: LlmConfigurableProvider[] = Object.entries(declaredRoutes()).map(([routeKey, route]) => ({
       provider: routeKey,
       displayName: route.displayName ?? routeKey,
-      settingsNs: DYNAMIC_NS,
+      settingsNs: settingsTarget(),
       settingsPath: ['routes', routeKey],
       declared: true,
     }))
@@ -264,11 +273,14 @@ export function apply(ctx: Context, config?: Config): void {
 
   // Hot-edit: adding or editing a route reprobes without a restart, and removing
   // one withdraws its route on the same pass. The directory re-syncs with it.
-  ctx.on('settings/updated', (ns) => {
-    if (ns !== DYNAMIC_NS) return
+  // 两条线各注册一条通知：0.1.5 是 settings 提交，0.1.7 是 Loader 点更 volatile，
+  // 同一个组合里只有其中一条会响。
+  const onRoutesChanged = (): void => {
     syncDirectory()
     void reprobe()
-  })
+  }
+  onSettingsCommit(ctx, DYNAMIC_NS, onRoutesChanged)
+  onVolatileUpdate(ctx, onRoutesChanged)
   // Publish the namespace's exposure before serving: the directory is what
   // admits it to the proxy's exposed set.
   syncDirectory()

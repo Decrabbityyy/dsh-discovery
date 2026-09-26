@@ -1,5 +1,6 @@
 import z from '@deepseek-ai/schemastery'
 import { ROUTE_PROTOCOLS } from 'dsh-llm-discovery/engine'
+import { volatileField } from 'dsh-llm-discovery/compat'
 
 export { ROUTE_PROTOCOLS }
 
@@ -31,7 +32,8 @@ const routeProfile: z<RouteProfile> = z.object({
 })
 
 export interface Config {
-  /** Base layer of the `routes` settings namespace, editable live through the UI. */
+  /** 路由声明。0.1.7 上这一格是用户可改的设置字段（设置页与插件自己的端点都写它）；
+   * 0.1.5 上用户层在 `llm-dynamic-provider` 命名空间里，这里只是组成层。 */
   routes?: Record<string, RouteProfile>
   /** Per-request probe timeout in milliseconds (default 10,000). */
   timeoutMs?: number
@@ -42,18 +44,21 @@ export interface Config {
 }
 
 export const Config: z<Config> = z.object({
-  routes: z.dict(routeProfile),
+  // 0.1.7 上整份路由表是一个 volatile 字段：Loader 就地点更它，插件不重启，
+  // 设置页也能把它当作一格读写。0.1.5 的 schemastery 没有 `.volatile()`，
+  // `volatileField` 原样返回。
+  routes: volatileField(z.dict(routeProfile)),
   timeoutMs: z.number().step(1).min(1),
   maxResponseBytes: z.number().step(1).min(1024),
   enrichment: z.boolean(),
 })
 
-/** The composition base merged with the user layer. */
+/** 0.1.5 兼容：那条线上用户层所在的 settings 命名空间的形状。 */
 export interface DynamicSection {
   routes: Record<string, RouteProfile>
 }
 
-/** The settings namespace schema, editable from the Web UI. */
+/** 0.1.5 兼容：注册给旧 settings 服务的命名空间 schema，占位默认值让页面能读到。 */
 export const NamespaceConfig: z<DynamicSection> = z.object({
   routes: z.dict(routeProfile).default({}),
 })

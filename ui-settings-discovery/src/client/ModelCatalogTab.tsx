@@ -4,10 +4,10 @@
 
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { UI_CATALOG_STATUS_PATH } from 'dsh-llm-discovery/vocabulary'
 import { DYNAMIC_PROBE_PATH, messageOf } from './discovery.ts'
 import type { CatalogStatus, DiscoverySettingsSection, RouteProbe, RouteStatus } from './discovery.ts'
+import type { SettingsForm } from './settings-form.ts'
 import styles from './styles.module.css'
 
 /** 刷新间隔那个设置字段。 */
@@ -19,9 +19,9 @@ const READ_SLACK_MS = 1_500
 /** 最短重读间隔，免得宿主报了个已经过去的时刻把页面变成连问。 */
 const MIN_READ_DELAY_MS = 5_000
 
-/** Props delivered by the slot outlet: the bound settings scope this page also edits. */
+/** Props delivered by the slot outlet: the bound settings form this page also edits. */
 export type ModelCatalogTabProps = Partial<{
-  readonly scope: SettingsScope<DiscoverySettingsSection>
+  readonly scope: SettingsForm<DiscoverySettingsSection>
 }>
 
 /** A refresh timestamp as the page shows it; one it never saw reads as a dash. */
@@ -182,12 +182,12 @@ export function ModelCatalogTab(props: ModelCatalogTabProps = {}): ReactNode {
 }
 
 /**
- * 目录自动刷新间隔：写设置命名空间的用户层，宿主半边收到 `settings/updated` 就重排定时器，
- * 所以保存后立即生效，不用重启。留空保存等于清掉用户层，回到部署配置的值。
- * 保存成功后告诉这一页重读一次状态，好让它按新的刷新时刻安排下一次。
+ * 目录自动刷新间隔：写设置表单的用户层，宿主半边收到提交就重排定时器，所以保存后
+ * 立即生效，不用重启。留空保存等于清掉用户层，回到部署配置的值。保存成功后告诉
+ * 这一页重读一次状态，好让它按新的刷新时刻安排下一次。
  */
 function RefreshIntervalField({ scope, onChanged }: {
-  scope: SettingsScope<DiscoverySettingsSection>
+  scope: SettingsForm<DiscoverySettingsSection>
   onChanged: () => void
 }): ReactNode {
   const [snapshot, setSnapshot] = useState(() => scope.getSnapshot())
@@ -206,13 +206,13 @@ function RefreshIntervalField({ scope, onChanged }: {
   const invalid = parsed !== undefined && (!Number.isInteger(parsed) || parsed < 0)
   const canSave = snapshot.writable && !invalid && !busy && trimmed !== String(minutes)
 
-  const write = async (): Promise<void> => {
+  /** 写入：0.1.7 用返回 false 表示宿主拒收（0.1.5 的拒收是 reject），都当失败报出来。 */
+  const commit = async (write: () => Promise<unknown>): Promise<void> => {
     setBusy(true)
     setError(undefined)
     setSaved(false)
     try {
-      if (trimmed === '') await scope.unset(INTERVAL_FIELD)
-      else if (parsed !== undefined) await scope.set(INTERVAL_FIELD, parsed)
+      if (await write() === false) throw new Error('宿主没有接受这次写入')
       setDraft(undefined)
       setSaved(true)
       onChanged()
@@ -223,21 +223,16 @@ function RefreshIntervalField({ scope, onChanged }: {
     }
   }
 
-  const clear = async (): Promise<void> => {
-    setBusy(true)
-    setError(undefined)
-    setSaved(false)
-    try {
-      await scope.unset(INTERVAL_FIELD)
-      setDraft(undefined)
-      setSaved(true)
-      onChanged()
-    } catch (cause) {
-      setError(messageOf(cause))
-    } finally {
-      setBusy(false)
-    }
-  }
+  const write = (): Promise<void> => commit(async () => {
+    if (trimmed === '') return await scope.unset(INTERVAL_FIELD)
+    if (parsed !== undefined) return await scope.set(INTERVAL_FIELD, parsed)
+    return undefined
+  })
+
+  const clear = (): Promise<void> => commit(() => scope.unset(INTERVAL_FIELD))
+
+  // 命名空间没暴露给这个客户端（没装 dsh-llm-discovery）时没有可写的东西，这一栏整个不出现。
+  if (snapshot.status === 'unavailable') return null
 
   return (
     <>

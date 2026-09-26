@@ -2,7 +2,7 @@
 
 `dsh-llm-dynamic-provider` 在 DeepSeek Harness 启动时探测你声明的模型端点，并把端点当前提供的模型注册成可用 Provider。它适合模型列表经常变化的 API 中转站、聚合网关和本地推理服务。
 
-发现的模型目录不会写入 `settings.yaml`。你只需要保存端点和协议；每次启动时插件会重新读取模型列表。
+发现的模型目录不会写入用户配置。你只需要保存端点和协议；每次启动时插件会重新读取模型列表。
 
 本插件依赖 `dsh-llm-discovery`：它提供 models.dev 目录服务。没装它时本插件的宿主行不会激活（模型选择器里也就没有动态路由）。
 
@@ -20,7 +20,12 @@ dsh --profile <name> --dump-config
 
 ## 配置一个动态路由
 
-在 `$DSH_HOME/settings.yaml` 中写入本插件的用户设置。未设置 `DSH_HOME` 时，默认文件是 `~/.dsh/settings.yaml`：
+路由写在本插件的用户配置里，这一层在两条宿主线上的位置不同：
+
+- **0.1.5 线**：`$DSH_HOME/settings.yaml` 里 `llm-dynamic-provider` 命名空间的用户层；未设置 `DSH_HOME` 时该文件是 `~/.dsh/settings.yaml`。
+- **0.1.7 线**：profile 的 patch（`cordis.patch.yml`）里 `llm-dynamic-provider` 那一行的 `config`；命名空间就是这一行，页面写进去的也是它。
+
+两条线上的字段写法一样：
 
 ```yaml
 llm-dynamic-provider:
@@ -34,13 +39,24 @@ llm-dynamic-provider:
       defaultMaxTokens: 32768
 ```
 
-把凭证写入 DSH 使用的 `.env` 或启动环境，不要把真实密钥写入 `settings.yaml`：
+0.1.7 线上同样一份内容写在 profile patch 的那一行里：
+
+```yaml
+- id: llm-dynamic-provider
+  config:
+    routes:
+      upstream:
+        baseURL: https://gateway.example.com/v1
+        api: openai-completions
+```
+
+把凭证写入 DSH 使用的 `.env` 或启动环境，不要把真实密钥写进配置文件：
 
 ```text
 UPSTREAM_API_KEY=你的密钥
 ```
 
-保存 `settings.yaml` 后插件会自动重新探测，不需要重启。探测成功后，路由名 `upstream` 会出现在模型选择器中，端点返回的模型都可以直接使用。
+保存后插件会自动重新探测，不需要重启。探测成功后，路由名 `upstream` 会出现在模型选择器中，端点返回的模型都可以直接使用。
 
 ## 路由字段
 
@@ -57,7 +73,7 @@ UPSTREAM_API_KEY=你的密钥
 
 ## 插件配置
 
-这些是部署级选项，不属于用户 `settings.yaml`。需要修改时，在 profile 的 `cordis.patch.yml` 中配置插件行：
+这些是部署级选项，不属于用户配置。需要修改时，在 profile 的 `cordis.patch.yml` 中配置插件行：
 
 ```yaml
 - id: llm-dynamic-provider
@@ -69,14 +85,14 @@ UPSTREAM_API_KEY=你的密钥
 
 | 字段 | 默认值 | 说明 |
 |---|---:|---|
-| `routes` | `{}` | 路由声明的底稿层；`settings.yaml` 里的同名路由覆盖它 |
+| `routes` | `{}` | 路由声明的底稿层；用户配置里的同名路由覆盖它 |
 | `timeoutMs` | `10000` | 每次探测请求的超时时间，单位毫秒 |
 | `maxResponseBytes` | `4194304` | 模型列表响应的最大字节数 |
 | `enrichment` | `true` | 用内置模型目录补全端点未提供的名称和容量 |
 
-`config.routes` 适合随 profile 分发一组默认端点；用户在 `settings.yaml` 里改动或新增的路由写在同一份命名空间的用户层上。
+`config.routes` 适合随 profile 分发一组默认端点；用户改动或新增的路由盖在它上面（0.1.5 写进 settings.yaml 的用户层，0.1.7 写进 profile patch 里那一行的 `config`）。
 
-修改 profile patch 后需要重启。安装了 `dsh-client-ui-settings-discovery` 时，也可以在「模型发现」页面的「动态路由」区域新增、编辑和删除路由；页面写入的也是同一份用户 settings。
+修改 profile patch 后需要重启。安装了 `dsh-client-ui-settings-discovery` 时，也可以在「模型发现」页面的「动态路由」区域新增、编辑和删除路由；页面写入的也是同一份用户配置。
 
 ## 协议和地址
 
@@ -93,7 +109,7 @@ UPSTREAM_API_KEY=你的密钥
 
 - 每次启动都会重新探测所有路由：端点不可达、认证失败或返回空列表的路由这一轮不注册，端点恢复后随下一次探测（改设置或手动刷新）注册。
 - 已经探测成功过的路由，某一轮探测失败时继续沿用上一次的模型清单；只有从未成功过的路由才完全不出现。
-- `settings.yaml` 中的路由发生变化时会自动重新探测，不需要重启。
+- 用户配置里的路由发生变化时会自动重新探测，不需要重启。
 - 探测成功后，端点返回的模型会出现在模型选择器中。
 - 端点返回的容量优先；缺失字段可由路由默认值补全。
 - 缺失的名称与容量由 `dsh-llm-discovery` 提供的 models.dev 目录补齐，缓存与刷新由该插件负责。
@@ -125,7 +141,7 @@ UPSTREAM_API_KEY=你的密钥
 ## 已知限制
 
 - Anthropic 和 Gemini 每次最多读取 1000 个模型，不继续读取后续分页。
-- 用页面编辑已有路由时只写回路由 ID、协议、端点地址、显示名称与密钥；`defaultContextWindow` 与 `defaultMaxTokens` 需要在 `settings.yaml` 里维护。
+- 用页面编辑已有路由时只写回路由 ID、协议、端点地址、显示名称与密钥；`defaultContextWindow` 与 `defaultMaxTokens` 需要在用户配置里维护。
 - 连续快速编辑同一路由可能产生重叠探测；一次保存后请等待探测完成再继续修改。
 - 使用 Web 动态路由管理时，只应把 DSH Web 服务暴露给可信用户和可信网络。
 

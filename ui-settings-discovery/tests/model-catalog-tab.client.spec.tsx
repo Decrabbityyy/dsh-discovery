@@ -4,7 +4,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Mock } from 'vitest'
-import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { SettingsForm, SettingsFormSnapshot } from '../src/client/settings-form.ts'
 import { UI_CATALOG_STATUS_PATH } from 'dsh-llm-discovery/vocabulary'
 import { ModelCatalogTab } from '../src/client/ModelCatalogTab.tsx'
 import { DYNAMIC_PROBE_PATH } from '../src/client/discovery.ts'
@@ -181,21 +181,23 @@ describe('model catalog tab', () => {
   })
 })
 
-/** 一张内存 scope：写入会更新快照并通知订阅者，和真实 scope 的可观察行为一致。 */
+/** 一张内存表单：写入会更新快照并通知订阅者，和真实表单的可观察行为一致。 */
 function fakeScope(options: { minutes?: number; overridden?: boolean; writable?: boolean } = {}): {
-  scope: SettingsScope<DiscoverySettingsSection>
+  scope: SettingsForm<DiscoverySettingsSection>
   sets: { field: string; value: unknown }[]
   unsets: string[]
   failWith?: string
+  refuse?: boolean
 } {
   const listeners = new Set<() => void>()
   const fake = { sets: [], unsets: [] } as unknown as {
-    scope: SettingsScope<DiscoverySettingsSection>
+    scope: SettingsForm<DiscoverySettingsSection>
     sets: { field: string; value: unknown }[]
     unsets: string[]
     failWith?: string
+    refuse?: boolean
   }
-  let snapshot: SettingsScopeSnapshot<DiscoverySettingsSection> = {
+  let snapshot: SettingsFormSnapshot<DiscoverySettingsSection> = {
     status: 'ready',
     value: options.minutes === undefined ? {} : { catalogRefreshIntervalMinutes: options.minutes },
     base: { catalogRefreshIntervalMinutes: 0 },
@@ -204,7 +206,7 @@ function fakeScope(options: { minutes?: number; overridden?: boolean; writable?:
     writable: options.writable ?? true,
     mode: 'host',
   }
-  const publish = (next: SettingsScopeSnapshot<DiscoverySettingsSection>): void => {
+  const publish = (next: SettingsFormSnapshot<DiscoverySettingsSection>): void => {
     snapshot = next
     for (const listener of listeners) listener()
   }
@@ -214,18 +216,20 @@ function fakeScope(options: { minutes?: number; overridden?: boolean; writable?:
       listeners.add(listener)
       return () => { listeners.delete(listener) }
     },
-    mutate: () => Promise.resolve(),
     set: (field, value) => {
       if (fake.failWith !== undefined) return Promise.reject(new Error(fake.failWith))
+      // 0.1.7 用 false 表示宿主拒收，0.1.5 的拒收是 reject。
+      if (fake.refuse === true) return Promise.resolve(false)
       fake.sets.push({ field, value })
       publish({ ...snapshot, value: { [field]: value as number }, user: { [field]: value } })
-      return Promise.resolve()
+      return Promise.resolve(true)
     },
     unset: (field) => {
       if (fake.failWith !== undefined) return Promise.reject(new Error(fake.failWith))
+      if (fake.refuse === true) return Promise.resolve(false)
       fake.unsets.push(field)
       publish({ ...snapshot, value: {}, user: {} })
-      return Promise.resolve()
+      return Promise.resolve(true)
     },
   }
   return fake
@@ -287,13 +291,22 @@ describe('catalog refresh interval on the page', () => {
 
   it('reports a refused write and keeps the draft', async () => {
     both()
-    const fake = fakeScope({ minutes: 60 })
-    fake.failWith = 'settings namespace "llm-discovery" changed since it was read'
-    render(<ModelCatalogTab scope={fake.scope} />)
+    const thrown = fakeScope({ minutes: 60 })
+    thrown.failWith = 'settings namespace "llm-discovery" changed since it was read'
+    render(<ModelCatalogTab scope={thrown.scope} />)
     fireEvent.change(intervalInput(), { target: { value: '120' } })
     fireEvent.click(saveInterval())
-
     await waitFor(() => { expect(screen.getByText(/changed since it was read/)).toBeDefined() })
+    expect(intervalInput().value).toBe('120')
+    cleanup()
+
+    // 0.1.7 的写入用返回值 false 表示宿主拒收，0.1.5 的拒收是 reject；两种都当失败报出来。
+    const refused = fakeScope({ minutes: 60 })
+    refused.refuse = true
+    render(<ModelCatalogTab scope={refused.scope} />)
+    fireEvent.change(intervalInput(), { target: { value: '120' } })
+    fireEvent.click(saveInterval())
+    await waitFor(() => { expect(screen.getByText(/宿主没有接受这次写入/)).toBeDefined() })
     expect(intervalInput().value).toBe('120')
   })
 

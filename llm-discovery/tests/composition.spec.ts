@@ -78,13 +78,17 @@ describe('real Loader composition', () => {
     }
   })
 
-  it('fails to load a config the schema rejects', { timeout: 60_000 }, async () => {
-    await expect(loadYaml([
+  it('does not serve discovery when the config fails the schema', { timeout: 60_000 }, async () => {
+    // 0.1.7 的 Loader 用 Promise.allSettled 等条目，schema 拒掉的配置不会再让 `await()`
+    // 抛出来（条目照样起不来）。所以断言的是行为：这个 offer 没有注册上。
+    const loaded = await loadYaml([
       "- name: '@deepseek-ai/dsh-llm'",
       "- name: 'dsh-llm-discovery'",
       '  config:',
       '    timeoutMs: 0',
-    ])).rejects.toThrow()
+    ])
+    await expect(loaded.llm.discoverModels(DISCOVERY_NAMESPACE, { baseURL: 'http://127.0.0.1:1' }))
+      .rejects.toMatchObject({ code: 'NO_DISCOVERY' })
   })
 
   it('withdraws the discovery offer when the plugin fiber is disposed (HMR safety)', { timeout: 60_000 }, async () => {

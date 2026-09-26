@@ -1,4 +1,5 @@
 import z from '@deepseek-ai/schemastery'
+import { configValue, volatileField } from '../compat.ts'
 
 export interface EngineSwitches {
   /** Ollama native API (`/api/tags` + per-model `/api/show`). Default true. */
@@ -29,7 +30,9 @@ export const Config: z<Config> = z.object({
   timeoutMs: z.number().step(1).min(1),
   maxResponseBytes: z.number().step(1).min(1024),
   enrichment: z.boolean(),
-  catalogRefreshIntervalMinutes: z.number().step(1).min(0),
+  // 0.1.7 上这一格是用户可改的设置字段（设置页写它、本插件读它）；0.1.5 上
+  // `volatileField` 原样返回，用户层由下面 `legacySettings()` 注册的命名空间承担。
+  catalogRefreshIntervalMinutes: volatileField(z.number().step(1).min(0)),
   ollamaDefaultContextWindow: z.number().step(1).min(1),
   engines: z.object({
     ollama: z.boolean(),
@@ -48,18 +51,23 @@ export interface ResolvedDiscoveryConfig {
   engines: Required<EngineSwitches>
 }
 
-/** Resolve the deployment config into its fully-defaulted form. This is the one place the defaults live. */
+/**
+ * Resolve the deployment config into its fully-defaulted form. This is the one place the defaults live.
+ *
+ * 每一个字段都过一遍 `configValue`：0.1.7 交下来的配置里，标了 `.volatile()` 的字段
+ * 是引用而不是值（见 `../compat.ts`）。
+ */
 export function resolveDiscoveryConfig(config: Config | undefined): ResolvedDiscoveryConfig {
   return {
-    timeoutMs: config?.timeoutMs ?? 10_000,
-    maxResponseBytes: config?.maxResponseBytes ?? 4 * 1024 * 1024,
-    enrichment: config?.enrichment ?? true,
-    catalogRefreshIntervalMinutes: config?.catalogRefreshIntervalMinutes ?? 0,
-    ollamaDefaultContextWindow: config?.ollamaDefaultContextWindow ?? 128_000,
+    timeoutMs: configValue(config?.timeoutMs) ?? 10_000,
+    maxResponseBytes: configValue(config?.maxResponseBytes) ?? 4 * 1024 * 1024,
+    enrichment: configValue(config?.enrichment) ?? true,
+    catalogRefreshIntervalMinutes: configValue(config?.catalogRefreshIntervalMinutes) ?? 0,
+    ollamaDefaultContextWindow: configValue(config?.ollamaDefaultContextWindow) ?? 128_000,
     engines: {
-      ollama: config?.engines?.ollama ?? true,
-      litellm: config?.engines?.litellm ?? true,
-      openaiModels: config?.engines?.openaiModels ?? true,
+      ollama: configValue(config?.engines?.ollama) ?? true,
+      litellm: configValue(config?.engines?.litellm) ?? true,
+      openaiModels: configValue(config?.engines?.openaiModels) ?? true,
     },
   }
 }

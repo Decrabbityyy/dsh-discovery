@@ -18,6 +18,8 @@ import type { DiscoverySectionInjected } from './DiscoverySection.tsx'
 import { ModelCatalogTab } from './ModelCatalogTab.tsx'
 import { ProviderModelsCard } from './ProviderModelsDialog.tsx'
 import type { ProviderModelsCardInjected } from './ProviderModelsDialog.tsx'
+import { FORM_SERVICES, bindSettingsForm } from './settings-form.ts'
+import type { SettingsForm } from './settings-form.ts'
 import type { DiscoveryApi, DiscoverySettingsSection } from './discovery.ts'
 import { DISCOVERY_NS, PI_AI_NS } from './discovery.ts'
 
@@ -37,7 +39,9 @@ const CACHE_TAB_ID = 'model-catalog'
 
 const CACHE_TAB_LABEL = '模型目录'
 
-/** Required services. `remote` and its generated faces are the typed Remote clients this page calls; `locale` and `settingsScope` are runtime ordering */
+/** Required services. `remote` and its generated faces are the typed Remote clients this page calls; `locale` is runtime ordering for the section's copy. The
+ * settings-form service the catalog page binds is NOT listed here: its name depends on the host line (see `settings-form.ts`), so it is awaited with `ctx.inject`
+ * instead of being a hard requirement. */
 export const inject = [
   'slots',
   'locale',
@@ -47,7 +51,6 @@ export const inject = [
   'remote.settings',
   'remote.credentials',
   'remote.pluginInventory',
-  'settingsScope',
 ]
 
 /** Register the discovery section, the provider-card editor, and the Plugins section's cache tab once their slot declarations are on the ledger. */
@@ -58,8 +61,6 @@ export function apply(ctx: ClientContext): void {
   const api = ctx.remote as unknown as DiscoveryApi
   const injected = (): DiscoverySectionInjected => ({ api })
   const cardInjected = (): ProviderModelsCardInjected => ({ api })
-  // 设置命名空间与探测 offer 同名；这一页只读写它，宿主半边据此重排目录定时器。
-  const settingsScope = ctx.settingsScope.bind<DiscoverySettingsSection>({ namespace: DISCOVERY_NS })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: SECTION_ID,
@@ -76,13 +77,22 @@ export function apply(ctx: ClientContext): void {
     key: PI_AI_NS,
     inject: cardInjected,
   }, ProviderModelsCard))
-  // 插件区自己的标签页：排在「插件配置」(0) 与「插件列表」(10) 之后。
-  // 目录刷新间隔就长在这一页上，改完由宿主半边重排定时器，不用重启。
-  ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
-    name: 'settings.plugins.tab',
-    id: CACHE_TAB_ID,
-    order: 20,
-    label: () => CACHE_TAB_LABEL,
-    inject: () => ({ scope: settingsScope }),
-  }, ModelCatalogTab))
+  // 插件区自己的标签页：排在「插件配置」(0) 与「插件列表」(10) 之后。目录刷新间隔
+  // 就长在这一页上，它读写的是 dsh-llm-discovery 的设置命名空间（与探测 offer 同名）。
+  // 承载这份表单的服务随宿主线而变，两条都等一次：哪条线的服务在，就用哪条注册这一页。
+  const registerTab = (form: SettingsForm<DiscoverySettingsSection>): void => {
+    ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
+      name: 'settings.plugins.tab',
+      id: CACHE_TAB_ID,
+      order: 20,
+      label: () => CACHE_TAB_LABEL,
+      inject: () => ({ scope: form }),
+    }, ModelCatalogTab))
+  }
+  for (const service of FORM_SERVICES) {
+    ctx.inject([service], (scope) => {
+      const form = bindSettingsForm<DiscoverySettingsSection>(scope, service, DISCOVERY_NS)
+      if (form !== undefined) registerTab(form)
+    })
+  }
 }

@@ -3,35 +3,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
-import { SettingsProvider } from '@deepseek-ai/dsh-settings'
 import { DYNAMIC_PROBE_PATH } from 'dsh-llm-discovery/engine'
 import { CATALOG_SERVICE } from 'dsh-llm-discovery/vocabulary'
 import * as dynamicProvider from '../src/index.ts'
+import { legacySettingsStub } from './settings-stub.ts'
 import { startProbeServer } from './server.ts'
 import type { ProbeServer } from './server.ts'
-
-/** The smallest real SettingsProvider: an in-memory document with a persist log. */
-class MemorySettings extends SettingsProvider {
-  doc: Record<string, unknown>
-
-  constructor(ctx: ConstructorParameters<typeof SettingsProvider>[0], options?: { doc?: Record<string, unknown> }) {
-    super(ctx)
-    this.doc = structuredClone(options?.doc ?? {})
-  }
-
-  get writable(): boolean {
-    return true
-  }
-
-  protected load(): Promise<Record<string, unknown>> {
-    return Promise.resolve(structuredClone(this.doc))
-  }
-
-  protected persist(ns: string, section: Record<string, unknown>): Promise<void> {
-    this.doc[ns] = structuredClone(section)
-    return Promise.resolve()
-  }
-}
 
 let ctx: Context | undefined
 let server: ProbeServer | undefined
@@ -62,11 +39,11 @@ function catalogService(): Record<string, unknown> {
   }
 }
 
-/** Mount the llm seam, the settings seam, a catalog service, plus the dynamic provider. */
+/** Mount the llm seam, the 0.1.5 settings seam, a catalog service, plus the dynamic provider. */
 async function boot(config?: dynamicProvider.Config): Promise<Context> {
   ctx = new Context()
   await ctx.plugin(LlmRuntime)
-  await ctx.plugin(MemorySettings)
+  ctx.provide('settings', legacySettingsStub(ctx) as never)
   ctx.provide(CATALOG_SERVICE, catalogService())
   await ctx.plugin(dynamicProvider, config)
   return ctx
@@ -124,7 +101,7 @@ describe('plugin composition', () => {
   it('withdraws cleanly when the plugin fiber is disposed (HMR safety)', async () => {
     const fresh = new Context()
     await fresh.plugin(LlmRuntime)
-    await fresh.plugin(MemorySettings)
+    fresh.provide('settings', legacySettingsStub(fresh) as never)
     fresh.provide(CATALOG_SERVICE, catalogService())
     const fiber = await fresh.plugin(dynamicProvider, {
       routes: { upstream: { baseURL: 'http://127.0.0.1:1', api: 'openai-completions' } },
@@ -147,7 +124,7 @@ describe('plugin composition', () => {
     }
     const fresh = new Context()
     await fresh.plugin(LlmRuntime)
-    await fresh.plugin(MemorySettings)
+    fresh.provide('settings', legacySettingsStub(fresh) as never)
     fresh.provide('webServer', webServer)
     fresh.provide(CATALOG_SERVICE, catalogService())
 

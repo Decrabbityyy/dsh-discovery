@@ -7,6 +7,9 @@ export default defineConfig({
       find: 'dsh-llm-discovery/catalog/service',
       replacement: fileURLToPath(new URL('../llm-discovery/src/catalog/service.ts', import.meta.url)),
     }, {
+      find: 'dsh-llm-discovery/compat',
+      replacement: fileURLToPath(new URL('../llm-discovery/src/compat.ts', import.meta.url)),
+    }, {
       find: 'dsh-llm-discovery/engine',
       replacement: fileURLToPath(new URL('../llm-discovery/src/engine.ts', import.meta.url)),
     }, {

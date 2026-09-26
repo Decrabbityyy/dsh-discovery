@@ -2,6 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-llm'
 // Type-only: pulls the Context augmentation carrying `settings`.
 import type {} from '@deepseek-ai/dsh-settings/types'
+import { configValue, legacySettings, onSettingsCommit, onVolatileUpdate } from './compat.ts'
 import { DISCOVERY_NAMESPACE, discoverEndpoint, enrichModels, resolveDiscoveryConfig } from './engine.ts'
 import type { Config } from './engine.ts'
 import { provideModelCatalog } from './catalog/service.ts'
@@ -43,24 +44,32 @@ export function apply(ctx: Context, config?: Config): void {
     refreshIntervalMs: resolved.catalogRefreshIntervalMinutes * 60_000,
   })
 
-  // 部署配置是组成层，页面上的改动落在用户层；注册后按生效值排定时器，改设置时重排。
-  const serveSettings = (scope: Context): void => {
-    scope.settings.register(DISCOVERY_SETTINGS_NS, DiscoverySettings, {
+  // 刷新间隔是用户可改的设置。0.1.7 上它是 Config 里标了 `.volatile()` 的那一格：
+  // 页面把新值写进 profile，Loader 就地点进交下来的引用并通知本插件，不重启。
+  // 0.1.5 兼容：那时用户层在 settings 命名空间里，注册后从这里读（`legacyRead`）。
+  let legacyRead: (() => number | undefined) | undefined
+  const effectiveMinutes = (): number =>
+    legacyRead?.() ?? configValue(config?.catalogRefreshIntervalMinutes) ?? resolved.catalogRefreshIntervalMinutes
+  const schedule = (): void => { catalog.setRefreshIntervalMs(effectiveMinutes() * 60_000) }
+
+  // settings 是可选依赖：0.1.5 上命名空间得自己注册，0.1.7 上命名空间就是本插件的
+  // Loader entry，不用注册（也不该往 settings 上挂东西）。`ctx.inject` 起一个子插件，
+  // 服务已经在了就立刻跑，晚挂载就等它——两种情况都不需要重启。
+  ctx.inject(['settings'], (scope) => {
+    const legacy = legacySettings(scope)
+    if (legacy === undefined) return
+    legacy.register(DISCOVERY_SETTINGS_NS, DiscoverySettings, {
       base: { catalogRefreshIntervalMinutes: resolved.catalogRefreshIntervalMinutes },
     })
-    const schedule = (): void => {
-      const section = scope.settings.get(DISCOVERY_SETTINGS_NS) as DiscoverySettingsSection | undefined
-      const minutes = section?.catalogRefreshIntervalMinutes ?? resolved.catalogRefreshIntervalMinutes
-      catalog.setRefreshIntervalMs(minutes * 60_000)
-    }
+    legacyRead = () => (legacy.get(DISCOVERY_SETTINGS_NS) as DiscoverySettingsSection | undefined)?.catalogRefreshIntervalMinutes
     schedule()
-    scope.on('settings/updated', (ns) => {
-      if (ns === DISCOVERY_SETTINGS_NS) schedule()
-    })
-  }
-  // settings 是可选依赖：挂上了才注册命名空间，没挂时只用部署配置。`ctx.inject`
-  // 起一个子插件，服务已经在了就立刻跑，晚挂载就等它——两种情况都不需要重启。
-  ctx.inject(['settings'], serveSettings)
+    // 页面改完设置后重排定时器；0.1.7 上这个事件不会来。
+    onSettingsCommit(scope, DISCOVERY_SETTINGS_NS, schedule)
+  })
+  // 0.1.7 上改设置的通知走 Loader（只发给 owner fiber），0.1.5 上没有这个事件。
+  onVolatileUpdate(ctx, schedule)
+  schedule()
+
   ctx.llm.registerModelDiscovery(DISCOVERY_NAMESPACE, async (request) => {
     const [raw] = await Promise.all([discoverEndpoint(request, resolved), catalog.ready()])
     const bundled = resolved.enrichment ? enrichModels(raw) : [...raw]

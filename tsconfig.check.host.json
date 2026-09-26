@@ -15,6 +15,7 @@
     "paths": {
       "dsh-llm-discovery": ["./llm-discovery/src/index.ts"],
       "dsh-llm-discovery/engine": ["./llm-discovery/src/engine.ts"],
+      "dsh-llm-discovery/compat": ["./llm-discovery/src/compat.ts"],
       "dsh-llm-discovery/vocabulary": ["./llm-discovery/src/vocabulary.ts"],
       "dsh-llm-discovery/catalog/models-dev": ["./llm-discovery/src/catalog/models-dev.ts"],
       "dsh-llm-discovery/catalog/service": ["./llm-discovery/src/catalog/service.ts"]

@@ -36,28 +36,23 @@ import { DiscoverySection } from '../src/client/DiscoverySection.tsx'
 import { ModelCatalogTab } from '../src/client/ModelCatalogTab.tsx'
 import { ProviderModelsCard } from '../src/client/ProviderModelsDialog.tsx'
 
-/** 设置 scope 的桩：只记录被绑定的命名空间，页面本身的行为由它自己的用例覆盖。 */
-function fakeScopeBinder(): { bound: string[]; binder: unknown } {
+/** 设置表单服务的桩：只记录被取的命名空间，页面本身的行为由它自己的用例覆盖。 */
+function fakeFormService(kind: 'configForms' | 'settingsScope'): { bound: string[]; service: unknown } {
   const bound: string[] = []
-  const scope = {
+  const form = {
     getSnapshot: () => ({ status: 'ready', value: {}, base: {}, user: {}, revision: 1, writable: true, mode: 'host' }),
     subscribe: () => () => {},
-    mutate: () => Promise.resolve(),
-    set: () => Promise.resolve(),
-    unset: () => Promise.resolve(),
+    set: () => Promise.resolve(true),
+    unset: () => Promise.resolve(true),
   }
-  return {
-    bound,
-    binder: {
-      bind: (spec: { namespace: string }) => {
-        bound.push(spec.namespace)
-        return scope
-      },
-    },
-  }
+  // 0.1.7 的 configForms 按 entry id `get`，0.1.5 的 settingsScope 按命名空间 `bind`。
+  const service = kind === 'configForms'
+    ? { get: (entryId: string) => { bound.push(entryId); return form } }
+    : { bind: (spec: { namespace: string }) => { bound.push(spec.namespace); return form } }
+  return { bound, service }
 }
 
-async function bench() {
+async function bench(kind: 'configForms' | 'settingsScope' = 'configForms') {
   const ctx = new Context()
   await ctx.plugin(SlotRegistry).await()
   // The apply path only captures the wire face;
@@ -70,9 +65,9 @@ async function bench() {
   ctx.provide('remote.credentials', {} as never)
   ctx.provide('remote.pluginInventory', {} as never)
   ctx.provide('locale', {} as never)
-  const settingsScope = fakeScopeBinder()
-  ctx.provide('settingsScope', settingsScope.binder as never)
-  return { ctx, slots: ctx.get('slots') as Slots, scopeBound: settingsScope.bound }
+  const forms = fakeFormService(kind)
+  ctx.provide(kind, forms.service as never)
+  return { ctx, slots: ctx.get('slots') as Slots, scopeBound: forms.bound }
 }
 
 function declare(slots: Slots): () => void {
@@ -91,6 +86,8 @@ function declare(slots: Slots): () => void {
 
 describe('ui-settings-discovery apply', () => {
   it('declares the services it uses', () => {
+    // 承载设置表单的服务随宿主线而变（0.1.7 configForms / 0.1.5 settingsScope），
+    // 所以它不在硬依赖里，由 apply 里的 ctx.inject 各自等一次。
     expect(inject).toEqual([
       'slots',
       'locale',
@@ -100,7 +97,6 @@ describe('ui-settings-discovery apply', () => {
       'remote.settings',
       'remote.credentials',
       'remote.pluginInventory',
-      'settingsScope',
     ])
   })
 
@@ -166,21 +162,24 @@ describe('ui-settings-discovery apply', () => {
   })
 
   it('contributes the catalog page bound to the discovery settings namespace', async () => {
-    const b = await bench()
-    declare(b.slots)
-    const fiber = b.ctx.plugin({ inject: [...inject], apply })
-    await fiber.await()
-    const entry = b.slots.entries('settings.plugins.tab')[0]!
-    expect(entry.component).toBe(ModelCatalogTab)
-    expect(entry.options).toMatchObject({ id: 'model-catalog', order: 20 })
-    expect(resolveSlotLabel(entry.options.label)).toBe('模型目录')
-    // 这一页上长着目录刷新间隔，所以它拿到绑定到设置命名空间的 scope。
-    expect(b.scopeBound).toEqual(['llm-discovery'])
-    const injected = (
-      entry.inject as unknown as () => import('../src/client/ModelCatalogTab.tsx').ModelCatalogTabProps
-    )()
-    expect(injected.scope).toBeDefined()
-    await fiber.dispose()
-    expect(b.slots.entries('settings.plugins.tab')).toHaveLength(0)
+    for (const kind of ['configForms', 'settingsScope'] as const) {
+      const b = await bench(kind)
+      declare(b.slots)
+      const fiber = b.ctx.plugin({ inject: [...inject], apply })
+      await fiber.await()
+      const entry = b.slots.entries('settings.plugins.tab')[0]!
+      expect(entry.component).toBe(ModelCatalogTab)
+      expect(entry.options).toMatchObject({ id: 'model-catalog', order: 20 })
+      expect(resolveSlotLabel(entry.options.label)).toBe('模型目录')
+      // 这一页上长着目录刷新间隔，所以它拿到绑到 dsh-llm-discovery 命名空间的表单。
+      expect(b.scopeBound).toEqual(['llm-discovery'])
+      const injected = (
+        entry.inject as unknown as () => import('../src/client/ModelCatalogTab.tsx').ModelCatalogTabProps
+      )()
+      expect(injected.scope).toBeDefined()
+      await fiber.dispose()
+      expect(b.slots.entries('settings.plugins.tab')).toHaveLength(0)
+      await b.ctx.fiber.dispose()
+    }
   })
 })
