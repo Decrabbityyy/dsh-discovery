@@ -46,8 +46,10 @@
   flex-direction: column;
   gap: 12px;
   width: min(100%, 720px);
-  max-height: calc(100vh - 80px);
-  overflow-y: auto;
+  /* 窗口大小定死：高度到 680px（或视口再留 80px）为止，多出来的内容交给结果表自己滚，
+     弹窗这一层不滚——否则长清单会连标题和按钮一起滚走，长行还会把整窗撑出一条横向滚动条。 */
+  max-height: min(680px, calc(100vh - 80px));
+  overflow: hidden;
   padding: 20px;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 16px;

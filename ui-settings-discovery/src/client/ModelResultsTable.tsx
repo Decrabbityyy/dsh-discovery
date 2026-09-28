@@ -256,146 +256,148 @@ export function ModelResultsTable(props: ModelResultsTableProps): ReactNode {
             {visible.length === 0
               ? <p className={styles['empty']}>没有匹配「{query.trim()}」的模型</p>
               : (
-                <table className={styles['results']}>
-                  <thead>
-                    <tr>
-                      <th className={styles['resultHead']}><span className={styles['visuallyHidden']}>选择</span></th>
-                      <th className={styles['resultHead']}>模型 ID</th>
-                      <th className={styles['resultHead']}>名称</th>
-                      <th className={styles['resultHead']}>上下文窗口</th>
-                      <th className={styles['resultHead']}>最大输出</th>
-                      <th className={styles['resultHead']}>模态</th>
-                      <th className={styles['resultHead']} title="匹配到的条目记录的全部档位，保存时一并写入">思考档位</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visible.map((model) => {
-                      const match = matches.get(model.id)
-                      const entry = match?.entry
-                      // 手动指定的条目连名称与容量一起作数；自动解析的只在行没披露时补。
-                      const pinned = match?.bound === true
-                      const displayName = pinned ? entry?.name ?? model.name : model.name ?? entry?.name
-                      const contextWindow = pinned ? entry?.contextWindow ?? model.contextWindow : model.contextWindow ?? entry?.contextWindow
-                      const maxTokens = pinned ? entry?.maxTokens ?? model.maxTokens : model.maxTokens ?? entry?.maxTokens
-                      // 目录记录的档位与 profile 已声明的一起算「支持的档位」：
-                      // 它只用来标注，写入时全量带上，不由用户逐档挑；显示按词表顺序。
-                      const available = orderedLevels([...(entry?.levels ?? []), ...(extraLevels?.[model.id] ?? [])])
-                      return (
-                        <Fragment key={model.id}>
-                          <tr className={styles['resultRow']}>
-                            <td className={styles['resultCell']}>
-                              <input
-                                type="checkbox"
-                                checked={picked.has(model.id)}
-                                aria-label={`选择 ${model.id}`}
-                                onChange={() => { onToggle(model.id) }}
-                              />
-                            </td>
-                            <td className={`${styles['resultCell']} ${styles['resultId']}`}>{model.id}</td>
-                            <td className={styles['resultCell']}>
-                              {/* Without a catalog there is nothing to match
-                                  a row to, so the cell stays a plain name. */}
-                              {index.keys.length === 0
-                                ? displayName ?? '—'
-                                : (
-                                  <MatchCell
-                                    id={model.id}
-                                    name={displayName}
-                                    match={match}
-                                    bound={bindings[model.id] !== undefined}
-                                    disabled={disabled}
-                                    expanded={pickerFor === model.id}
-                                    onToggle={() => { openPicker(model.id) }}
-                                  />
-                                )}
-                            </td>
-                            <td className={styles['resultCell']} title={contextWindow === undefined ? undefined : String(contextWindow)}>{formatCapacity(contextWindow) ?? '—'}</td>
-                            <td className={styles['resultCell']} title={maxTokens === undefined ? undefined : String(maxTokens)}>{formatCapacity(maxTokens) ?? '—'}</td>
-                            <td className={styles['resultCell']}>{modalityLabel(entry?.input)}</td>
-                            {/* 这一列给文字：表格有位置，方块留给空间紧张的选择器。 */}
-                            <td className={styles['resultCell']}>
-                              {available.length === 0 ? '—' : available.join('/')}
-                            </td>
-                          </tr>
-                          {pickerFor === model.id
-                            ? (
-                              <tr>
-                                <td className={styles['pickerCell']} colSpan={7}>
-                                  <div className={styles['pickerPanel']}>
-                                    <input
-                                      className={`${styles['input']} ${styles['searchInput']}`}
-                                      type="search"
-                                      value={pickerQuery}
-                                      placeholder="搜索 ID/名称，或用 @供应商 筛选…"
-                                      aria-label={`搜索目录条目：${model.id}`}
-                                      autoFocus
-                                      onChange={(event) => { setPickerQuery(event.target.value) }}
-                                      // Escape belongs to the picker while it is open: the enclosing dialog keeps it
-                                      onKeyDown={(event) => {
-                                        if (event.key !== 'Escape') return
-                                        event.stopPropagation()
-                                        closePicker()
-                                      }}
+                <div className={styles['resultsBody']}>
+                  <table className={styles['results']}>
+                    <thead>
+                      <tr>
+                        <th className={styles['resultHead']}><span className={styles['visuallyHidden']}>选择</span></th>
+                        <th className={styles['resultHead']}>模型 ID</th>
+                        <th className={styles['resultHead']}>名称</th>
+                        <th className={styles['resultHead']}>上下文窗口</th>
+                        <th className={styles['resultHead']}>最大输出</th>
+                        <th className={styles['resultHead']}>模态</th>
+                        <th className={styles['resultHead']} title="匹配到的条目记录的全部档位，保存时一并写入">思考档位</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visible.map((model) => {
+                        const match = matches.get(model.id)
+                        const entry = match?.entry
+                        // 手动指定的条目连名称与容量一起作数；自动解析的只在行没披露时补。
+                        const pinned = match?.bound === true
+                        const displayName = pinned ? entry?.name ?? model.name : model.name ?? entry?.name
+                        const contextWindow = pinned ? entry?.contextWindow ?? model.contextWindow : model.contextWindow ?? entry?.contextWindow
+                        const maxTokens = pinned ? entry?.maxTokens ?? model.maxTokens : model.maxTokens ?? entry?.maxTokens
+                        // 目录记录的档位与 profile 已声明的一起算「支持的档位」：
+                        // 它只用来标注，写入时全量带上，不由用户逐档挑；显示按词表顺序。
+                        const available = orderedLevels([...(entry?.levels ?? []), ...(extraLevels?.[model.id] ?? [])])
+                        return (
+                          <Fragment key={model.id}>
+                            <tr className={styles['resultRow']}>
+                              <td className={styles['resultCell']}>
+                                <input
+                                  type="checkbox"
+                                  checked={picked.has(model.id)}
+                                  aria-label={`选择 ${model.id}`}
+                                  onChange={() => { onToggle(model.id) }}
+                                />
+                              </td>
+                              <td className={`${styles['resultCell']} ${styles['resultId']}`}>{model.id}</td>
+                              <td className={styles['resultCell']}>
+                                {/* Without a catalog there is nothing to match
+                                    a row to, so the cell stays a plain name. */}
+                                {index.keys.length === 0
+                                  ? displayName ?? '—'
+                                  : (
+                                    <MatchCell
+                                      id={model.id}
+                                      name={displayName}
+                                      match={match}
+                                      bound={bindings[model.id] !== undefined}
+                                      disabled={disabled}
+                                      expanded={pickerFor === model.id}
+                                      onToggle={() => { openPicker(model.id) }}
                                     />
-                                    {pickerRanked.length === 0
-                                      ? (
-                                        <p className={styles['empty']}>
-                                          {pickerQueryParsed.providers.length === 0
-                                            ? `目录里没有匹配「${pickerQuery.trim()}」的条目`
-                                            : `目录里没有 ${pickerQueryParsed.providers.map(name => `@${name}`).join(' 或 ')} 收录的条目`}
-                                        </p>
-                                      )
-                                      : (
-                                        <ul className={styles['pickerList']}>
-                                          {pickerRanked.map(option => (
-                                            <li key={option.key}>
-                                              <button
-                                                type="button"
-                                                className={styles['pickerItem']}
-                                                aria-label={`把 ${model.id} 匹配到 ${option.key}`}
-                                                onClick={() => { onBind(model.id, option.key); closePicker() }}
-                                              >
-                                                {/* 行上只给名字：id 留给搜索与悬停——有些键是内部替身，摆出来反而误导。 */}
-                                                <span className={styles['pickerName']} title={pickerIds(option)}>{option.name ?? '—'}</span>
-                                                <span className={styles['pickerSource']} title={sourceTitle(option)}>{pickerSource(option)}</span>
-                                                <PickerMeta entry={option} />
-                                              </button>
-                                            </li>
-                                          ))}
-                                        </ul>
-                                      )}
-                                    <div className={styles['pickerFoot']}>
-                                      <span className={styles['pickerCount']}>
-                                        共 {pickerOptions.length} 条
-                                        {pickerOptions.length > pickerRanked.length
-                                          ? `，显示前 ${pickerRanked.length} 条`
-                                          : ''}
-                                      </span>
-                                      {bindings[model.id] !== undefined
+                                  )}
+                              </td>
+                              <td className={styles['resultCell']} title={contextWindow === undefined ? undefined : String(contextWindow)}>{formatCapacity(contextWindow) ?? '—'}</td>
+                              <td className={styles['resultCell']} title={maxTokens === undefined ? undefined : String(maxTokens)}>{formatCapacity(maxTokens) ?? '—'}</td>
+                              <td className={styles['resultCell']}>{modalityLabel(entry?.input)}</td>
+                              {/* 这一列给文字：表格有位置，方块留给空间紧张的选择器。 */}
+                              <td className={styles['resultCell']}>
+                                {available.length === 0 ? '—' : available.join('/')}
+                              </td>
+                            </tr>
+                            {pickerFor === model.id
+                              ? (
+                                <tr>
+                                  <td className={styles['pickerCell']} colSpan={7}>
+                                    <div className={styles['pickerPanel']}>
+                                      <input
+                                        className={`${styles['input']} ${styles['searchInput']}`}
+                                        type="search"
+                                        value={pickerQuery}
+                                        placeholder="搜索 ID/名称，或用 @供应商 筛选…"
+                                        aria-label={`搜索目录条目：${model.id}`}
+                                        autoFocus
+                                        onChange={(event) => { setPickerQuery(event.target.value) }}
+                                        // Escape belongs to the picker while it is open: the enclosing dialog keeps it
+                                        onKeyDown={(event) => {
+                                          if (event.key !== 'Escape') return
+                                          event.stopPropagation()
+                                          closePicker()
+                                        }}
+                                      />
+                                      {pickerRanked.length === 0
                                         ? (
-                                          <button
-                                            type="button"
-                                            className={styles['toolButton']}
-                                            onClick={() => { onBind(model.id, undefined); closePicker() }}
-                                          >
-                                            清除匹配
-                                          </button>
+                                          <p className={styles['empty']}>
+                                            {pickerQueryParsed.providers.length === 0
+                                              ? `目录里没有匹配「${pickerQuery.trim()}」的条目`
+                                              : `目录里没有 ${pickerQueryParsed.providers.map(name => `@${name}`).join(' 或 ')} 收录的条目`}
+                                          </p>
                                         )
-                                        : null}
-                                      <button type="button" className={styles['toolButton']} onClick={closePicker}>
-                                        取消
-                                      </button>
+                                        : (
+                                          <ul className={styles['pickerList']}>
+                                            {pickerRanked.map(option => (
+                                              <li key={option.key}>
+                                                <button
+                                                  type="button"
+                                                  className={styles['pickerItem']}
+                                                  aria-label={`把 ${model.id} 匹配到 ${option.key}`}
+                                                  onClick={() => { onBind(model.id, option.key); closePicker() }}
+                                                >
+                                                  {/* 行上只给名字：id 留给搜索与悬停——有些键是内部替身，摆出来反而误导。 */}
+                                                  <span className={styles['pickerName']} title={pickerIds(option)}>{option.name ?? '—'}</span>
+                                                  <span className={styles['pickerSource']} title={sourceTitle(option)}>{pickerSource(option)}</span>
+                                                  <PickerMeta entry={option} />
+                                                </button>
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        )}
+                                      <div className={styles['pickerFoot']}>
+                                        <span className={styles['pickerCount']}>
+                                          共 {pickerOptions.length} 条
+                                          {pickerOptions.length > pickerRanked.length
+                                            ? `，显示前 ${pickerRanked.length} 条`
+                                            : ''}
+                                        </span>
+                                        {bindings[model.id] !== undefined
+                                          ? (
+                                            <button
+                                              type="button"
+                                              className={styles['toolButton']}
+                                              onClick={() => { onBind(model.id, undefined); closePicker() }}
+                                            >
+                                              清除匹配
+                                            </button>
+                                          )
+                                          : null}
+                                        <button type="button" className={styles['toolButton']} onClick={closePicker}>
+                                          取消
+                                        </button>
+                                      </div>
                                     </div>
-                                  </div>
-                                </td>
-                              </tr>
-                            )
-                            : null}
-                        </Fragment>
-                      )
-                    })}
-                  </tbody>
-                </table>
+                                  </td>
+                                </tr>
+                              )
+                              : null}
+                          </Fragment>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               )}
           </>
         )}

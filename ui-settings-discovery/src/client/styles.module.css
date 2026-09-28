@@ -26,6 +26,7 @@
 
 .intro {
   margin: 0;
+  overflow-wrap: anywhere;
   font-size: 14px;
   line-height: 22px;
   color: var(--dsw-alias-label-tertiary);
@@ -33,6 +34,7 @@
 
 .hint {
   margin: 0;
+  overflow-wrap: anywhere;
   font-size: 12px;
   line-height: 18px;
   color: var(--dsw-alias-label-tertiary);
@@ -201,6 +203,7 @@
 
 .error {
   margin: 0;
+  overflow-wrap: anywhere;
   font-size: 12px;
   line-height: 18px;
   color: var(--dsw-alias-state-error-primary);
@@ -208,6 +211,7 @@
 
 .savedNotice {
   margin: 0;
+  overflow-wrap: anywhere;
   font-size: 12px;
   line-height: 18px;
   color: var(--dsw-alias-state-success-primary);
@@ -217,6 +221,8 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  /* 结果区可以被压扁：宿主弹窗把它压到剩余高度，滚动交给下面的表体。 */
+  min-height: 0;
   margin-top: 4px;
 }
 
@@ -291,6 +297,15 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+/* 表格的滚动区：弹窗里它是唯一可滚动的部分，头、提示与按钮都钉住，表格再宽也只是
+   这一块横向滚，不会把整个弹窗撑出滚动条。页面里没有高度约束，所以它只跟着内容长。 */
+.resultsBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
 .results {
   border-collapse: collapse;
   width: 100%;
@@ -321,6 +336,8 @@
 
 .resultCell {
   padding: 6px 10px;
+  /* 长 id、长名称在这里断开换行，而不是把表格（进而把弹窗）撑宽。 */
+  overflow-wrap: anywhere;
   font-size: 13px;
   line-height: 20px;
   color: var(--dsw-alias-label-primary);

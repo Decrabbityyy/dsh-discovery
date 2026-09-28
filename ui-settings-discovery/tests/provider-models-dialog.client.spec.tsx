@@ -197,6 +197,16 @@ describe('provider models dialog', () => {
     expect(screen.getByText('off/low/high')).toBeDefined()
   })
 
+  it('scrolls the model list inside the dialog, not the dialog itself', async () => {
+    const { api } = scripted()
+    await openDialog(api)
+    // 长清单与长行只让这一块滚：标题、提示与按钮留在原地，表格变宽也只是这一块
+    // 横向滚，不会把整个窗口撑出滚动条。
+    const body = screen.getByRole('table').parentElement
+    expect(body?.className).toContain('resultsBody')
+    expect(screen.getByRole('dialog').contains(body)).toBe(true)
+  })
+
   it('probes the stored endpoint without a key and adds advertised models unchecked', async () => {
     const { api, discover } = scripted({
       discovered: [{ id: 'qwen2.5:7b' }, { id: 'qwen3-vl:8b', contextWindow: 65536 }],
