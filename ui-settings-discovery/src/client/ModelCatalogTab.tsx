@@ -4,10 +4,10 @@
 
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
+import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { UI_CATALOG_STATUS_PATH } from 'dsh-llm-discovery/vocabulary'
 import { DYNAMIC_PROBE_PATH, messageOf } from './discovery.ts'
 import type { CatalogStatus, DiscoverySettingsSection, RouteProbe, RouteStatus } from './discovery.ts'
-import type { SettingsForm } from './settings-form.ts'
 import styles from './styles.module.css'
 
 /** 刷新间隔那个设置字段。 */
@@ -21,7 +21,7 @@ const MIN_READ_DELAY_MS = 5_000
 
 /** Props delivered by the slot outlet: the bound settings form this page also edits. */
 export type ModelCatalogTabProps = Partial<{
-  readonly scope: SettingsForm<DiscoverySettingsSection>
+  readonly scope: ConfigForm<DiscoverySettingsSection>
 }>
 
 /** A refresh timestamp as the page shows it; one it never saw reads as a dash. */
@@ -187,7 +187,7 @@ export function ModelCatalogTab(props: ModelCatalogTabProps = {}): ReactNode {
  * 这一页重读一次状态，好让它按新的刷新时刻安排下一次。
  */
 function RefreshIntervalField({ scope, onChanged }: {
-  scope: SettingsForm<DiscoverySettingsSection>
+  scope: ConfigForm<DiscoverySettingsSection>
   onChanged: () => void
 }): ReactNode {
   const [snapshot, setSnapshot] = useState(() => scope.getSnapshot())
@@ -206,7 +206,7 @@ function RefreshIntervalField({ scope, onChanged }: {
   const invalid = parsed !== undefined && (!Number.isInteger(parsed) || parsed < 0)
   const canSave = snapshot.writable && !invalid && !busy && trimmed !== String(minutes)
 
-  /** 写入：0.1.7 用返回 false 表示宿主拒收（0.1.5 的拒收是 reject），都当失败报出来。 */
+  /** 写入：宿主用返回值 `false` 表示拒收（传输失败则 reject），两种都当失败报出来。 */
   const commit = async (write: () => Promise<unknown>): Promise<void> => {
     setBusy(true)
     setError(undefined)

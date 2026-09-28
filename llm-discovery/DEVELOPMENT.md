@@ -17,7 +17,7 @@
 src/
   index.ts              插件入口：注册探测 offer、启动目录服务
   invariant.ts          向 invariants 服务注册本包的空伴生项
-  compat.ts             0.1.5 / 0.1.7 两条宿主线的设置兼容面（临时件）
+  loader-config.ts      Loader 拥有的插件配置：volatile 字段的点更通知与写设置用的 entry id
   vocabulary.ts         浏览器安全的常量、目录键解析与 SharedCatalog 契约
   engine.ts             宿主侧公开面，重新导出 engine/* 与 catalog/models-dev
   engine/discover.ts    驱动引擎阶梯，收敛失败信息
@@ -31,7 +31,7 @@ src/
   catalog/spec.ts       目录的存储域声明
 tests/
   support/server.ts     测试用的假端点
-  volatile.ts           0.1.7 volatile 配置引用的写入协议（测试照着 Loader 的做法提交）
+  volatile.ts           volatile 配置引用的写入协议（测试照着 Loader 的做法提交）
 ```
 
 ## 导出面
@@ -40,7 +40,7 @@ tests/
 |---|---|---|
 | `.` | 插件入口与 `enrichModelsFromCatalog` | 宿主 Loader |
 | `./engine` | 探测引擎、配置、内置目录与补全、models.dev 解析 | `dsh-llm-dynamic-provider` |
-| `./compat` | 两线共用的设置取值/注册/通知收口 | `dsh-llm-dynamic-provider` |
+| `./loader-config` | volatile 配置的点更通知与写设置用的 Loader entry id | `dsh-llm-dynamic-provider` |
 | `./vocabulary` | 常量、协议清单、目录键解析、`SharedCatalog` 契约 | 两个插件（浏览器侧也内联它） |
 | `./catalog/models-dev` | models.dev 解析与 `ModelFacts` | 设置页 |
 | `./invariant` | 空的 invariant 伴生插件 | 宿主 Loader |
@@ -64,7 +64,7 @@ tests/
 - 持久化在存储域 `llm_models_dev_catalog`：整份目录作为一条记录写在 `catalog` 表的 `models` 键下，ETag 与抓取时间放在域 global。整份存一条是因为 json 的单文件布局每次写入都会重发整个单元。
 - `offline`（对外表现为 `enrichment: false`）：只读本地快照，不联网刷新。
 - `refreshIntervalMs`（插件配置 `catalogRefreshIntervalMinutes`）非零时用 `ctx.effect` 起一个定时器定期刷新，随 fiber 卸载停止；`offline` 时不排定时器。`refresh()` 自带并发合并，定时器与调用方同时问只发一轮请求。
-- 刷新间隔是用户可改的设置，两条宿主线的存法不同，由 `src/compat.ts` 收口：0.1.5 上它是插件自己注册的 settings 命名空间（`src/settings.ts`，部署配置作组成层），靠 `settings/updated` 通知重排；0.1.7 上它是插件 `Config` 里标了 `.volatile()` 的那一格，读值要走 `configValue()`，Loader 就地点更后以 `loader/volatile-update` 通知重排（只发给 owner fiber）。`setRefreshIntervalMs` 对同样的间隔不做任何事，所以两条线都可以直接调。
+- 刷新间隔是用户可改的设置：它是插件 `Config` 里标了 `.volatile()` 的那一格，Loader 把生效值交下来时是稳定引用，读值要走 `.get()`。页面把新值写进 profile 的该插件行（命名空间就是这条 Loader entry 的 id），Loader 就地点更引用后以 `loader/volatile-update` 通知重排定时器（只发给 owner fiber，收口在 `src/loader-config.ts`）。`setRefreshIntervalMs` 对同样的间隔不做任何事，所以每次通知都直接调也无所谓。
 - `ready()`：第一份快照进入内存后 resolve。冷启动的路由注册与探测补全都排在它之后；已有本地目录时它不等联网。
 - 打开存储域失败不致命：记下 `storageError`、退回内存快照，并通过 `status()` 报出来。
 - `refresh()` 永不抛：失败保留旧快照，把错误写进 `status()`。
@@ -92,8 +92,8 @@ tsdown 的 `clean: false` 是刻意的：`lib/types` 由 `tsc -b` 写在同一�
 ## 依赖约定
 
 - `@deepseek-ai/dsh-*` 同时声明为 peer（运行时由宿主注入）与 devDependency（编译期钉一份）；`autoInstallPeers: false`，peer 不会自动安装。
-- peer 范围是双宿主线：`^0.1.5-rc.1 || ^0.1.7-rc.1`（npm 的预发布规则不接受跨 patch 的预发布版本，所以只能用 `||` 拼）。0.1.7 那条线上的 peer 还要求 cordis `~4.0.4`，所以编译期钉的是 cordis 4.0.4 / schemastery 3.18.4——只有一份 cordis 时，`declare module` 的服务增强才不会被劈成两半。
-- 丢掉 0.1.5 线时要动的地方：三个 package.json 的 peer/dev 版本、`pnpm-workspace.yaml` 的 `minimumReleaseAgeExclude`、`llm-discovery/src/compat.ts` 与 `ui-settings-discovery/src/client/settings-form.ts` 两个兼容面、各插件 `apply` 里标了「0.1.5 兼容」的分支、以及两边测试里的 settings 替身。`scripts/compat/README.md` 记了怎么对两条线各跑一次检查。
+- peer 范围只覆盖 0.1.7-rc：`^0.1.7-rc.1`。这条线上的宿主要求 cordis `~4.0.4`，所以 peer 与编译期钉的都是 cordis `~4.0.4` / schemastery `^3.18.4`——只有一份 cordis 时，`declare module` 的服务增强才不会被劈成两半。
+- volatile 配置字段的取值一律走 `.get()`（`config.<field>.get()`），因为它交到插件手上时是引用而不是普通值；`Config` 接口按宿主 `.d.ts` 的写法把这些字段声明成 `Volatile<T>`，schema 那一边则直接 `.volatile()`。注意 `ctx.plugin()` 的 config 参数类型取自 `apply` 的第二个参数，所以程序化挂载要传 schema 解析后的配置，或者由 `ctx.plugin(plugin, raw as never)` 交给注册表解析。
 - pi-ai 只能有一份：宿主 `dsh-llm-pi-ai` 声明的范围是权威，用 `pnpm run sync:pi-ai` 同步到各包的 peer/dev 声明。
 - `zod`、`@earendil-works/pi-ai` 等留在 external，不打进产物。
 

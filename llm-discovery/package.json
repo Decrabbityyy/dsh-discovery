@@ -33,9 +33,9 @@
       "types": "./lib/types/engine.d.ts",
       "default": "./lib/engine.js"
     },
-    "./compat": {
-      "types": "./lib/types/compat.d.ts",
-      "default": "./lib/compat.js"
+    "./loader-config": {
+      "types": "./lib/types/loader-config.d.ts",
+      "default": "./lib/loader-config.js"
     },
     "./vocabulary": {
       "types": "./lib/types/vocabulary.d.ts",
@@ -70,12 +70,11 @@
     }
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.2",
-    "@deepseek-ai/dsh-llm": "^0.1.5-rc.1 || ^0.1.7-rc.1",
-    "@deepseek-ai/dsh-settings": "^0.1.5-rc.1 || ^0.1.7-rc.1",
-    "@deepseek-ai/dsh-storage": "^0.1.5-rc.1 || ^0.1.7-rc.1",
-    "@deepseek-ai/dsh-storage-domain": "^0.1.5-rc.1 || ^0.1.7-rc.1",
-    "@deepseek-ai/schemastery": "^3.18.2",
+    "@deepseek-ai/cordis": "~4.0.4",
+    "@deepseek-ai/dsh-llm": "^0.1.7-rc.1",
+    "@deepseek-ai/dsh-storage": "^0.1.7-rc.1",
+    "@deepseek-ai/dsh-storage-domain": "^0.1.7-rc.1",
+    "@deepseek-ai/schemastery": "^3.18.4",
     "zod": "^4.4.3",
     "@earendil-works/pi-ai": "^0.85.1"
   },
@@ -86,21 +85,17 @@
     "@deepseek-ai/dsh-llm": {
       "optional": true
     },
-    "@deepseek-ai/dsh-settings": {
-      "optional": true
-    },
     "@deepseek-ai/schemastery": {
       "optional": true
     }
   },
   "dependencies": {},
   "devDependencies": {
-    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/cordis": "~4.0.4",
     "@deepseek-ai/cordis-plugin-include": "^1.0.9",
     "@deepseek-ai/cordis-plugin-loader": "^1.0.5",
     "@deepseek-ai/dsh-invariants": "^0.1.7-rc.2",
     "@deepseek-ai/dsh-llm": "^0.1.7-rc.2",
-    "@deepseek-ai/dsh-settings": "^0.1.7-rc.2",
     "@deepseek-ai/schemastery": "^3.18.4",
     "@earendil-works/pi-ai": "^0.85.1",
     "@deepseek-ai/dsh-storage": "^0.1.7-rc.2",

@@ -4,17 +4,23 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
 import * as discovery from '../src/index.ts'
 import { DISCOVERY_NAMESPACE } from '../src/index.ts'
+import { loaderEntryId } from '../src/loader-config.ts'
 import { startProbeServer } from './support/server.ts'
 
 let root: string | undefined
 let context: Context | undefined
+
+/** 排定时器的调用次数，按间隔区分（定时器可能被别的东西也用到）。 */
+function timerCalls(spy: { mock: { calls: unknown[][] } }, delayMs: number): number {
+  return spy.mock.calls.filter(call => call[1] === delayMs).length
+}
 
 afterEach(async () => {
   await context?.fiber.dispose()
@@ -106,6 +112,31 @@ describe('real Loader composition', () => {
       await ctx.fiber.dispose()
     } finally {
       await server.close()
+    }
+  })
+
+  // 这一条走的是真实 Loader 的就地点更：entry.update 只换 volatile 那一格时，
+  // Loader 把新值点进运行中 fiber 的引用，再派发 `loader/volatile-update`。
+  it('follows a volatile-only config change the Loader commits', { timeout: 60_000 }, async () => {
+    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval')
+    try {
+      const loaded = await loadYaml([
+        "- name: '@deepseek-ai/dsh-llm'",
+        '- id: renamed-discovery',
+        "  name: 'dsh-llm-discovery'",
+        '  config:',
+        '    catalogRefreshIntervalMinutes: 1440',
+      ])
+      expect(timerCalls(setIntervalSpy, 1440 * 60_000)).toBe(1)
+
+      const entry = [...loaded.loader.entries()].find(candidate => candidate.options.id === 'renamed-discovery')!
+      // 写设置的目标是组合层给这条 entry 起的 id，不是插件名。
+      expect(loaderEntryId(entry.fiber!.ctx, 'dsh-llm-discovery')).toBe('renamed-discovery')
+
+      await entry.update({ config: { catalogRefreshIntervalMinutes: 1 } })
+      await vi.waitFor(() => { expect(timerCalls(setIntervalSpy, 60_000)).toBe(1) })
+    } finally {
+      setIntervalSpy.mockRestore()
     }
   })
 })

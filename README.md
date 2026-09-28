@@ -21,9 +21,9 @@
 
 ## 安装
 
-要求：已经安装 `dsh`，并已创建目标 profile。设置页面仅适用于 Web profile。
+要求：已经安装 `dsh` 0.1.7-rc 或更新的宿主线，并已创建目标 profile。设置页面仅适用于 Web profile。
 
-插件同时支持 0.1.5-rc 与 0.1.7-rc 两条宿主线（后者是 npm 上的 `next` 频道）。两条线的差别只在用户配置的落点：0.1.5 上它是 `$DSH_HOME/settings.yaml` 里该插件命名空间的用户层，0.1.7 上它是 profile patch（`cordis.patch.yml`）里该插件行的 `config`；页面上的编辑两条线都能用。
+插件的用户配置写在 profile patch（`cordis.patch.yml`）里该插件行的 `config`；页面上的编辑写回同一行。宿主仍在 0.1.5-rc 线上的话，升级插件前请先升级宿主，否则宿主版本不会被 peer 范围接受。
 
 按需要从 npmjs 安装插件；`dsh-llm-discovery` 是另外两个的依赖，先装它：
 
@@ -59,7 +59,7 @@ dsh --profile web --dump-config
 
 ### 自动管理一个端点的全部模型
 
-安装 `dsh-llm-dynamic-provider`，然后在本插件的用户配置里声明路由：0.1.5 线写 `$DSH_HOME/settings.yaml` 的 `llm-dynamic-provider.routes`，0.1.7 线写 profile patch（`cordis.patch.yml`）里那一行的 `config.routes`。插件在每次启动时都会重新探测这些路由，改动路由后也会重新探测，不需要重启。探测成功后，该路由会出现在模型选择器中。
+安装 `dsh-llm-dynamic-provider`，然后在 profile patch（`cordis.patch.yml`）里那一行的 `config.routes` 声明路由。插件在每次启动时都会重新探测这些路由，改动路由后也会重新探测，不需要重启。探测成功后，该路由会出现在模型选择器中。
 
 配置字段与凭证说明见 [`dsh-llm-dynamic-provider`](./llm-dynamic-provider/README.md)。
 

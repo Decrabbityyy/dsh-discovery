@@ -6,27 +6,33 @@
 
 ## [未发布]
 
+### 破坏性变更
+
+- **只支持 0.1.7 宿主线（npm 的 `next` 频道）。** `@deepseek-ai/dsh-*` 的 peer 由 `^0.1.5-rc.1` 收窄为 `^0.1.7-rc.1`，编译所依据的副本（devDependencies）钉在 `0.1.7-rc.2`；cordis 的 peer 由 `^4.0.2` 收窄为 `~4.0.4`。宿主仍在 0.1.5-rc 线上的话，升级插件前请先升级宿主，否则宿主版本不会被 peer 范围接受。
+- **`dsh-llm-discovery` 的设置导出换成 `./loader-config`。** 0.1.5 上用户设置住在插件自己注册的 settings 命名空间里，为此存在的 `./compat`、`DISCOVERY_SETTINGS_NS` 与 `DiscoverySettings` 都不再导出，`@deepseek-ai/dsh-settings` 也不再是这个包的 peer。用户设置现在是插件 `Config` 里标了 `.volatile()` 的字段（这一点从 0.1.7 起才是宿主认的写法），`dsh-llm-discovery` 自己不再碰 settings 服务。
+
 ### 新增
 
-- **支持 0.1.7 宿主线（npm 的 `next` 频道）。** 0.1.7 把插件设置整个换了：`SettingsProvider` 不再导出，`ctx.settings` 变成 `SettingsForms`，命名空间就是插件的 Loader entry id，schema 取自插件自己导出的 `Config`，只有标了 `.volatile()` 的字段可编辑，改动通知也从 `settings/updated` 换成 Loader 只发给 owner fiber 的 `loader/volatile-update`；浏览器半边的 `ctx.settingsScope` 换成 `ctx.configForms`。三个包都按这条线接好了：目录刷新间隔与动态路由表分别是各自插件 `Config` 里的 volatile 字段（读值走 `configValue()`），页面改走 `configForms`，插件自己的路由端点照旧写同一份设置。0.1.5 线行为不变，两条线的差别收在两个兼容面里——`dsh-llm-discovery/compat`（宿主侧）与 `ui-settings-discovery/src/client/settings-form.ts`（浏览器侧），丢掉旧线时只删这两处与各调用点上标了「0.1.5 兼容」的分支。
+- **支持 0.1.7 宿主线。** 0.1.7 把插件设置整个换了：`SettingsProvider` 不再导出，`ctx.settings` 变成 `SettingsForms`，命名空间就是插件的 Loader entry id，schema 取自插件自己导出的 `Config`，只有标了 `.volatile()` 的字段可编辑，改动通知也从 `settings/updated` 换成 Loader 只发给 owner fiber 的 `loader/volatile-update`；浏览器半边的 `ctx.settingsScope` 换成 `ctx.configForms`。三个包都按这条线接好了：目录刷新间隔与动态路由表分别是各自插件 `Config` 里的 volatile 字段（读值走 `.get()`），页面改走 `configForms`，插件自己的路由端点照旧写同一份设置。
+- `dsh-llm-discovery` 新增 `./loader-config` 子路径导出：volatile 配置就地点更后的通知收口，以及写设置用的 Loader entry id。
 
 ### 变更
 
-- **peer 范围改为双宿主线。** `@deepseek-ai/dsh-*` 的 peer 由 `^0.1.5-rc.1` 放宽为 `^0.1.5-rc.1 || ^0.1.7-rc.1`（npm 的预发布规则不接受跨 patch 的预发布版本，只能这样拼），编译所依据的副本（devDependencies）钉到 `0.1.7-rc.2`。
-- 编译期的 cordis 钉到 `^4.0.4`、schemastery 钉到 `^3.18.4`：0.1.7 的包要求 cordis `~4.0.4`，装出两份 cordis 会把 `declare module` 的服务增强劈成两半，插件的 `ctx.llm` / `ctx.settings` 这类增强就全部失效。
-- 0.1.7 线上写设置的目标是插件自己的 Loader entry id（从 `ctx.fiber.entry` 取，没有 Loader 时退回插件名）；0.1.5 线上仍是注册用的命名空间常量。
-- 「模型目录」页在命名空间没有服务给当前客户端时（没装 `dsh-llm-discovery`）不再显示刷新间隔输入框；宿主用返回值 `false` 拒收写入时页面会报出来（0.1.7 的 `ConfigForm.set` 用返回值表示拒收，0.1.5 的拒收是 reject）。
-- `dsh-llm-discovery` 新增 `./compat` 子路径导出。
+- **旧线的兼容面与分支全部删除。** `dsh-llm-discovery/src/compat.ts` 与 `ui-settings-discovery/src/client/settings-form.ts` 两个兼容面、`dsh-llm-discovery/src/settings.ts`、`dsh-llm-dynamic-provider` 的 `NamespaceConfig` / `DynamicSection`，以及测试里的 `legacySettingsStub` 都不再存在；设置取值、写入目标与变更通知各按 0.1.7 的写法直接写在调用点上。
+- 编译期的 cordis 钉到 `~4.0.4`、schemastery 钉到 `^3.18.4`：0.1.7 的包要求 cordis `~4.0.4`，装出两份 cordis 会把 `declare module` 的服务增强劈成两半，插件的 `ctx.llm` / `ctx.settings` 这类增强就全部失效。
+- 写设置的目标是插件自己的 Loader entry id（从 `ctx.fiber.entry` 取，没有 Loader 时退回插件名）。
+- 「模型目录」页在命名空间没有服务给当前客户端时（没装 `dsh-llm-discovery`）不显示刷新间隔输入框；宿主用返回值 `false` 拒收写入时页面会报出来。
+- 「模型发现」分区读提供方目录只用 `llm.listConfigurableProviders()`：为 0.1.2-alpha 时代的宿主留的 `llm.providers()` 回退与 `{ providers }` 信封兜底随旧线一并删除。
 
 ### 修复
 
-- **0.1.7 上设置集成整体不可用。** 原有的 `ctx.settings.register(...)` / `get(...)` 与 `settings/updated` 在 0.1.7 上都不存在，插件会在设置这一步直接失败；现在按宿主线分派。
-- `dsh-llm-dynamic-provider` 在 0.1.7 线上把路由表当普通对象用于 settings 组成层时，会拿到 volatile 引用；现在取值统一走 `configValue()`。
+- **原来的设置集成在 0.1.7 上整体不可用。** 它用的 `ctx.settings.register(...)` / `get(...)` 与 `settings/updated` 在 0.1.7 上都不存在，插件会在设置这一步直接失败；现在整条链路按 0.1.7 写。
+- `dsh-llm-dynamic-provider` 把路由表交给 settings 组成层当普通对象用时，会拿到 volatile 引用；现在取值统一走 `.get()`。
 
 ### 开发
 
-- `pnpm run check` 参数不再需要写成 `-- --host`（那个 `--` 会被脚本按未知参数拒掉）；对两条宿主线各跑一次的做法记在 [`scripts/compat/README.md`](./scripts/compat/README.md)，本地宿主树是 `.compat/hosts/rc1`（0.1.5）与 `.compat/hosts/next`（0.1.7）。
-- 测试按宿主线分工：0.1.7 用真实 schema（schemastery 3.18.4 + cordis 4.0.4 会把 volatile 字段解析成引用）加 `tests/volatile.ts` 里照着 Loader 做法提交的写入；0.1.5 用 `legacySettingsStub` 替身（0.1.5 的 `SettingsProvider` 已经不在编译期依赖里）。`dsh-llm-dynamic-provider` 的 `@deepseek-ai/dsh-attachment` devDependency 只为测试导入 `dsh-llm-pi-ai` 时需要，不是本插件的运行时依赖。
+- `pnpm run check` 参数不再需要写成 `-- --host`（那个 `--` 会被脚本按未知参数拒掉）；宿主树用 `.compat/hosts/next`（0.1.7-rc.2），做法记在 [`scripts/compat/README.md`](./scripts/compat/README.md)。
+- 测试用真实 schema（schemastery 3.18.4 + cordis 4.0.4 会把 volatile 字段解析成引用）加 `tests/volatile.ts` 里照着 Loader 做法提交的写入；直接调 `resolveDiscoveryConfig` 的用例用同一个模块里的 `volatileRef()` 造引用，程序化挂载则按 `ctx.plugin` 的类型要求把写下来的普通配置传给 schema。`dsh-llm-dynamic-provider` 的 `@deepseek-ai/dsh-attachment` devDependency 只为测试导入 `dsh-llm-pi-ai` 时需要，不是本插件的运行时依赖。
 - 0.1.7 的 Loader 用 `Promise.allSettled` 等条目，被 schema 拒掉的配置不会让 `loader.await()` 抛出；相关的组合用例改为断言插件没有注册探测 offer。
 
 ## [0.2.0] - 2026-09-23

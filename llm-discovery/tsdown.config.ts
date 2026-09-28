@@ -6,7 +6,7 @@ export default defineConfig({
   entry: [
     'src/index.ts',
     'src/engine.ts',
-    'src/compat.ts',
+    'src/loader-config.ts',
     'src/vocabulary.ts',
     'src/catalog/models-dev.ts',
     'src/invariant.ts',

@@ -8,7 +8,8 @@ import type { Fiber } from '@deepseek-ai/cordis'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
 import { CATALOG_SERVICE, DYNAMIC_PROBE_PATH, DYNAMIC_ROUTES_PATH } from 'dsh-llm-discovery/vocabulary'
 import * as dynamicProvider from '../src/index.ts'
-import { formsStub, legacySettingsStub } from './settings-stub.ts'
+import type { RouteProfile } from '../src/config.ts'
+import { formsStub } from './settings-stub.ts'
 import { startProbeServer } from './server.ts'
 import type { ProbeServer } from './server.ts'
 
@@ -101,21 +102,28 @@ afterEach(async () => {
   server = undefined
 })
 
+/** 组合层写下来的那份配置：volatile 字段在这里是普通值，注册表按插件的 schema 解析成引用后才交给 `apply`。 */
+type RawConfig = {
+  routes?: Record<string, RouteProfile>
+  timeoutMs?: number
+  maxResponseBytes?: number
+  enrichment?: boolean
+}
+
 /** Mount the seams plus the plugin over one config, capturing its endpoints. */
 async function boot(
-  config?: dynamicProvider.Config,
+  config?: RawConfig,
   catalog: unknown = fakeCatalog().catalog,
-  line: 'legacy' | 'forms' = 'legacy',
 ): Promise<Map<string, RegisteredRoute>> {
   const routes = new Map<string, RegisteredRoute>()
   const forms = formsStub()
   ctx = new Context()
   await ctx.plugin(LlmRuntime)
-  ctx.provide('settings', (line === 'legacy' ? legacySettingsStub(ctx) : forms.service) as never)
+  ctx.provide('settings', forms.service as never)
   ctx.provide('webServer', fakeWebServer(routes))
   ctx.provide(CATALOG_SERVICE, catalog)
-  const fiber: Fiber = await ctx.plugin(dynamicProvider, config).await()
-  if (line === 'forms') forms.attach(fiber)
+  const fiber: Fiber = await ctx.plugin(dynamicProvider, config as never).await()
+  forms.attach(fiber)
   return routes
 }
 
@@ -182,10 +190,10 @@ describe('probe endpoint', () => {
   })
 })
 
-describe('routes endpoint on the volatile settings line (0.1.7)', () => {
+describe('routes endpoint', () => {
   it('writes a route through the settings service, reprobes it, and reads it back', async () => {
     server = await startProbeServer({ '/models': { body: JSON.stringify(LISTING) } })
-    const routes = await boot({ routes: {} }, fakeCatalog().catalog, 'forms')
+    const routes = await boot({ routes: {} }, fakeCatalog().catalog)
     const write = routes.get(DYNAMIC_ROUTES_PATH)!
 
     const written = await postJson(write, {

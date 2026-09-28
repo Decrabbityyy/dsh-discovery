@@ -1,10 +1,10 @@
 /**
- * 0.1.7 的 volatile 配置引用协议。
+ * volatile 配置引用的协议。
  *
  * Loader 就地点更配置时走的就是这一条：`updateVolatile(ref, source)` 等价于
  * `ref[write](source.get())`，随后只在 owner fiber 上派发 `loader/volatile-update`。
- * 测试照着做，就不必为一条 0.1.5 宿主上根本不存在的 API 去依赖 cosmokit——
- * 写入符号是 `Symbol.for` 注册的，跨 ESM/CJS 副本一致。
+ * 测试照着做，就不必为了一个写入符号去依赖 cosmokit——写入符号是 `Symbol.for`
+ * 注册的，跨 ESM/CJS 副本一致。
  *
  * @module tests/volatile
  */

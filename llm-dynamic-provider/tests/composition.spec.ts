@@ -2,11 +2,13 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import type { Fiber } from '@deepseek-ai/cordis'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
 import { DYNAMIC_PROBE_PATH } from 'dsh-llm-discovery/engine'
 import { CATALOG_SERVICE } from 'dsh-llm-discovery/vocabulary'
 import * as dynamicProvider from '../src/index.ts'
-import { legacySettingsStub } from './settings-stub.ts'
+import type { RouteProfile } from '../src/config.ts'
+import { formsStub } from './settings-stub.ts'
 import { startProbeServer } from './server.ts'
 import type { ProbeServer } from './server.ts'
 
@@ -39,13 +41,23 @@ function catalogService(): Record<string, unknown> {
   }
 }
 
-/** Mount the llm seam, the 0.1.5 settings seam, a catalog service, plus the dynamic provider. */
-async function boot(config?: dynamicProvider.Config): Promise<Context> {
+/** 组合层写下来的那份配置：volatile 字段在这里是普通值，注册表按插件的 schema 解析成引用后才交给 `apply`。 */
+type RawConfig = {
+  routes?: Record<string, RouteProfile>
+  timeoutMs?: number
+  maxResponseBytes?: number
+  enrichment?: boolean
+}
+
+/** Mount the llm seam, the settings seam, a catalog service, plus the dynamic provider. */
+async function boot(config?: RawConfig): Promise<Context> {
   ctx = new Context()
   await ctx.plugin(LlmRuntime)
-  ctx.provide('settings', legacySettingsStub(ctx) as never)
+  const forms = formsStub()
+  ctx.provide('settings', forms.service as never)
   ctx.provide(CATALOG_SERVICE, catalogService())
-  await ctx.plugin(dynamicProvider, config)
+  const fiber: Fiber = await ctx.plugin(dynamicProvider, config as never).await()
+  forms.attach(fiber)
   return ctx
 }
 
@@ -101,11 +113,13 @@ describe('plugin composition', () => {
   it('withdraws cleanly when the plugin fiber is disposed (HMR safety)', async () => {
     const fresh = new Context()
     await fresh.plugin(LlmRuntime)
-    fresh.provide('settings', legacySettingsStub(fresh) as never)
+    const forms = formsStub()
+    fresh.provide('settings', forms.service as never)
     fresh.provide(CATALOG_SERVICE, catalogService())
     const fiber = await fresh.plugin(dynamicProvider, {
       routes: { upstream: { baseURL: 'http://127.0.0.1:1', api: 'openai-completions' } },
-    })
+    } as never)
+    forms.attach(fiber)
     await fiber.dispose()
     await fresh.fiber.dispose()
   })
@@ -124,11 +138,13 @@ describe('plugin composition', () => {
     }
     const fresh = new Context()
     await fresh.plugin(LlmRuntime)
-    fresh.provide('settings', legacySettingsStub(fresh) as never)
+    const forms = formsStub()
+    fresh.provide('settings', forms.service as never)
     fresh.provide('webServer', webServer)
     fresh.provide(CATALOG_SERVICE, catalogService())
 
     const first = await fresh.plugin(dynamicProvider)
+    forms.attach(first)
     expect(live.has('/llm-dynamic-provider/routes')).toBe(true)
     expect(live.has(DYNAMIC_PROBE_PATH)).toBe(true)
     expect(live.size).toBe(2)
@@ -137,6 +153,7 @@ describe('plugin composition', () => {
 
     // A second mount re-registers the endpoints without a duplicate rejection.
     const second = await fresh.plugin(dynamicProvider)
+    forms.attach(second)
     expect(live.size).toBe(2)
     await second.dispose()
     expect(live.size).toBe(0)

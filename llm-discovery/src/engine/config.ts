@@ -1,5 +1,5 @@
+import type { Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { configValue, volatileField } from '../compat.ts'
 
 export interface EngineSwitches {
   /** Ollama native API (`/api/tags` + per-model `/api/show`). Default true. */
@@ -10,7 +10,12 @@ export interface EngineSwitches {
   openaiModels?: boolean
 }
 
-/** Tunables of the endpoint-discovery plugin; every field is optional. */
+/**
+ * Tunables of the endpoint-discovery plugin; every field is optional.
+ *
+ * 标了 `.volatile()` 的字段是用户可改的设置：Loader 把生效值交下来时，它们是可就地
+ * 点更的引用（`.get()` 读当前快照），而不是普通值。其余字段只是部署配置。
+ */
 export interface Config {
   /** Per-request probe timeout in milliseconds (default 10,000). */
   timeoutMs?: number
@@ -19,20 +24,20 @@ export interface Config {
   /** Fill fields an endpoint leaves undisclosed from the bundled pi-ai catalog, matched by exact model id (default true). */
   enrichment?: boolean
   /** How often to poll models.dev for changes, in minutes. 0 (default) refreshes once at mount; 1440 is a day. */
-  catalogRefreshIntervalMinutes?: number
+  catalogRefreshIntervalMinutes?: Volatile<number | undefined>
   /** Context window for an Ollama model whose `/api/show` metadata carries no `*.context_length` (default 128,000). */
   ollamaDefaultContextWindow?: number
   /** Per-engine kill switches; an engine omitted from the map stays enabled. */
   engines?: EngineSwitches
 }
 
-export const Config: z<Config> = z.object({
+/** Runtime schema for {@link Config}. */
+export const Config = z.object({
   timeoutMs: z.number().step(1).min(1),
   maxResponseBytes: z.number().step(1).min(1024),
   enrichment: z.boolean(),
-  // 0.1.7 上这一格是用户可改的设置字段（设置页写它、本插件读它）；0.1.5 上
-  // `volatileField` 原样返回，用户层由下面 `legacySettings()` 注册的命名空间承担。
-  catalogRefreshIntervalMinutes: volatileField(z.number().step(1).min(0)),
+  // 只有标了 `.volatile()` 的字段进设置页、才能被页面改写：刷新间隔是唯一一格用户设置。
+  catalogRefreshIntervalMinutes: z.number().step(1).min(0).volatile(),
   ollamaDefaultContextWindow: z.number().step(1).min(1),
   engines: z.object({
     ollama: z.boolean(),
@@ -54,20 +59,19 @@ export interface ResolvedDiscoveryConfig {
 /**
  * Resolve the deployment config into its fully-defaulted form. This is the one place the defaults live.
  *
- * 每一个字段都过一遍 `configValue`：0.1.7 交下来的配置里，标了 `.volatile()` 的字段
- * 是引用而不是值（见 `../compat.ts`）。
+ * 刷新间隔那一格是 volatile 引用，取值要走 `.get()`（见 `../loader-config.ts`）。
  */
 export function resolveDiscoveryConfig(config: Config | undefined): ResolvedDiscoveryConfig {
   return {
-    timeoutMs: configValue(config?.timeoutMs) ?? 10_000,
-    maxResponseBytes: configValue(config?.maxResponseBytes) ?? 4 * 1024 * 1024,
-    enrichment: configValue(config?.enrichment) ?? true,
-    catalogRefreshIntervalMinutes: configValue(config?.catalogRefreshIntervalMinutes) ?? 0,
-    ollamaDefaultContextWindow: configValue(config?.ollamaDefaultContextWindow) ?? 128_000,
+    timeoutMs: config?.timeoutMs ?? 10_000,
+    maxResponseBytes: config?.maxResponseBytes ?? 4 * 1024 * 1024,
+    enrichment: config?.enrichment ?? true,
+    catalogRefreshIntervalMinutes: config?.catalogRefreshIntervalMinutes?.get() ?? 0,
+    ollamaDefaultContextWindow: config?.ollamaDefaultContextWindow ?? 128_000,
     engines: {
-      ollama: configValue(config?.engines?.ollama) ?? true,
-      litellm: configValue(config?.engines?.litellm) ?? true,
-      openaiModels: configValue(config?.engines?.openaiModels) ?? true,
+      ollama: config?.engines?.ollama ?? true,
+      litellm: config?.engines?.litellm ?? true,
+      openaiModels: config?.engines?.openaiModels ?? true,
     },
   }
 }

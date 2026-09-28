@@ -8,17 +8,16 @@ import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-settings/types'
 import type { LlmConfigurableProvider } from '@deepseek-ai/dsh-llm'
 import type { DirectoryRegistrationHandle } from '@deepseek-ai/dsh-llm'
-import type { Config, DynamicSection } from './config.ts'
-import { NamespaceConfig } from './config.ts'
+import type { Config, RouteProfile } from './config.ts'
 import { discoverDynamicProviders } from './provider.ts'
 import type { DynamicProviderProfile } from './provider.ts'
-import { configValue, legacySettings, loaderEntryId, onSettingsCommit, onVolatileUpdate } from 'dsh-llm-discovery/compat'
+import { loaderEntryId, onVolatileUpdate } from 'dsh-llm-discovery/loader-config'
 import { catalogReasoningEfforts, discoverEndpoint, enrichModels, resolveDiscoveryConfig } from 'dsh-llm-discovery/engine'
 import { CATALOG_SERVICE, DYNAMIC_PROBE_PATH, DYNAMIC_ROUTES_PATH } from 'dsh-llm-discovery/vocabulary'
 import type { CatalogStatus, SharedCatalog } from 'dsh-llm-discovery/vocabulary'
 
-export { Config, NamespaceConfig } from './config.ts'
-export type { DynamicSection, RouteProfile } from './config.ts'
+export { Config } from './config.ts'
+export type { RouteProfile } from './config.ts'
 export { catalogReasoningEfforts } from 'dsh-llm-discovery/engine'
 export type { ReasoningEfforts } from 'dsh-llm-discovery/engine'
 export { assembleProfile, discoverDynamicProviders, toModel } from './provider.ts'
@@ -34,12 +33,10 @@ interface WebServerFace {
 }
 
 export const name = 'llm-dynamic-provider'
-/** llm 注册表、设置命名空间，以及 dsh-llm-discovery 提供的 models.dev 目录。 */
+/** llm 注册表、设置表单写入面，以及 dsh-llm-discovery 提供的 models.dev 目录。 */
 export const inject = ['llm', 'settings', CATALOG_SERVICE]
 
-/** This plugin's settings namespace, holding the route declarations. */
-// alpha.4 dropped the settingsNamespace() factory; a namespace is a branded
-// string validated by SettingsNamespaceInput at registration time.
+/** 本插件拥有的命名空间：探测 offer 用它，写设置的兜底名也是它（有 Loader 时用 entry id）。 */
 export const DYNAMIC_NS = 'llm-dynamic-provider' as SettingsNamespace
 
 /** 设置页「模型目录」读的状态：声明的路由数与 models.dev 目录状态。 */
@@ -58,15 +55,8 @@ interface RouteProbeReport {
 
 /** Mount the dynamic-provider adapter: declared routes register on first successful probe. */
 export function apply(ctx: Context, config?: Config): void {
-  // 0.1.5 兼容：那条线上用户层住在插件自己注册的 settings 命名空间里，组成层是这里的
-  // `config.routes`。0.1.7 的 `ctx.settings` 换成了 SettingsForms，没有按命名空间注册
-  // 这回事——路由表就是本插件 Config 里标了 `.volatile()` 的那一格。
-  const legacy = legacySettings(ctx)
-  // `configValue` 在两条线上都要走一遍：0.1.7 交下来的是引用，`base` 要的是普通值。
-  legacy?.register(DYNAMIC_NS, NamespaceConfig, { base: { routes: configValue(config?.routes) ?? {} } })
-
-  /** 0.1.5 写命名空间常量；0.1.7 写自己的 Loader entry id（命名空间就是它）。 */
-  const settingsTarget = (): string => (legacy === undefined ? loaderEntryId(ctx, DYNAMIC_NS) : DYNAMIC_NS)
+  /** 写设置的命名空间就是本插件的 Loader entry id。 */
+  const settingsTarget = (): string => loaderEntryId(ctx, DYNAMIC_NS)
 
   // 目录由 dsh-llm-discovery 提供（`inject` 保证它在）：facts 查询、模态与状态都读它。
   const catalog = ctx.get(CATALOG_SERVICE) as SharedCatalog
@@ -191,13 +181,8 @@ export function apply(ctx: Context, config?: Config): void {
     }
   }
 
-  /** The declared routes: the user layer over the composition base, wherever this host keeps it. */
-  const declaredRoutes = (): Record<string, import('./config.ts').RouteProfile> => {
-    // 0.1.5 兼容：组成层 `base` 与用户层都由 settings 命名空间合并后交回。
-    if (legacy !== undefined) return (legacy.get(DYNAMIC_NS) as DynamicSection | undefined)?.routes ?? {}
-    // 0.1.7：整格路由表是 Config 里的一个 volatile 引用，Loader 就地点更它。
-    return configValue(config?.routes) ?? {}
-  }
+  /** The declared routes: this plugin's Config holds the whole table as one volatile reference. */
+  const declaredRoutes = (): Record<string, RouteProfile> => config?.routes?.get() ?? {}
 
   /** Mirror the declared routes into the LLM configurable-provider directory. */
   let directory: DirectoryRegistrationHandle | undefined
@@ -273,13 +258,10 @@ export function apply(ctx: Context, config?: Config): void {
 
   // Hot-edit: adding or editing a route reprobes without a restart, and removing
   // one withdraws its route on the same pass. The directory re-syncs with it.
-  // 两条线各注册一条通知：0.1.5 是 settings 提交，0.1.7 是 Loader 点更 volatile，
-  // 同一个组合里只有其中一条会响。
   const onRoutesChanged = (): void => {
     syncDirectory()
     void reprobe()
   }
-  onSettingsCommit(ctx, DYNAMIC_NS, onRoutesChanged)
   onVolatileUpdate(ctx, onRoutesChanged)
   // Publish the namespace's exposure before serving: the directory is what
   // admits it to the proxy's exposed set.

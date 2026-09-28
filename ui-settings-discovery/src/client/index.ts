@@ -1,14 +1,14 @@
 /** 模型发现 settings section plugin, browser half: registers the 模型发现 section into the settings panel, the model editor its provider cards open, and the */
-// The browser half is an ordinary cordis plugin: its context type is cordis's
-// own (0.1.5 deleted the dsh-client-runtime facade that used to alias it).
+// The browser half is an ordinary cordis plugin: its context type is cordis's own.
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 // Type-only: pulls the renderer's Context augmentation carrying `slots`.
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 // Type-only: pulls the Context augmentation carrying `remote` and the
 // re-exported wire vocabulary (LlmDiscoveredModel, RpcResponse, …).
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
-// Type-only: pulls the shell's SlotMap merge (the 'settings.section' entry) and
-// the Plugins section's tab seat.
+// Type-only: pulls the shell's SlotMap merge (the 'settings.section' entry),
+// the Plugins section's tab seat, and the Context augmentation carrying
+// `configForms`.
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: pulls the Models page's SlotMap merge (the provider-card seat)
 // and the directory row its owner share carries.
@@ -18,8 +18,6 @@ import type { DiscoverySectionInjected } from './DiscoverySection.tsx'
 import { ModelCatalogTab } from './ModelCatalogTab.tsx'
 import { ProviderModelsCard } from './ProviderModelsDialog.tsx'
 import type { ProviderModelsCardInjected } from './ProviderModelsDialog.tsx'
-import { FORM_SERVICES, bindSettingsForm } from './settings-form.ts'
-import type { SettingsForm } from './settings-form.ts'
 import type { DiscoveryApi, DiscoverySettingsSection } from './discovery.ts'
 import { DISCOVERY_NS, PI_AI_NS } from './discovery.ts'
 
@@ -39,13 +37,13 @@ const CACHE_TAB_ID = 'model-catalog'
 
 const CACHE_TAB_LABEL = '模型目录'
 
-/** Required services. `remote` and its generated faces are the typed Remote clients this page calls; `locale` is runtime ordering for the section's copy. The
- * settings-form service the catalog page binds is NOT listed here: its name depends on the host line (see `settings-form.ts`), so it is awaited with `ctx.inject`
- * instead of being a hard requirement. */
+/** Required services. `configForms` is the settings domain's form service, keyed by Host plugin entry id: the catalog page edits the discovery plugin's entry
+ * through it. `remote` and its generated faces are the typed Remote clients this page calls; `locale` is runtime ordering for the section's copy. */
 export const inject = [
   'slots',
   'locale',
   'connection',
+  'configForms',
   'remote',
   'remote.llm',
   'remote.settings',
@@ -78,21 +76,14 @@ export function apply(ctx: ClientContext): void {
     inject: cardInjected,
   }, ProviderModelsCard))
   // 插件区自己的标签页：排在「插件配置」(0) 与「插件列表」(10) 之后。目录刷新间隔
-  // 就长在这一页上，它读写的是 dsh-llm-discovery 的设置命名空间（与探测 offer 同名）。
-  // 承载这份表单的服务随宿主线而变，两条都等一次：哪条线的服务在，就用哪条注册这一页。
-  const registerTab = (form: SettingsForm<DiscoverySettingsSection>): void => {
-    ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
-      name: 'settings.plugins.tab',
-      id: CACHE_TAB_ID,
-      order: 20,
-      label: () => CACHE_TAB_LABEL,
-      inject: () => ({ scope: form }),
-    }, ModelCatalogTab))
-  }
-  for (const service of FORM_SERVICES) {
-    ctx.inject([service], (scope) => {
-      const form = bindSettingsForm<DiscoverySettingsSection>(scope, service, DISCOVERY_NS)
-      if (form !== undefined) registerTab(form)
-    })
-  }
+  // 就长在这一页上：它读写的表单属于 dsh-llm-discovery 那一条 Host entry（命名空间与
+  // 探测 offer 同名），条目不在组合里时表单自报 `unavailable`，这一栏就不出现。
+  const scope = ctx.configForms.get<DiscoverySettingsSection>(DISCOVERY_NS)
+  ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
+    name: 'settings.plugins.tab',
+    id: CACHE_TAB_ID,
+    order: 20,
+    label: () => CACHE_TAB_LABEL,
+    inject: () => ({ scope }),
+  }, ModelCatalogTab))
 }

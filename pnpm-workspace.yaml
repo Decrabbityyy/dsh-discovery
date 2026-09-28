@@ -4,11 +4,11 @@ packages:
   - 'llm-dynamic-provider'
 
 # Harness packages (@deepseek-ai/dsh-*) resolve from npm as ordinary
-# dependencies — the 0.1.5-rc and 0.1.7-rc channels both carry the full internal
-# dependency graph, so no Harness checkout is needed to build or test. Peers stay
-# declared (the host injects these modules at runtime) but are NOT auto-installed:
-# each package pins the compile-time copy it builds against in devDependencies —
-# 0.1.7-rc.2, the newer of the two host lines the peer ranges accept.
+# dependencies — the 0.1.7-rc channel carries the full internal dependency
+# graph, so no Harness checkout is needed to build or test. Peers stay declared
+# (the host injects these modules at runtime) but are NOT auto-installed: each
+# package pins the compile-time copy it builds against in devDependencies —
+# 0.1.7-rc.2, the host line the peer ranges accept.
 autoInstallPeers: false
 
 # Pure-JS transitive dependencies of pi-ai; neither needs its install script.
@@ -18,13 +18,9 @@ allowBuilds:
 
 # Versions this repo pins that are younger than the configured minimum release age.
 minimumReleaseAgeExclude:
-  - '@deepseek-ai/cordis@4.0.2'
   - '@deepseek-ai/cordis@4.0.4'
-  - '@deepseek-ai/cordis-plugin-include@1.0.7'
   - '@deepseek-ai/cordis-plugin-include@1.0.9'
-  - '@deepseek-ai/cordis-plugin-loader@1.0.3'
   - '@deepseek-ai/cordis-plugin-loader@1.0.5'
-  - '@deepseek-ai/cosmokit@1.8.3'
   - '@deepseek-ai/cosmokit@1.8.5'
   - '@deepseek-ai/dsh-api-remotes@0.1.7-rc.2'
   - '@deepseek-ai/dsh-attachment@0.1.7-rc.2'
@@ -52,5 +48,4 @@ minimumReleaseAgeExclude:
   - '@deepseek-ai/dsh-typert-protocol@0.1.7-rc.2'
   - '@deepseek-ai/dsh-util-crypto@0.1.7-rc.2'
   - '@deepseek-ai/dsh-util-values@0.1.7-rc.2'
-  - '@deepseek-ai/schemastery@3.18.2'
   - '@deepseek-ai/schemastery@3.18.4'

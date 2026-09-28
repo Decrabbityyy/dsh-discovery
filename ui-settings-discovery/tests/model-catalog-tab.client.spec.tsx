@@ -4,7 +4,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Mock } from 'vitest'
-import type { SettingsForm, SettingsFormSnapshot } from '../src/client/settings-form.ts'
+import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { UI_CATALOG_STATUS_PATH } from 'dsh-llm-discovery/vocabulary'
 import { ModelCatalogTab } from '../src/client/ModelCatalogTab.tsx'
 import { DYNAMIC_PROBE_PATH } from '../src/client/discovery.ts'
@@ -183,7 +183,7 @@ describe('model catalog tab', () => {
 
 /** 一张内存表单：写入会更新快照并通知订阅者，和真实表单的可观察行为一致。 */
 function fakeScope(options: { minutes?: number; overridden?: boolean; writable?: boolean } = {}): {
-  scope: SettingsForm<DiscoverySettingsSection>
+  scope: ConfigForm<DiscoverySettingsSection>
   sets: { field: string; value: unknown }[]
   unsets: string[]
   failWith?: string
@@ -191,13 +191,13 @@ function fakeScope(options: { minutes?: number; overridden?: boolean; writable?:
 } {
   const listeners = new Set<() => void>()
   const fake = { sets: [], unsets: [] } as unknown as {
-    scope: SettingsForm<DiscoverySettingsSection>
+    scope: ConfigForm<DiscoverySettingsSection>
     sets: { field: string; value: unknown }[]
     unsets: string[]
     failWith?: string
     refuse?: boolean
   }
-  let snapshot: SettingsFormSnapshot<DiscoverySettingsSection> = {
+  let snapshot: ConfigFormSnapshot<DiscoverySettingsSection> = {
     status: 'ready',
     value: options.minutes === undefined ? {} : { catalogRefreshIntervalMinutes: options.minutes },
     base: { catalogRefreshIntervalMinutes: 0 },
@@ -206,7 +206,7 @@ function fakeScope(options: { minutes?: number; overridden?: boolean; writable?:
     writable: options.writable ?? true,
     mode: 'host',
   }
-  const publish = (next: SettingsFormSnapshot<DiscoverySettingsSection>): void => {
+  const publish = (next: ConfigFormSnapshot<DiscoverySettingsSection>): void => {
     snapshot = next
     for (const listener of listeners) listener()
   }
@@ -216,9 +216,10 @@ function fakeScope(options: { minutes?: number; overridden?: boolean; writable?:
       listeners.add(listener)
       return () => { listeners.delete(listener) }
     },
+    mutate: () => Promise.resolve(true),
     set: (field, value) => {
       if (fake.failWith !== undefined) return Promise.reject(new Error(fake.failWith))
-      // 0.1.7 用 false 表示宿主拒收，0.1.5 的拒收是 reject。
+      // 宿主用返回值 false 表示拒收。
       if (fake.refuse === true) return Promise.resolve(false)
       fake.sets.push({ field, value })
       publish({ ...snapshot, value: { [field]: value as number }, user: { [field]: value } })
@@ -300,7 +301,7 @@ describe('catalog refresh interval on the page', () => {
     expect(intervalInput().value).toBe('120')
     cleanup()
 
-    // 0.1.7 的写入用返回值 false 表示宿主拒收，0.1.5 的拒收是 reject；两种都当失败报出来。
+    // 宿主拒收时写入返回 false（传输失败才是 reject）；两种都当失败报出来。
     const refused = fakeScope({ minutes: 60 })
     refused.refuse = true
     render(<ModelCatalogTab scope={refused.scope} />)

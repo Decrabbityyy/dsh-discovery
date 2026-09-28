@@ -20,26 +20,7 @@ dsh --profile <name> --dump-config
 
 ## 配置一个动态路由
 
-路由写在本插件的用户配置里，这一层在两条宿主线上的位置不同：
-
-- **0.1.5 线**：`$DSH_HOME/settings.yaml` 里 `llm-dynamic-provider` 命名空间的用户层；未设置 `DSH_HOME` 时该文件是 `~/.dsh/settings.yaml`。
-- **0.1.7 线**：profile 的 patch（`cordis.patch.yml`）里 `llm-dynamic-provider` 那一行的 `config`；命名空间就是这一行，页面写进去的也是它。
-
-两条线上的字段写法一样：
-
-```yaml
-llm-dynamic-provider:
-  routes:
-    upstream:
-      baseURL: https://gateway.example.com/v1
-      api: openai-completions
-      apiKeyEnv: UPSTREAM_API_KEY
-      displayName: 公司网关
-      defaultContextWindow: 262144
-      defaultMaxTokens: 32768
-```
-
-0.1.7 线上同样一份内容写在 profile patch 的那一行里：
+路由写在本插件的用户配置里，也就是 profile 的 patch（`cordis.patch.yml`）里 `llm-dynamic-provider` 那一行的 `config`；命名空间就是这一行，页面写进去的也是它。
 
 ```yaml
 - id: llm-dynamic-provider
@@ -48,8 +29,13 @@ llm-dynamic-provider:
       upstream:
         baseURL: https://gateway.example.com/v1
         api: openai-completions
+        apiKeyEnv: UPSTREAM_API_KEY
+        displayName: 公司网关
+        defaultContextWindow: 262144
+        defaultMaxTokens: 32768
 ```
 
+`config.routes` 是插件 `Config` 里标了 `.volatile()` 的字段：设置页改动它时不重启（Loader 就地点更配置），插件随即重新探测。
 把凭证写入 DSH 使用的 `.env` 或启动环境，不要把真实密钥写进配置文件：
 
 ```text
@@ -85,12 +71,12 @@ UPSTREAM_API_KEY=你的密钥
 
 | 字段 | 默认值 | 说明 |
 |---|---:|---|
-| `routes` | `{}` | 路由声明的底稿层；用户配置里的同名路由覆盖它 |
+| `routes` | `{}` | 路由声明；页面与插件自己的端点写的是同一格 |
 | `timeoutMs` | `10000` | 每次探测请求的超时时间，单位毫秒 |
 | `maxResponseBytes` | `4194304` | 模型列表响应的最大字节数 |
 | `enrichment` | `true` | 用内置模型目录补全端点未提供的名称和容量 |
 
-`config.routes` 适合随 profile 分发一组默认端点；用户改动或新增的路由盖在它上面（0.1.5 写进 settings.yaml 的用户层，0.1.7 写进 profile patch 里那一行的 `config`）。
+`config.routes` 适合随 profile 分发一组默认端点，页面上的改动也写回这一格。
 
 修改 profile patch 后需要重启。安装了 `dsh-client-ui-settings-discovery` 时，也可以在「模型发现」页面的「动态路由」区域新增、编辑和删除路由；页面写入的也是同一份用户配置。
 

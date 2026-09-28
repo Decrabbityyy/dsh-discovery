@@ -23,34 +23,29 @@ pnpm run check:manifest                     # 等价于 --only manifest
 
 退出码：`0` 通过（允许有 warning）；`1` 有 FAIL；`2` 参数错误，或给了 `--require-host` 但没找到宿主树。
 
-## 两条宿主线
+## 宿主树
 
-仓库同时支持 0.1.5-rc 与 0.1.7-rc 两条宿主线（peer 范围写成 `^0.1.5-rc.1 || ^0.1.7-rc.1`），所以升级宿主前后各跑一次：
+peer 范围只覆盖 0.1.7-rc 一条宿主线，所以针对要跑的宿主预检一次就够：
 
 ```sh
-node scripts/compat/check.mjs --host .compat/hosts/rc1    # 0.1.5 线
-node scripts/compat/check.mjs --host .compat/hosts/next   # 0.1.7 线
+node scripts/compat/check.mjs --host .compat/hosts/next   # 0.1.7-rc.2
 ```
 
-两棵树都是 git 忽略的本地产物，按宿主闭包装法不同：
+这棵树是 git 忽略的本地产物，把宿主闭包装进去就行：
 
 ```sh
-# rc1：umbrella 包的依赖闭包。缺 dsh-client-ui-slots（本仓库只有测试导入它），补一下更省事：
-npm install --prefix .compat/hosts/rc1 --ignore-scripts @deepseek-ai/dsh-client-ui-slots@0.1.5-rc.2
-
-# next：把 0.1.7-rc.2 的同一份闭包装进另一个目录
 npm install --prefix .compat/hosts/next --ignore-scripts
 ```
 
 `--ignore-scripts` 是给受限 shell 用的：装包时的生命周期脚本要以管道方式 spawn 子进程，部分沙箱下会 EPERM，而这些包都不需要装后脚本。
 
-`deps` 那一项按 npm 的语义判断双线范围（预发布版本只有在同一 [major, minor, patch] 上有预发布比较器时才落进范围，所以跨 patch 的预发布只能靠 `||` 拼），两条线的宿主版本、以及编译期钉的那一份，都要落进同一个范围。
+`deps` 那一项按 npm 的语义判断 peer 范围（预发布版本只有在同一 [major, minor, patch] 上有预发布比较器时才落进范围），宿主版本与编译期钉的那一份都要落进同一个范围。
 
 ## 检查项
 
 | id | 标题 | 需要宿主 | 检查内容 |
 |---|---|---|---|
-| `deps` | dependency versions | 否 | peer 范围是否接受宿主版本（含 npm 的预发布规则；双宿主线时两条线的宿主都要落进范围）；同一依赖在各包是否钉了同一范围；peer 是否在 `devDependencies` 里有对应副本 |
+| `deps` | dependency versions | 否 | peer 范围是否接受宿主版本（含 npm 的预发布规则）；同一依赖在各包是否钉了同一范围；peer 是否在 `devDependencies` 里有对应副本 |
 | `pi-ai` | pi-ai alignment | 否 | `@earendil-works/pi-ai` 的声明是否与所钉 `dsh-llm-pi-ai` 自己依赖的范围一致 |
 | `surface` | harness surface | 是 | 插件 import 的 specifier 是否在宿主的 exports 映射里可解析；具名导出是否存在于宿主的运行时模块（不只看 `.d.ts`）；同名包在多个宿主根上是否为兼容版本 |
 | `types` | workspace types (src + tests) | 否 | `tsc -b` 只覆盖 `src`，tsdown 不做类型检查；这一项用 `noEmit` 把 `src` 与 `tests` 一起检查 |
@@ -67,7 +62,7 @@ npm install --prefix .compat/hosts/next --ignore-scripts
 2. PATH 上的 `dsh` 启动器（`dsh.cmd` / `dsh.exe` / `dsh.ps1` / `dsh`），自该目录向上最多 6 层查找 `node_modules/@deepseek-ai/dsh`；
 3. `$DSH_HOME/profiles/*/node_modules`——Web 端插件依赖的几个 client 包只在这里。
 
-找不到时输出 `host (not found — pass --host <dir> or set DSH_HOME)`。要针对即将升级到的那版宿主预检，把它的依赖闭包装到任意目录再 `--host` 指过去即可；本仓库开发时用 `.compat/hosts/rc1`（0.1.5 线）与 `.compat/hosts/next`（0.1.7 线），见上面「两条宿主线」。
+找不到时输出 `host (not found — pass --host <dir> or set DSH_HOME)`。要针对即将升级到的那版宿主预检，把它的依赖闭包装到任意目录再 `--host` 指过去即可；本仓库开发时用 `.compat/hosts/next`（0.1.7-rc.2），见上面「宿主树」。
 
 多个根会按顺序回退：某个包只在旧 profile 里存在时，指向新宿主的那次检查也会通过。传了 `--host` 时其余根仍参与回退，判断某个包在宿主上是否存在要看 `surface` 的 note 行。
 
@@ -80,7 +75,7 @@ pnpm run sync:pi-ai               # 把权威范围写到每个 peer/dev 声明
 pnpm run sync:pi-ai -- --check    # 只报告偏离，不写回（CI 用，有偏离则退出 1）
 ```
 
-`pi-ai` 这一项按同一条规则判定：任何一处声明偏离权威就 FAIL，并在输出里给出上面的命令。宿主那份 `dsh-llm-pi-ai` 若属于另一条发布线（例如机器上是 0.1.2-alpha.5、钉 `^0.84.2`），只报 warn——仓库同时支持多条宿主线，而一个包只能对着一个 pi-ai 编译；最终判定兼容性的是 `host-types`，它拿宿主的 `.d.ts` 重新编译插件源码。
+`pi-ai` 这一项按同一条规则判定：任何一处声明偏离权威就 FAIL，并在输出里给出上面的命令。宿主那份 `dsh-llm-pi-ai` 若属于另一条发布线（例如机器上装的是别的宿主系列、钉 `^0.84.2`），只报 warn——一个包只能对着一个 pi-ai 编译，最终判定兼容性的是 `host-types`，它拿宿主的 `.d.ts` 重新编译插件源码。
 
 ## 生成物
 

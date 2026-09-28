@@ -8,7 +8,7 @@
 
 插件自身的 Host 半边把目录服务的结果交给浏览器半边：`/ui-settings-discovery/catalog` 回答整份目录（思考档位、输入/输出模态、名称与容量），`/ui-settings-discovery/catalog/status` 回答目录状态（`POST` 会重新读取目录）。没有 Web 服务器时不注册这两个端点，插件卸载时随之撤销。浏览器半边在同一页面会话里只抓一次目录，「模型发现」页与「模型与选项」弹窗共用它。
 
-除「模型发现」页面外，本插件还在「设置」→「插件」里贡献一个「模型目录」页面（排在「插件配置」与「插件列表」之后；没装 `dsh-llm-dynamic-provider` 时页面会直接说明）。它显示声明路由数与 models.dev 目录的条数、刷新时间、来源，提供「刷新目录与路由」按钮（不等重启就重新读取目录、重新探测所有路由，并逐条列出每条路由的模型数或失败原因），以及一个「目录自动刷新间隔」输入框：宿主服务了 `llm-discovery` 命名空间时出现，保存后立即重排目录定时器，不用重启。停在页面上时，它按宿主报的「下一次刷新时刻」重读一次状态，所以后台刷新完不用手动点也会显示出来；只在挂载时刷一次的部署没有下一次，页面也就不会再发请求。
+除「模型发现」页面外，本插件还在「设置」→「插件」里贡献一个「模型目录」页面（排在「插件配置」与「插件列表」之后；没装 `dsh-llm-dynamic-provider` 时页面会直接说明）。它显示声明路由数与 models.dev 目录的条数、刷新时间、来源，提供「刷新目录与路由」按钮（不等重启就重新读取目录、重新探测所有路由，并逐条列出每条路由的模型数或失败原因），以及一个「目录自动刷新间隔」输入框：宿主有条目 id 为 `llm-discovery` 的插件行（也就是 `dsh-llm-discovery` 那一行）时出现，保存后立即重排目录定时器，不用重启。停在页面上时，它按宿主报的「下一次刷新时刻」重读一次状态，所以后台刷新完不用手动点也会显示出来；只在挂载时刷一次的部署没有下一次，页面也就不会再发请求。
 
 标准 Web profile 需要提供 Host 的 `plugin-inventory`，并使用能够挂载 `remote.llm`、`remote.settings`、`remote.credentials` 与 `remote.pluginInventory` 的匹配版本 `api-remotes`；不要混用不同发布系列的 Host 与 Client 包。清单 Remote 不可用时页面会隐藏这两个区域；这表示运行时状态未知，不等同于宿主插件一定未安装。
 
@@ -141,9 +141,9 @@ dsh --profile web --dump-config
 
 ## 已知限制
 
-下文提到「手工编辑配置」时，落点随宿主线而变：0.1.5 线是 `$DSH_HOME/settings.yaml` 里对应命名空间的用户层，0.1.7 线是 profile patch（`cordis.patch.yml`）里该插件行的 `config`。下面写 `settings.yaml` 的地方，0.1.7 线上按 profile patch 理解。
+下文提到「手工编辑配置」时，落点是 profile patch（`cordis.patch.yml`）里该插件行的 `config`。下面写 `settings.yaml` 的地方，按 profile patch 理解。
 
-- 「模型目录」页按插件名取设置命名空间（0.1.7 线上命名空间就是 Loader entry id，也就是 profile patch 里那一行的 `id`）。如果你把 `dsh-llm-discovery` 那一行的 `id` 改成了别的名字，这一页读不到它，刷新间隔输入框不会出现。
+- 「模型目录」页按 Host entry id 取设置表单（profile patch 里那一行的 `id`）。如果你把 `dsh-llm-discovery` 那一行的 `id` 改成了别的名字，这一页读不到它，刷新间隔输入框不会出现。
 - 页面创建 Provider 后，只能到「模型」设置页继续编辑。
 - 「模型与选项」保存的是该提供方的显式 `models` 列表：对模型全部由安装目录提供的路由（例如 `anthropic`）来说，这等于把清单固化下来，之后安装目录新增的模型不会自动生效。
 - 档位不能收窄：写进配置的 `reasoningEfforts` 是「匹配到的条目记录的全集 + 原配置里已声明的」，界面上不提供逐档开关；要收窄只能编辑 `settings.yaml`。

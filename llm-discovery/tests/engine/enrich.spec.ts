@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest'
 import { resolveDiscoveryConfig } from '../../src/engine/config.ts'
 import { enrichModels } from '../../src/engine/enrich.ts'
+import { volatileRef } from '../volatile.ts'
 
 describe('enrichModels', () => {
   it('fills every undisclosed field of a catalog-known id', () => {
@@ -45,7 +46,12 @@ describe('resolveDiscoveryConfig', () => {
   })
 
   it('keeps explicit values and fills the rest', () => {
-    expect(resolveDiscoveryConfig({ timeoutMs: 5_000, catalogRefreshIntervalMinutes: 60, engines: { ollama: false } })).toEqual({
+    // 刷新间隔在运行时的 Config 里是 volatile 引用，所以手写的那份要带上引用。
+    expect(resolveDiscoveryConfig({
+      timeoutMs: 5_000,
+      catalogRefreshIntervalMinutes: volatileRef(60),
+      engines: { ollama: false },
+    })).toEqual({
       timeoutMs: 5_000,
       maxResponseBytes: 4 * 1024 * 1024,
       enrichment: true,

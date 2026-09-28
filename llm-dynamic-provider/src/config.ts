@@ -1,6 +1,6 @@
+import type { Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { ROUTE_PROTOCOLS } from 'dsh-llm-discovery/engine'
-import { volatileField } from 'dsh-llm-discovery/compat'
 
 export { ROUTE_PROTOCOLS }
 
@@ -31,10 +31,20 @@ const routeProfile: z<RouteProfile> = z.object({
   defaultMaxTokens: z.number().step(1).min(1),
 })
 
+/** 路由表按 id 索引；单独命名是为了让推断出的 schema 类型可移植（`z.dict` 交回的是 cosmokit 的 `Dict`）。 */
+type RouteTable = Record<string, RouteProfile>
+
+const routeTable: z<RouteTable> = z.dict(routeProfile) as z<RouteTable>
+
+/**
+ * Tunables of the dynamic-provider plugin.
+ *
+ * 标了 `.volatile()` 的字段是用户可改的设置：Loader 把生效值交下来时，它们是可就地
+ * 点更的引用（`.get()` 读当前快照），而不是普通值。整份路由表就是这样一格。
+ */
 export interface Config {
-  /** 路由声明。0.1.7 上这一格是用户可改的设置字段（设置页与插件自己的端点都写它）；
-   * 0.1.5 上用户层在 `llm-dynamic-provider` 命名空间里，这里只是组成层。 */
-  routes?: Record<string, RouteProfile>
+  /** Route declarations: the settings page and this plugin's own endpoint both write this field. */
+  routes?: Volatile<Record<string, RouteProfile> | undefined>
   /** Per-request probe timeout in milliseconds (default 10,000). */
   timeoutMs?: number
   /** Maximum probe reply size in bytes (default 4 MiB). */
@@ -43,22 +53,11 @@ export interface Config {
   enrichment?: boolean
 }
 
-export const Config: z<Config> = z.object({
-  // 0.1.7 上整份路由表是一个 volatile 字段：Loader 就地点更它，插件不重启，
-  // 设置页也能把它当作一格读写。0.1.5 的 schemastery 没有 `.volatile()`，
-  // `volatileField` 原样返回。
-  routes: volatileField(z.dict(routeProfile)),
+/** Runtime schema for {@link Config}. */
+export const Config = z.object({
+  // 整份路由表是一个 volatile 字段：Loader 就地点更它，插件不重启，设置页也能把它当作一格读写。
+  routes: routeTable.volatile(),
   timeoutMs: z.number().step(1).min(1),
   maxResponseBytes: z.number().step(1).min(1024),
   enrichment: z.boolean(),
-})
-
-/** 0.1.5 兼容：那条线上用户层所在的 settings 命名空间的形状。 */
-export interface DynamicSection {
-  routes: Record<string, RouteProfile>
-}
-
-/** 0.1.5 兼容：注册给旧 settings 服务的命名空间 schema，占位默认值让页面能读到。 */
-export const NamespaceConfig: z<DynamicSection> = z.object({
-  routes: z.dict(routeProfile).default({}),
 })
