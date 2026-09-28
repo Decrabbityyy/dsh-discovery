@@ -8,7 +8,7 @@
 
 本插件持有 models.dev 目录：挂载时读取，缓存在 `$DSH_HOME/storages/llm_models_dev_catalog.json`，之后增量刷新，并以 `modelsDevCatalog` 服务提供给组合里的其他插件。`dsh-llm-dynamic-provider` 与设置页面读的就是这一份。已有本地缓存时启动不等待联网；首次启动需要联网取第一份目录。
 
-默认只在挂载时刷一次，之后可以在「模型目录」页手动刷；给 `catalogRefreshIntervalMinutes` 一个非零分钟数（例如 `1440` 表示一天），它就会按该间隔自动刷新。
+默认只在挂载时刷一次，之后可以在「模型发现」→「模型目录」页手动刷；给 `catalogRefreshIntervalMinutes` 一个非零分钟数（例如 `1440` 表示一天），它就会按该间隔自动刷新。
 
 `enrichment: false` 只影响本插件自己的探测回复：目录服务照常提供，但不联网刷新、只用本地已有的目录，也不补全自己的回复。
 
@@ -81,7 +81,7 @@ dsh --profile web --dump-config
 
 profile patch 会整体替换该插件的 `config`，因此需要保留你仍想使用的字段。
 
-`catalogRefreshIntervalMinutes` 也可以在「设置」→「插件」→「模型目录」页里改：那里写的是用户层，保存后立即重排刷新定时器，不用重启；清掉用户层就回到这里配置的值。
+`catalogRefreshIntervalMinutes` 也可以在「设置」→「模型发现」→「模型目录」页里改：那里写的是用户层，保存后立即重排刷新定时器，不用重启；清掉用户层就回到这里配置的值。
 
 ## 常见问题
 

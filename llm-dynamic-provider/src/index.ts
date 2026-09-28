@@ -39,7 +39,7 @@ export const inject = ['llm', 'settings', CATALOG_SERVICE]
 /** 本插件拥有的命名空间：探测 offer 用它，写设置的兜底名也是它（有 Loader 时用 entry id）。 */
 export const DYNAMIC_NS = 'llm-dynamic-provider' as SettingsNamespace
 
-/** 设置页「模型目录」读的状态：声明的路由数与 models.dev 目录状态。 */
+/** 「模型发现」页的「模型目录」区块读的状态：声明的路由数与 models.dev 目录状态。 */
 export interface DynamicRouteStatus {
   readonly routes: number
   readonly modelsDev: CatalogStatus
@@ -230,7 +230,7 @@ export function apply(ctx: Context, config?: Config): void {
     ]
   }
 
-  // 设置页「模型目录」读的端点：GET 报状态，POST 重读目录并重新探测所有路由。
+  // 「模型目录」区块读的端点：GET 报状态，POST 重读目录并重新探测所有路由。
   const routeStatus = (): DynamicRouteStatus => ({
     routes: Object.keys(declaredRoutes()).length,
     modelsDev: catalog.status(),

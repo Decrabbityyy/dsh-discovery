@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Mock } from 'vitest'
 import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-api-remotes/client'
-import { UI_CATALOG_PATH } from '../src/client/discovery.ts'
+import { UI_CATALOG_PATH, UI_CATALOG_STATUS_PATH, DYNAMIC_PROBE_PATH } from '../src/client/discovery.ts'
 import type { DiscoveryApi, DiscoveryResponse } from '../src/client/discovery.ts'
 import { DiscoverySection } from '../src/client/DiscoverySection.tsx'
 import { resetCatalogCache } from '../src/client/catalogStore.ts'
@@ -12,7 +12,8 @@ import { CUSTOM_PRESET } from '../src/client/presets.ts'
 
 afterEach(cleanup)
 
-/** Stub the section's own catalog endpoint with a levels table and the optional modality/capacity tables beside it. */
+/** Stub the section's own catalog endpoint with a levels table and the optional modality/capacity tables beside it; the embedded 模型目录 block's two
+ * endpoints answer their own shapes so the page under test renders like the real one. */
 function stubCatalog(
   catalog: Record<string, readonly string[]>,
   extra: {
@@ -20,11 +21,13 @@ function stubCatalog(
     facts?: Record<string, { readonly name?: string; readonly contextWindow?: number; readonly maxTokens?: number }>
   } = {},
 ): ReturnType<typeof vi.fn> {
-  const fetchMock = vi.fn(() => Promise.resolve({
-    ok: true,
-    status: 200,
-    json: () => Promise.resolve({ catalog, ...extra }),
-  }))
+  const fetchMock = vi.fn((input: unknown) => Promise.resolve(
+    String(input) === UI_CATALOG_STATUS_PATH
+      ? { ok: true, status: 200, json: () => Promise.resolve({ entries: 0, refreshedAt: null, source: 'storage' }) }
+      : String(input) === DYNAMIC_PROBE_PATH
+        ? { ok: true, status: 200, json: () => Promise.resolve({ routes: 0 }) }
+        : { ok: true, status: 200, json: () => Promise.resolve({ catalog, ...extra }) },
+  ))
   vi.stubGlobal('fetch', fetchMock)
   return fetchMock
 }
@@ -199,11 +202,24 @@ describe('DiscoverySection rendering', () => {
     expect(fetchMock.mock.calls.some(([url]) => url === UI_CATALOG_PATH)).toBe(true)
   })
 
-  it('reads exactly its own catalog, with the dynamic plugin absent', async () => {
+  it('reads its own catalog once, with the dynamic plugin absent', async () => {
     const fetchMock = stubCatalog({})
     await renderLoaded(scriptedFace().api)
     await waitFor(() => { expect(fetchMock).toHaveBeenCalled() })
+    // 没切到「模型目录」那一页，所以只有 section 自己那一读。
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([UI_CATALOG_PATH])
+  })
+
+  it('carries the 模型目录 tab, with no interval field until a form is injected', async () => {
+    const fetchMock = stubCatalog({})
+    await renderLoaded(scriptedFace().api)
+    // 目录是页内的一页：切过去才挂上，那一页自己读那两个端点。
+    fireEvent.click(await screen.findByRole('tab', { name: '模型目录' }))
+    await waitFor(() => { expect(screen.getByText('声明路由')).toBeDefined() })
+    expect(screen.getByRole('button', { name: '刷新目录与路由' })).toBeDefined()
+    expect(fetchMock.mock.calls.some(([url]) => url === UI_CATALOG_STATUS_PATH)).toBe(true)
+    // 刷新间隔要设置表单；这里没注入，所以那一栏不出现，目录状态照旧。
+    expect(screen.queryByLabelText('目录自动刷新间隔（分钟）')).toBeNull()
   })
 
   it('renders the section when the catalog request rejects', async () => {
@@ -228,7 +244,8 @@ describe('DiscoverySection rendering', () => {
   it('gates the two optional blocks independently', async () => {
     const { api } = scriptedFace({ discoveryLoaded: false, dynamicLoaded: true })
     render(<DiscoverySection api={api} />)
-    await waitFor(() => { expect(screen.getByText('动态路由')).toBeDefined() })
+    // 发现插件不在，所以只剩「动态路由」这一页（单页时不出切页条）。
+    await waitFor(() => { expect(screen.getByLabelText('动态路由')).toBeDefined() })
     expect(screen.queryByText('Ollama')).toBeNull()
   })
 

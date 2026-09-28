@@ -33,7 +33,6 @@ import { describe, expect, it } from 'vitest'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import { apply, inject, SECTION_ID } from 'dsh-client-ui-settings-discovery/client'
 import { DiscoverySection } from '../src/client/DiscoverySection.tsx'
-import { ModelCatalogTab } from '../src/client/ModelCatalogTab.tsx'
 import { ProviderModelsCard } from '../src/client/ProviderModelsDialog.tsx'
 
 /** 设置表单服务的桩：只记录被取的 entry id，页面本身的行为由它自己的用例覆盖。 */
@@ -74,7 +73,6 @@ function declare(slots: Slots): () => void {
       children: {
         'settings.section': { kind: 'list', scope: 'root' },
         'settings.models.provider-card': { kind: 'keyed', scope: 'root' },
-        'settings.plugins.tab': { kind: 'list', scope: 'root' },
       },
     } as never,
     () => null,
@@ -158,23 +156,23 @@ describe('ui-settings-discovery apply', () => {
     expect(b.slots.entries('settings.models.provider-card')).toHaveLength(0)
   })
 
-  it('contributes the catalog page bound to the discovery settings namespace', async () => {
+  it('injects the discovery settings form with the section, and claims no Plugins tab', async () => {
     const b = await bench()
     declare(b.slots)
     const fiber = b.ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
-    const entry = b.slots.entries('settings.plugins.tab')[0]!
-    expect(entry.component).toBe(ModelCatalogTab)
-    expect(entry.options).toMatchObject({ id: 'model-catalog', order: 20 })
-    expect(resolveSlotLabel(entry.options.label)).toBe('模型目录')
-    // 这一页上长着目录刷新间隔，所以它拿到 dsh-llm-discovery 那条 entry 的表单。
+    // 「模型目录」并进「模型发现」页，所以这一页上长着目录刷新间隔：
+    // 它拿到的是 dsh-llm-discovery 那条 entry 的表单。
     expect(b.scopeBound).toEqual(['llm-discovery'])
+    const entry = b.slots.entries('settings.section')[0]!
     const injected = (
-      entry.inject as unknown as () => import('../src/client/ModelCatalogTab.tsx').ModelCatalogTabProps
+      entry.inject as unknown as () => import('../src/client/DiscoverySection.tsx').DiscoverySectionInjected
     )()
+    expect(injected.api).toBeDefined()
     expect(injected.scope).toBeDefined()
-    await fiber.dispose()
+    // 插件区不再有我们的一页。
     expect(b.slots.entries('settings.plugins.tab')).toHaveLength(0)
+    await fiber.dispose()
     await b.ctx.fiber.dispose()
   })
 })

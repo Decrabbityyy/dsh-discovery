@@ -21,8 +21,10 @@
 - **旧线的兼容面与分支全部删除。** `dsh-llm-discovery/src/compat.ts` 与 `ui-settings-discovery/src/client/settings-form.ts` 两个兼容面、`dsh-llm-discovery/src/settings.ts`、`dsh-llm-dynamic-provider` 的 `NamespaceConfig` / `DynamicSection`，以及测试里的 `legacySettingsStub` 都不再存在；设置取值、写入目标与变更通知各按 0.1.7 的写法直接写在调用点上。
 - 编译期的 cordis 钉到 `~4.0.4`、schemastery 钉到 `^3.18.4`：0.1.7 的包要求 cordis `~4.0.4`，装出两份 cordis 会把 `declare module` 的服务增强劈成两半，插件的 `ctx.llm` / `ctx.settings` 这类增强就全部失效。
 - 写设置的目标是插件自己的 Loader entry id（从 `ctx.fiber.entry` 取，没有 Loader 时退回插件名）。
-- 「模型目录」页在命名空间没有服务给当前客户端时（没装 `dsh-llm-discovery`）不显示刷新间隔输入框；宿主用返回值 `false` 拒收写入时页面会报出来。
+- **「模型目录」不再是「设置」→「插件」里的一个标签页**：「模型发现」这一页改成页内切页——**探测与采纳 / 动态路由 / 模型目录**（装了哪个插件才有哪一页；只剩一页时不出切页条），切页条用「设置」→「插件」分区标签那一套形状（13/20 文字、底部细线、选中项 2px 下划线），一次只挂当前那一页。插件区只留宿主自己的「插件列表」。
+- 「模型目录」区块在命名空间没有服务给当前客户端时（没装 `dsh-llm-discovery`）不显示刷新间隔输入框；宿主用返回值 `false` 拒收写入时页面会报出来。
 - 「模型发现」分区读提供方目录只用 `llm.listConfigurableProviders()`：为 0.1.2-alpha 时代的宿主留的 `llm.providers()` 回退与 `{ providers }` 信封兜底随旧线一并删除。
+- 「模型与选项」弹窗（模型页）的大小钉住：高度到 680px（或视口留 80px）为止，滚动交给结果表自己，长 id、长地址在格子里换行而不是把整个窗口撑出滚动条。
 
 ### 修复
 

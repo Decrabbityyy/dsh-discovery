@@ -1,5 +1,8 @@
 /**
- * 设置 → 插件的「模型目录」页：这个部署的 models.dev 目录与声明路由，以及一次不用重启的刷新。
+ * 「模型发现」页里的「模型目录」区块：这个部署的 models.dev 目录与声明路由，以及一次不用重启的刷新。
+ *
+ * 它原来是设置 → 插件里的一个标签页，但这一页讲的是模型从哪来，放在模型发现页更顺：
+ * 目录状态与路由声明都是探测这件事的前置事实。
  */
 
 import { useEffect, useState } from 'react'
@@ -19,9 +22,9 @@ const READ_SLACK_MS = 1_500
 /** 最短重读间隔，免得宿主报了个已经过去的时刻把页面变成连问。 */
 const MIN_READ_DELAY_MS = 5_000
 
-/** Props delivered by the slot outlet: the bound settings form this page also edits. */
-export type ModelCatalogTabProps = Partial<{
-  readonly scope: ConfigForm<DiscoverySettingsSection>
+/** Props delivered by the slot outlet: the discovery plugin's settings form; the interval field needs it, the facts do not. */
+export type ModelCatalogPanelProps = Partial<{
+  readonly scope: ConfigForm<DiscoverySettingsSection> | undefined
 }>
 
 /** A refresh timestamp as the page shows it; one it never saw reads as a dash. */
@@ -44,7 +47,8 @@ async function readJson(path: string, missing: string): Promise<unknown> {
   return await response.json() as unknown
 }
 
-export function ModelCatalogTab(props: ModelCatalogTabProps = {}): ReactNode {
+/** 「模型发现」页里的目录状态区块；没注入设置表单时只是少掉刷新间隔那一栏。 */
+export function ModelCatalogPanel(props: ModelCatalogPanelProps = {}): ReactNode {
   const { scope } = props
   const [routes, setRoutes] = useState<RouteStatus | undefined>(undefined)
   const [facts, setFacts] = useState<CatalogStatus | undefined>(undefined)
@@ -127,8 +131,13 @@ export function ModelCatalogTab(props: ModelCatalogTabProps = {}): ReactNode {
   }
 
   return (
-    <div className={styles['cacheSection']}>
-      <dl className={styles['cacheFacts']}>
+    <section className={styles['resultsArea']} aria-label="模型目录">
+      {/* 标题由页内切页条给出（这一页叫「模型目录」）。 */}
+      <p className={styles['intro']}>
+        目录由 dsh-llm-discovery 持有并供所有模型入口共用；这一份的条数、来源与刷新时刻在这里看，
+        也可以不等重启就重新读一遍目录、重新探测所有声明的动态路由。
+      </p>
+      <dl className={styles['catalogFacts']}>
         <div>
           <dt>声明路由</dt>
           <dd>{routes === undefined ? '—' : `${String(routes.routes)} 条`}</dd>
@@ -153,23 +162,23 @@ export function ModelCatalogTab(props: ModelCatalogTabProps = {}): ReactNode {
           {busy ? '刷新中…' : '刷新目录与路由'}
         </button>
       </div>
-      {facts?.error === undefined ? null : <p className={styles['cacheError']}>上次读取目录失败：{facts.error}</p>}
-      {catalogError === undefined ? null : <p className={styles['cacheError']}>{catalogError}</p>}
-      {routeError === undefined ? null : <p className={styles['cacheError']}>{routeError}</p>}
+      {facts?.error === undefined ? null : <p className={styles['catalogError']}>上次读取目录失败：{facts.error}</p>}
+      {catalogError === undefined ? null : <p className={styles['catalogError']}>{catalogError}</p>}
+      {routeError === undefined ? null : <p className={styles['catalogError']}>{routeError}</p>}
       {probes === undefined
         ? null
         : probes.length === 0
-          ? <p className={styles['cacheNote']}>没有声明任何路由。</p>
+          ? <p className={styles['catalogNote']}>没有声明任何路由。</p>
           : (
             <>
-              <p className={styles['cacheSaved']} role="status" aria-live="polite">
+              <p className={styles['catalogSaved']} role="status" aria-live="polite">
                 已重新探测 {probes.length} 条路由。
               </p>
-              <dl className={styles['cacheFacts']}>
+              <dl className={styles['catalogFacts']}>
                 {probes.map(probe => (
                   <div key={probe.route}>
                     <dt>{probe.route}</dt>
-                    <dd className={probe.error === undefined ? undefined : styles['cacheError']}>
+                    <dd className={probe.error === undefined ? undefined : styles['catalogError']}>
                       {probe.error === undefined ? `${String(probe.models ?? 0)} 个模型` : probe.error}
                     </dd>
                   </div>
@@ -177,7 +186,7 @@ export function ModelCatalogTab(props: ModelCatalogTabProps = {}): ReactNode {
               </dl>
             </>
           )}
-    </div>
+    </section>
   )
 }
 
@@ -253,14 +262,14 @@ function RefreshIntervalField({ scope, onChanged }: {
           }}
         />
       </div>
-      <p className={styles['cacheNote']}>
+      <p className={styles['catalogNote']}>
         0 表示只在插件挂载时刷一次，之后可以在这里手动刷；留空保存则回到部署配置的值。
         {snapshot.status === 'ready'
           ? ` 当前生效：${minutes === 0 ? '只在挂载时刷一次' : `每 ${String(minutes)} 分钟`}。`
           : ' 正在读取当前设置…'}
       </p>
-      {invalid ? <p className={styles['cacheError']}>请填 0 或正整数分钟数。</p> : null}
-      {snapshot.writable ? null : <p className={styles['cacheNote']}>当前部署的设置文档不可写，这个值只能由配置文件提供。</p>}
+      {invalid ? <p className={styles['catalogError']}>请填 0 或正整数分钟数。</p> : null}
+      {snapshot.writable ? null : <p className={styles['catalogNote']}>当前部署的设置文档不可写，这个值只能由配置文件提供。</p>}
       <div className={styles['actions']}>
         <button type="button" className={styles['secondaryButton']} disabled={!canSave} onClick={() => { void write() }}>
           {busy ? '保存中…' : '保存刷新间隔'}
@@ -274,8 +283,8 @@ function RefreshIntervalField({ scope, onChanged }: {
           恢复部署配置
         </button>
       </div>
-      {error === undefined ? null : <p className={styles['cacheError']}>{error}</p>}
-      {saved ? <p className={styles['cacheSaved']} role="status" aria-live="polite">已保存，立即生效。</p> : null}
+      {error === undefined ? null : <p className={styles['catalogError']}>{error}</p>}
+      {saved ? <p className={styles['catalogSaved']} role="status" aria-live="polite">已保存，立即生效。</p> : null}
     </>
   )
 }

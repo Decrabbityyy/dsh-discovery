@@ -1,37 +1,55 @@
-/** 「模型发现」设置分区：用宿主的 `llm.discoverModels` offer 探测预设或自定义端点，把选中的模型采纳成一个新的 pi-ai 提供方。 */
+/** 「模型发现」设置分区：页内切三页——探测与采纳、动态路由、模型目录；用宿主的 `llm.discoverModels` offer 探测预设或自定义端点，把选中的模型采纳成一个新的 pi-ai 提供方。 */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { LlmDiscoveredModel } from '@deepseek-ai/dsh-api-remotes/client'
+import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import clsx from 'clsx'
 import {
   CREDENTIAL_REF_PATTERN, deriveKeyRef, DISCOVERY_NS, DISCOVERY_PLUGIN, DYNAMIC_PLUGIN,
   isActivePlugin, matchCatalogEntry, messageOf, modelDeclaration, PI_AI_NS, ROUTE_PATTERN,
 } from './discovery.ts'
 import { useCatalog } from './catalogStore.ts'
-import type { DiscoveryApi } from './discovery.ts'
+import type { DiscoveryApi, DiscoverySettingsSection } from './discovery.ts'
 import { DynamicRoutes } from './DynamicRoutes.tsx'
+import { ModelCatalogPanel } from './ModelCatalogPanel.tsx'
 import { ModelResultsTable } from './ModelResultsTable.tsx'
 import { CUSTOM_PRESET, ENGINE_PRESETS, PROTOCOLS } from './presets.ts'
 import type { EnginePreset } from './presets.ts'
 import styles from './styles.module.css'
 
-/** Injected dependencies of {@link DiscoverySection} (slot `inject`). */
+/** Injected dependencies of {@link DiscoverySection} (slot `inject`): the wire face plus the discovery plugin's settings form for the 模型目录 block. */
 export interface DiscoverySectionInjected {
   api: DiscoveryApi
+  scope?: ConfigForm<DiscoverySettingsSection> | undefined
 }
 
 /** Props delivered by the slot outlet: the inject face spread flat (the renderer erases the share boundary at the render call). */
 export type DiscoverySectionProps = Partial<DiscoverySectionInjected>
 
-/** Renders the section, or null while the shell has not injected yet. */
-export function DiscoverySection(props: DiscoverySectionProps): ReactNode {
-  const { api } = props
-  if (api === undefined) return null
-  return <Loaded api={api} />
+/** 这一页的三块内容：探测与采纳（发现插件）、动态路由（动态插件）、模型目录（发现插件）。 */
+type SectionTab = 'discovery' | 'dynamic' | 'catalog'
+
+const TAB_LABELS: Record<SectionTab, string> = {
+  discovery: '探测与采纳',
+  dynamic: '动态路由',
+  catalog: '模型目录',
 }
 
-function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
+/** Renders the section, or null while the shell has not injected yet. */
+export function DiscoverySection(props: DiscoverySectionProps): ReactNode {
+  const { api, scope } = props
+  if (api === undefined) return null
+  return <Loaded api={api} scope={scope} />
+}
+
+function Loaded({ api, scope }: {
+  api: DiscoveryApi
+  scope?: ConfigForm<DiscoverySettingsSection> | undefined
+}): ReactNode {
+  const [tab, setTab] = useState<SectionTab>('discovery')
+  const tabsId = useId()
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([])
   const [presetKey, setPresetKey] = useState<string | undefined>(undefined)
   const [baseURL, setBaseURL] = useState('')
   const [protocol, setProtocol] = useState<string>(PROTOCOLS[0])
@@ -267,6 +285,14 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
     }
   }
 
+  // 页内切页：装了哪个插件才有哪一页（顺序即标签顺序）；只剩一页时不出切页条。
+  const tabs: readonly SectionTab[] = [
+    ...(discoveryLoaded ? (['discovery'] as const) : []),
+    ...(dynamicLoaded ? (['dynamic'] as const) : []),
+    ...(discoveryLoaded ? (['catalog'] as const) : []),
+  ]
+  const active: SectionTab | undefined = tabs.includes(tab) ? tab : tabs[0]
+
   return (
     <div className={styles['section']}>
       <h2 className={styles['title']}>模型发现</h2>
@@ -274,9 +300,53 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
         探测本地推理引擎或自定义端点公开的模型清单，并把选中的模型纳入一个新的模型提供方配置。
       </p>
 
-      {discoveryLoaded
+      {tabs.length > 1
         ? (
-          <>
+          <div className={styles['tabs']} role="tablist" aria-label="模型发现页面">
+            {tabs.map((id, index) => {
+              const selected = id === active
+              return (
+                <button
+                  key={id}
+                  ref={(element) => { tabRefs.current[index] = element }}
+                  id={`${tabsId}-tab-${id}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  aria-controls={`${tabsId}-panel-${id}`}
+                  tabIndex={selected ? 0 : -1}
+                  className={clsx(styles['tab'], selected && styles['tabActive'])}
+                  onClick={() => { setTab(id) }}
+                  onKeyDown={(event) => {
+                    let nextIndex: number | undefined
+                    if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length
+                    else if (event.key === 'ArrowLeft') nextIndex = (index - 1 + tabs.length) % tabs.length
+                    else if (event.key === 'Home') nextIndex = 0
+                    else if (event.key === 'End') nextIndex = tabs.length - 1
+                    if (nextIndex === undefined) return
+                    event.preventDefault()
+                    const next = tabs[nextIndex]
+                    if (next === undefined) return
+                    setTab(next)
+                    tabRefs.current[nextIndex]?.focus()
+                  }}
+                >
+                  {TAB_LABELS[id]}
+                </button>
+              )
+            })}
+          </div>
+        )
+        : null}
+
+      {discoveryLoaded && active === 'discovery'
+        ? (
+          <div
+            className={styles['panel']}
+            id={`${tabsId}-panel-discovery`}
+            role="tabpanel"
+            aria-labelledby={`${tabsId}-tab-discovery`}
+          >
       <div className={styles['presets']}>
         {ENGINE_PRESETS.map(preset => (
           <button
@@ -435,11 +505,36 @@ function Loaded({ api }: { api: DiscoveryApi }): ReactNode {
           </>
         )
         : null}
-          </>
+          </div>
         )
         : null}
 
-      {dynamicLoaded ? <DynamicRoutes api={api} /> : null}
+      {dynamicLoaded && active === 'dynamic'
+        ? (
+          <div
+            className={styles['panel']}
+            id={`${tabsId}-panel-dynamic`}
+            role="tabpanel"
+            aria-labelledby={`${tabsId}-tab-dynamic`}
+          >
+            <DynamicRoutes api={api} />
+          </div>
+        )
+        : null}
+
+      {/* 目录状态与刷新：原来是设置 → 插件里的一个标签页，现在并成这一页的第三页。 */}
+      {discoveryLoaded && active === 'catalog'
+        ? (
+          <div
+            className={styles['panel']}
+            id={`${tabsId}-panel-catalog`}
+            role="tabpanel"
+            aria-labelledby={`${tabsId}-tab-catalog`}
+          >
+            <ModelCatalogPanel scope={scope} />
+          </div>
+        )
+        : null}
     </div>
   )
 }

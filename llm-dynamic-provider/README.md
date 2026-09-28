@@ -78,7 +78,7 @@ UPSTREAM_API_KEY=你的密钥
 
 `config.routes` 适合随 profile 分发一组默认端点，页面上的改动也写回这一格。
 
-修改 profile patch 后需要重启。安装了 `dsh-client-ui-settings-discovery` 时，也可以在「模型发现」页面的「动态路由」区域新增、编辑和删除路由；页面写入的也是同一份用户配置。
+修改 profile patch 后需要重启。安装了 `dsh-client-ui-settings-discovery` 时，也可以在「设置」→「模型发现」→「动态路由」页新增、编辑和删除路由；页面写入的也是同一份用户配置。
 
 ## 协议和地址
 
@@ -102,7 +102,7 @@ UPSTREAM_API_KEY=你的密钥
 
 ## 手动刷新
 
-不用重启也可以重新读一遍目录并重新探测：安装 `dsh-client-ui-settings-discovery` 后，打开「设置」→「插件」→「模型目录」。页面显示声明路由数、models.dev 目录的条数、刷新时间与来源，按钮「刷新目录与路由」会重新读取目录、重新探测所有声明路由，并把结果逐条列出来（每条路由的模型数，或它的失败原因）。
+不用重启也可以重新读一遍目录并重新探测：安装 `dsh-client-ui-settings-discovery` 后，打开「设置」→「模型发现」→「模型目录」。那一页显示声明路由数、models.dev 目录的条数、刷新时间与来源，按钮「刷新目录与路由」会重新读取目录、重新探测所有声明路由，并把结果逐条列出来（每条路由的模型数，或它的失败原因）。
 
 插件自己的 HTTP 端点：`GET`/`POST /llm-dynamic-provider/probe` 读状态或触发一次全量刷新，`GET`/`POST /llm-dynamic-provider/routes` 读路由列表、按 `set` / `unset` 写入路由。两者只在挂了 Web 服务器时注册，随插件卸载撤销。
 

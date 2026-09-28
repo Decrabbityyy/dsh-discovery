@@ -40,6 +40,60 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+/* 页内切页条：与「设置 → 插件」的分区标签同一套形状——13/20 文字、底部一条细线，
+   选中项压 2px 下划线。这一页仍是设置面板的一页，所以形状跟着面板走。 */
+.tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 22px;
+  margin-top: 2px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.tab {
+  position: relative;
+  padding: 7px 1px 9px;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.tab:hover,
+.tabActive {
+  color: var(--dsw-alias-label-primary);
+}
+
+.tabActive::after,
+.tab:focus-visible::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--dsw-alias-label-primary);
+}
+
+.tab:focus-visible {
+  /* 焦点环由主题的全局 `:focus-visible` 画（这一条只让圆角好看一点）。 */
+  border-radius: 2px;
+  color: var(--dsw-alias-label-primary);
+}
+
+/* 一次只挂一页：切回来时每一页自己重读状态（探测那一页的草稿在 section 的 state 里，不会丢）。 */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding-top: 2px;
+}
+
 .presets {
   display: flex;
   flex-wrap: wrap;
@@ -510,39 +564,29 @@
   color: var(--dsw-alias-label-primary);
 }
 
-/* The 模型缓存 page of 设置 → 插件. The section's tab panel supplies the heading
-   and the tab strip; a tab page owns the rest, and this one follows the shape of
-   the 插件列表 tab beside it: a column of status text and a label/value grid. */
-.cacheSection {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: 100%;
-  max-width: 760px;
-  color: var(--dsw-alias-label-primary);
-}
-
-/* Label over value, one pair per line: the facts are longer than a 76px label. */
-.cacheFacts {
+/* 「模型发现」页里的「模型目录」区块（原来在 设置 → 插件 里单独占一页）：状态文字加
+   一组 label/value 网格，跟在动态路由那一块后面。每对 label 压着 value：事实比 76px
+   的标签长。 */
+.catalogFacts {
   display: flex;
   flex-direction: column;
   gap: 6px;
   margin: 0;
 }
 
-.cacheFacts div {
+.catalogFacts div {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.cacheFacts dt {
+.catalogFacts dt {
   font-size: 11px;
   line-height: 17px;
   color: var(--dsw-alias-label-tertiary);
 }
 
-.cacheFacts dd {
+.catalogFacts dd {
   margin: 0;
   overflow-wrap: anywhere;
   font-size: 12px;
@@ -550,21 +594,21 @@
   color: var(--dsw-alias-label-secondary);
 }
 
-.cacheNote {
+.catalogNote {
   margin: 0;
   font-size: 13px;
   line-height: 20px;
   color: var(--dsw-alias-label-tertiary);
 }
 
-.cacheError {
+.catalogError {
   margin: 0;
   font-size: 12.5px;
   line-height: 18px;
   color: var(--dsw-alias-state-error-primary);
 }
 
-.cacheSaved {
+.catalogSaved {
   margin: 0;
   font-size: 12.5px;
   line-height: 18px;

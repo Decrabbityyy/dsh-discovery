@@ -145,7 +145,7 @@ export function DynamicRoutes({ api }: { api: DiscoveryApi }): ReactNode {
 
   return (
     <section className={styles['resultsArea']} aria-label="动态路由">
-      <span className={styles['resultsTitle']}>动态路由</span>
+      {/* 标题由页内切页条给出（这一页叫「动态路由」）。 */}
       <p className={styles['intro']}>
         动态路由在每次启动时重新探测其端点并把发现的模型注册进模型注册表，无需手动采纳。
       </p>

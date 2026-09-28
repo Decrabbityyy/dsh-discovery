@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** 模型页合并后的面板：「动态路由」区域只在动态插件于宿主 Loader 清单里 active 时渲染。 */
+/** 「模型发现」页里「动态路由」那一页：只在动态插件于宿主 Loader 清单里 active 时才成一页。 */
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -85,9 +85,16 @@ function faceWith(overrides: {
   return { api, describe, mutate, set }
 }
 
-/** 渲染出来的「动态路由」区域，查询范围限定在里面，免得和发现区的字段撞名。 */
+/** 渲染出来的「动态路由」那一页：页内切页只有一页挂载，所以取当前这个 tabpanel。 */
 function dynamicBlock(): HTMLElement {
-  return screen.getByLabelText('动态路由')
+  return screen.getByRole('tabpanel')
+}
+
+/** 「动态路由」现在是页内的一页：先切过去，再操作这一块。 */
+async function openRoutesTab(): Promise<void> {
+  const tab = await screen.findByRole('tab', { name: '动态路由' })
+  fireEvent.click(tab)
+  await waitFor(() => { expect(tab.getAttribute('aria-selected')).toBe('true') })
 }
 
 describe('merged Models panel gating', () => {
@@ -103,7 +110,7 @@ describe('merged Models panel gating', () => {
       describe: describeWith([{ ns: 'llm-pi-ai' }, { ns: 'llm-dynamic-provider', routes: {} }]),
     })
     render(<DiscoverySection api={api} />)
-    await waitFor(() => { expect(screen.getByText('动态路由')).toBeTruthy() })
+    await openRoutesTab()
     expect(screen.getByText('尚无动态路由。')).toBeTruthy()
   })
 })
@@ -121,6 +128,7 @@ describe('dynamic-routes management', () => {
       describe: describeWith([{ ns: 'llm-pi-ai' }, { ns: 'llm-dynamic-provider', ...existing }]),
     })
     render(<DiscoverySection api={api} />)
+    await openRoutesTab()
     await waitFor(() => { expect(screen.getByText('upstream')).toBeTruthy() })
     expect(screen.getByText('http://gw.internal/v1')).toBeTruthy()
     expect(screen.getByText('Upstream')).toBeTruthy()
@@ -132,7 +140,7 @@ describe('dynamic-routes management', () => {
       describe: describeWith([{ ns: 'llm-pi-ai' }, { ns: 'llm-dynamic-provider', routes: {} }]),
     })
     render(<DiscoverySection api={api} />)
-    await waitFor(() => { expect(screen.getByText('动态路由')).toBeTruthy() })
+    await openRoutesTab()
     const block = dynamicBlock()
 
     fireEvent.change(within(block).getByLabelText('路由 ID'), { target: { value: 'newroute' } })
@@ -153,6 +161,7 @@ describe('dynamic-routes management', () => {
       describe: describeWith([{ ns: 'llm-pi-ai' }, { ns: 'llm-dynamic-provider', ...existing }]),
     })
     render(<DiscoverySection api={api} />)
+    await openRoutesTab()
     await waitFor(() => { expect(screen.getByText('upstream')).toBeTruthy() })
 
     fireEvent.click(screen.getByRole('button', { name: '删除' }))
@@ -169,7 +178,7 @@ describe('dynamic-routes management', () => {
       set,
     })
     render(<DiscoverySection api={api} />)
-    await waitFor(() => { expect(screen.getByText('动态路由')).toBeTruthy() })
+    await openRoutesTab()
     const block = dynamicBlock()
 
     fireEvent.change(within(block).getByLabelText('路由 ID'), { target: { value: 'secure' } })
@@ -196,7 +205,7 @@ describe('dynamic-routes management', () => {
       set,
     })
     render(<DiscoverySection api={api} />)
-    await waitFor(() => { expect(screen.getByText('动态路由')).toBeTruthy() })
+    await openRoutesTab()
     const block = dynamicBlock()
 
     // `9router` is a legal route id, but `9ROUTER_API_KEY` is not a legal

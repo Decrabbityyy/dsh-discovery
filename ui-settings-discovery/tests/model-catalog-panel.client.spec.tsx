@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
-/** 设置 → 插件 → 模型目录页：目录与路由两个来源，以及刷新按钮要的结果。 */
+/** 「模型发现」页里的「模型目录」区块：目录与路由两个来源，以及刷新按钮要的结果。 */
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Mock } from 'vitest'
 import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { UI_CATALOG_STATUS_PATH } from 'dsh-llm-discovery/vocabulary'
-import { ModelCatalogTab } from '../src/client/ModelCatalogTab.tsx'
+import { ModelCatalogPanel } from '../src/client/ModelCatalogPanel.tsx'
 import { DYNAMIC_PROBE_PATH } from '../src/client/discovery.ts'
 import type { DiscoverySettingsSection } from '../src/client/discovery.ts'
 
@@ -39,10 +39,12 @@ function both(status: { catalog?: unknown; routes?: unknown } = {}): Mock {
 const refreshButton = (): HTMLButtonElement =>
   screen.getByRole('button', { name: '刷新目录与路由' }) as HTMLButtonElement
 
-describe('model catalog tab', () => {
+describe('model catalog block', () => {
   it('reads the catalog and the declared routes on mount', async () => {
     const fetchMock = both()
-    render(<ModelCatalogTab />)
+    render(<ModelCatalogPanel />)
+    // 标题由页内切页条给出，这一块自己只留 area 标签。
+    expect(screen.getByLabelText('模型目录')).toBeDefined()
     await waitFor(() => { expect(screen.getByText(/1891 条 · .*刷新 · 来源 本次启动联网获取/)).toBeDefined() })
     expect(screen.getByText('2 条')).toBeDefined()
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([UI_CATALOG_STATUS_PATH, DYNAMIC_PROBE_PATH])
@@ -51,7 +53,7 @@ describe('model catalog tab', () => {
 
   it('names the local cache as the source where the facts came from it', async () => {
     both({ catalog: { ...CATALOG, entries: 42, source: 'storage' } })
-    render(<ModelCatalogTab />)
+    render(<ModelCatalogPanel />)
     await waitFor(() => { expect(screen.getByText(/42 条 · .*刷新 · 来源 本地缓存/)).toBeDefined() })
   })
 
@@ -69,7 +71,7 @@ describe('model catalog tab', () => {
         },
       }
     })
-    render(<ModelCatalogTab />)
+    render(<ModelCatalogPanel />)
     await waitFor(() => { expect(screen.getByText(/1891 条/)).toBeDefined() })
 
     fireEvent.click(refreshButton())
@@ -80,7 +82,7 @@ describe('model catalog tab', () => {
 
   it('keeps the catalog row when the dynamic plugin is not composed here', async () => {
     scripted((url) => (url === UI_CATALOG_STATUS_PATH ? { body: CATALOG } : { status: 404 }))
-    render(<ModelCatalogTab />)
+    render(<ModelCatalogPanel />)
     await waitFor(() => { expect(screen.getByText('未安装 dsh-llm-dynamic-provider')).toBeDefined() })
     expect(screen.getByText(/1891 条/)).toBeDefined()
   })
@@ -90,7 +92,7 @@ describe('model catalog tab', () => {
       if (init?.method === 'POST' && url === UI_CATALOG_STATUS_PATH) return { status: 405 }
       return { body: url === UI_CATALOG_STATUS_PATH ? CATALOG : { routes: 2 } }
     })
-    render(<ModelCatalogTab />)
+    render(<ModelCatalogPanel />)
     await waitFor(() => { expect(screen.getByText(/1891 条/)).toBeDefined() })
 
     fireEvent.click(refreshButton())
@@ -105,7 +107,7 @@ describe('model catalog tab', () => {
       }
       return { body: { entries: 0, refreshedAt: null, error: 'offline' } }
     })
-    render(<ModelCatalogTab />)
+    render(<ModelCatalogPanel />)
     await waitFor(() => { expect(screen.getByText(/上次读取目录失败：offline/)).toBeDefined() })
     expect(screen.getByText('0 条')).toBeDefined()
 
@@ -128,7 +130,7 @@ describe('model catalog tab', () => {
             },
           }
         : { body: { routes: 1 } }))
-      render(<ModelCatalogTab />)
+      render(<ModelCatalogPanel />)
       await act(async () => { await Promise.resolve() })
       expect(screen.getByText(/10 条/)).toBeDefined()
       expect(fetchMock.mock.calls).toHaveLength(2)
@@ -149,7 +151,7 @@ describe('model catalog tab', () => {
 
   it('leaves a mount-only catalog alone', async () => {
     const fetchMock = both()
-    render(<ModelCatalogTab />)
+    render(<ModelCatalogPanel />)
     await waitFor(() => { expect(screen.getByText(/1891 条/)).toBeDefined() })
 
     // 默认配置没有定时器（回答里没有 nextRefreshAt）：挂载读过一次就再也不问了。
@@ -168,7 +170,7 @@ describe('model catalog tab', () => {
       const fetchMock = scripted((url) => (url === UI_CATALOG_STATUS_PATH
         ? { body: { entries: 10, refreshedAt: Date.now(), source: 'storage', nextRefreshAt: Date.now() + 60_000 } }
         : { body: { routes: 1 } }))
-      const { unmount } = render(<ModelCatalogTab />)
+      const { unmount } = render(<ModelCatalogPanel />)
       await act(async () => { await Promise.resolve() })
       expect(fetchMock.mock.calls).toHaveLength(2)
 
@@ -247,7 +249,7 @@ describe('catalog refresh interval on the page', () => {
   it('shows the effective value and saves only a change', async () => {
     both()
     const fake = fakeScope({ minutes: 60 })
-    render(<ModelCatalogTab scope={fake.scope} />)
+    render(<ModelCatalogPanel scope={fake.scope} />)
     await waitFor(() => { expect(screen.getByText(/当前生效：每 60 分钟。/)).toBeDefined() })
     expect(intervalInput().value).toBe('60')
     expect(saveInterval().disabled).toBe(true)
@@ -262,7 +264,7 @@ describe('catalog refresh interval on the page', () => {
   it('clears the user layer when the field is emptied', async () => {
     both()
     const fake = fakeScope({ minutes: 60, overridden: true })
-    render(<ModelCatalogTab scope={fake.scope} />)
+    render(<ModelCatalogPanel scope={fake.scope} />)
     fireEvent.change(intervalInput(), { target: { value: '' } })
     fireEvent.click(saveInterval())
 
@@ -273,7 +275,7 @@ describe('catalog refresh interval on the page', () => {
   it('restores the deployment value with the reset button', async () => {
     both()
     const fake = fakeScope({ minutes: 60, overridden: true })
-    render(<ModelCatalogTab scope={fake.scope} />)
+    render(<ModelCatalogPanel scope={fake.scope} />)
     await waitFor(() => { expect(resetInterval().disabled).toBe(false) })
     fireEvent.click(resetInterval())
 
@@ -283,7 +285,7 @@ describe('catalog refresh interval on the page', () => {
   it('refuses a draft that is not a whole number of minutes', () => {
     both()
     const fake = fakeScope({ minutes: 60 })
-    render(<ModelCatalogTab scope={fake.scope} />)
+    render(<ModelCatalogPanel scope={fake.scope} />)
     fireEvent.change(intervalInput(), { target: { value: '1.5' } })
     expect(screen.getByText('请填 0 或正整数分钟数。')).toBeDefined()
     expect(saveInterval().disabled).toBe(true)
@@ -294,7 +296,7 @@ describe('catalog refresh interval on the page', () => {
     both()
     const thrown = fakeScope({ minutes: 60 })
     thrown.failWith = 'settings namespace "llm-discovery" changed since it was read'
-    render(<ModelCatalogTab scope={thrown.scope} />)
+    render(<ModelCatalogPanel scope={thrown.scope} />)
     fireEvent.change(intervalInput(), { target: { value: '120' } })
     fireEvent.click(saveInterval())
     await waitFor(() => { expect(screen.getByText(/changed since it was read/)).toBeDefined() })
@@ -304,7 +306,7 @@ describe('catalog refresh interval on the page', () => {
     // 宿主拒收时写入返回 false（传输失败才是 reject）；两种都当失败报出来。
     const refused = fakeScope({ minutes: 60 })
     refused.refuse = true
-    render(<ModelCatalogTab scope={refused.scope} />)
+    render(<ModelCatalogPanel scope={refused.scope} />)
     fireEvent.change(intervalInput(), { target: { value: '120' } })
     fireEvent.click(saveInterval())
     await waitFor(() => { expect(screen.getByText(/宿主没有接受这次写入/)).toBeDefined() })
@@ -313,7 +315,7 @@ describe('catalog refresh interval on the page', () => {
 
   it('leaves the interval controls out when no scope is injected', async () => {
     both()
-    render(<ModelCatalogTab />)
+    render(<ModelCatalogPanel />)
     await waitFor(() => { expect(screen.getByText(/1891 条/)).toBeDefined() })
     expect(screen.queryByLabelText('目录自动刷新间隔（分钟）')).toBeNull()
   })
@@ -321,7 +323,7 @@ describe('catalog refresh interval on the page', () => {
   it('re-reads the status right after the interval is saved', async () => {
     const fetchMock = both()
     const fake = fakeScope({ minutes: 60 })
-    render(<ModelCatalogTab scope={fake.scope} />)
+    render(<ModelCatalogPanel scope={fake.scope} />)
     await waitFor(() => { expect(fetchMock.mock.calls).toHaveLength(2) })
 
     // 宿主刚换了定时器，页面手上的下一次刷新时刻已经过期：保存后立刻重读一次。
