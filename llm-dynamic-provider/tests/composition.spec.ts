@@ -41,6 +41,17 @@ function catalogService(): Record<string, unknown> {
   }
 }
 
+/** A registry that mirrors the real webServer: duplicate paths throw, the disposer frees the path. */
+function pathRegistry(live: Map<string, number>): { register(route: { path: string }): () => void } {
+  return {
+    register(route: { path: string }): () => void {
+      if (live.has(route.path)) throw new Error(`duplicate ${route.path}`)
+      live.set(route.path, (live.get(route.path) ?? 0) + 1)
+      return () => { live.delete(route.path) }
+    },
+  }
+}
+
 /** 组合层写下来的那份配置：volatile 字段在这里是普通值，注册表按插件的 schema 解析成引用后才交给 `apply`。 */
 type RawConfig = {
   routes?: Record<string, RouteProfile>
@@ -125,22 +136,14 @@ describe('plugin composition', () => {
   })
 
   it('recycles its web endpoints across an unload/reload cycle', async () => {
-    // A registry that mirrors the real webServer: duplicate paths throw, the
-    // disposer frees the path. The plugin must release its endpoints on dispose
-    // so the next mount registers them cleanly.
+    // The plugin must release its endpoints on dispose so the next mount
+    // registers them cleanly.
     const live = new Map<string, number>()
-    const webServer = {
-      register(route: { path: string }): () => void {
-        if (live.has(route.path)) throw new Error(`duplicate ${route.path}`)
-        live.set(route.path, (live.get(route.path) ?? 0) + 1)
-        return () => { live.delete(route.path) }
-      },
-    }
     const fresh = new Context()
     await fresh.plugin(LlmRuntime)
     const forms = formsStub()
     fresh.provide('settings', forms.service as never)
-    fresh.provide('webServer', webServer)
+    fresh.provide('webServer', pathRegistry(live))
     fresh.provide(CATALOG_SERVICE, catalogService())
 
     const first = await fresh.plugin(dynamicProvider)
@@ -156,6 +159,32 @@ describe('plugin composition', () => {
     forms.attach(second)
     expect(live.size).toBe(2)
     await second.dispose()
+    expect(live.size).toBe(0)
+    await fresh.fiber.dispose()
+  })
+
+  it('registers its endpoints when the web server mounts after the plugin', async () => {
+    // The real web server's service is visible only while its own fiber is
+    // active, which is after its listen resolves; the settings page's endpoints
+    // must still appear when this plugin mounted first.
+    const live = new Map<string, number>()
+    const fresh = new Context()
+    await fresh.plugin(LlmRuntime)
+    const forms = formsStub()
+    fresh.provide('settings', forms.service as never)
+    fresh.provide(CATALOG_SERVICE, catalogService())
+    const fiber = await fresh.plugin(dynamicProvider)
+    forms.attach(fiber)
+    expect(live.size).toBe(0)
+
+    fresh.provide('webServer', pathRegistry(live))
+    await vi.waitFor(() => {
+      expect(live.has('/llm-dynamic-provider/routes')).toBe(true)
+      expect(live.has(DYNAMIC_PROBE_PATH)).toBe(true)
+    })
+
+    // Disposing the plugin must withdraw what the late web server registered.
+    await fiber.dispose()
     expect(live.size).toBe(0)
     await fresh.fiber.dispose()
   })

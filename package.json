@@ -12,7 +12,8 @@
     "check:deps": "node scripts/compat/check.mjs --only deps",
     "check:pi-ai": "node scripts/compat/check.mjs --only pi-ai",
     "check:manifest": "node scripts/compat/check.mjs --only manifest",
-    "sync:pi-ai": "node scripts/compat/sync-pi-ai.mjs"
+    "sync:pi-ai": "node scripts/compat/sync-pi-ai.mjs",
+    "release:prep": "pnpm install && pnpm run sync:pi-ai && pnpm install && pnpm run check && pnpm run build"
   },
   "devDependencies": {
     "@testing-library/dom": "^10.4.1",

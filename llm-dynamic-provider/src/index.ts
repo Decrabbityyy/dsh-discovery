@@ -60,7 +60,6 @@ export function apply(ctx: Context, config?: Config): void {
 
   // 目录由 dsh-llm-discovery 提供（`inject` 保证它在）：facts 查询、模态与状态都读它。
   const catalog = ctx.get(CATALOG_SERVICE) as SharedCatalog
-  const webServer = ctx.get('webServer') as WebServerFace | undefined
 
   // The route read/write endpoint.
   const readBody = (req: unknown): Promise<unknown> => new Promise((resolve, reject) => {
@@ -82,48 +81,37 @@ export function apply(ctx: Context, config?: Config): void {
     res.setHeader('content-type', 'application/json')
     res.end(JSON.stringify(body))
   }
-  if (webServer !== undefined) {
-    ctx.effect(() => webServer.register({
-      kind: 'exact',
-      path: DYNAMIC_ROUTES_PATH,
-      handler: async (req, res) => {
-        const method = (req as { method?: string }).method ?? 'GET'
-        if (method === 'GET') {
-          sendJson(res, 200, { routes: declaredRoutes() })
-          return
-        }
-        if (method !== 'POST') {
-          sendJson(res, 405, { error: 'method not allowed' })
-          return
-        }
-        let body: { op?: unknown; routeId?: unknown; route?: unknown }
-        try {
-          body = await readBody(req) as typeof body
-        } catch {
-          sendJson(res, 400, { error: 'invalid JSON body' })
-          return
-        }
-        const routeId = typeof body.routeId === 'string' ? body.routeId : ''
-        if (!/^[a-z0-9-]+$/.test(routeId)) {
-          sendJson(res, 400, { error: 'routeId must be lowercase letters, digits, and hyphens' })
-          return
-        }
-        try {
-          if (body.op === 'set') {
-            await ctx.settings.mutate(settingsTarget(), [{ op: 'set', path: ['routes', routeId], value: body.route }])
-          } else if (body.op === 'unset') {
-            await ctx.settings.mutate(settingsTarget(), [{ op: 'unset', path: ['routes', routeId] }])
-          } else {
-            sendJson(res, 400, { error: 'op must be set or unset' })
-            return
-          }
-        } catch (error) {
-          sendJson(res, 422, { error: error instanceof Error ? error.message : String(error) })
-          return
-        }
-        sendJson(res, 200, { routes: declaredRoutes() })
-      },
-    }), 'llm-dynamic-provider: routes endpoint')
+  /** One route-table write, answered with the table as it reads after the write. */
+  const writeRoute = async (
+    res: { statusCode: number; setHeader(name: string, value: string): void; end(body: string): void },
+    req: unknown,
+  ): Promise<void> => {
+    let body: { op?: unknown; routeId?: unknown; route?: unknown }
+    try {
+      body = await readBody(req) as typeof body
+    } catch {
+      sendJson(res, 400, { error: 'invalid JSON body' })
+      return
+    }
+    const routeId = typeof body.routeId === 'string' ? body.routeId : ''
+    if (!/^[a-z0-9-]+$/.test(routeId)) {
+      sendJson(res, 400, { error: 'routeId must be lowercase letters, digits, and hyphens' })
+      return
+    }
+    try {
+      if (body.op === 'set') {
+        await ctx.settings.mutate(settingsTarget(), [{ op: 'set', path: ['routes', routeId], value: body.route }])
+      } else if (body.op === 'unset') {
+        await ctx.settings.mutate(settingsTarget(), [{ op: 'unset', path: ['routes', routeId] }])
+      } else {
+        sendJson(res, 400, { error: 'op must be set or unset' })
+        return
+      }
+    } catch (error) {
+      sendJson(res, 422, { error: error instanceof Error ? error.message : String(error) })
+      return
+    }
+    sendJson(res, 200, { routes: declaredRoutes() })
   }
 
   // The discovery offer doubles as the loaded-signal the settings panel
@@ -235,8 +223,36 @@ export function apply(ctx: Context, config?: Config): void {
     routes: Object.keys(declaredRoutes()).length,
     modelsDev: catalog.status(),
   })
-  if (webServer !== undefined) {
-    ctx.effect(() => webServer.register({
+
+  /**
+   * Register both HTTP endpoints the settings page calls. The web server's
+   * service is visible only once its own fiber is active (its listen has
+   * resolved), and this plugin may mount first — so the caller either hands over
+   * an already-ready context or waits for the service through `inject`. A
+   * deployment without a web server never runs this.
+   */
+  const serveEndpoints = (scope: Context): void => {
+    const webServer = scope.get('webServer') as WebServerFace | undefined
+    if (webServer === undefined) return
+    // 路由声明的读写端点：GET 报文，POST set/unset。
+    scope.effect(() => webServer.register({
+      kind: 'exact',
+      path: DYNAMIC_ROUTES_PATH,
+      handler: async (req, res) => {
+        const method = (req as { method?: string }).method ?? 'GET'
+        if (method === 'GET') {
+          sendJson(res, 200, { routes: declaredRoutes() })
+          return
+        }
+        if (method !== 'POST') {
+          sendJson(res, 405, { error: 'method not allowed' })
+          return
+        }
+        await writeRoute(res, req)
+      },
+    }), 'llm-dynamic-provider: routes endpoint')
+    // 「模型目录」区块读的端点：GET 报状态，POST 重读目录并重新探测所有路由。
+    scope.effect(() => webServer.register({
       kind: 'exact',
       path: DYNAMIC_PROBE_PATH,
       handler: async (req, res) => {
@@ -255,6 +271,10 @@ export function apply(ctx: Context, config?: Config): void {
       },
     }), 'llm-dynamic-provider: probe endpoint')
   }
+
+  // The web server may mount after this plugin; the inject waits for it.
+  if (ctx.get('webServer') === undefined) ctx.inject(['webServer'], serveEndpoints)
+  else serveEndpoints(ctx)
 
   // Hot-edit: adding or editing a route reprobes without a restart, and removing
   // one withdraws its route on the same pass. The directory re-syncs with it.

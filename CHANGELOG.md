@@ -8,13 +8,14 @@
 
 ### 破坏性变更
 
-- **只支持 0.1.7 宿主线（npm 的 `next` 频道）。** `@deepseek-ai/dsh-*` 的 peer 由 `^0.1.5-rc.1` 收窄为 `^0.1.7-rc.1`，编译所依据的副本（devDependencies）钉在 `0.1.7-rc.2`；cordis 的 peer 由 `^4.0.2` 收窄为 `~4.0.4`。宿主仍在 0.1.5-rc 线上的话，升级插件前请先升级宿主，否则宿主版本不会被 peer 范围接受。
+- **只支持 0.1.7-rc 与 0.2.0-rc 两条宿主线。** `@deepseek-ai/dsh-*` 的 peer 由 `^0.1.5-rc.1` 收窄为 `^0.1.7-rc.1 || ^0.2.0-rc.2`，编译所依据的副本（devDependencies）钉在 `0.2.0-rc.2`；cordis 的 peer 由 `^4.0.2` 收窄为 `~4.0.4`。宿主仍在 0.1.5-rc 线上的话，升级插件前请先升级宿主，否则宿主版本不会被 peer 范围接受。
 - **`dsh-llm-discovery` 的设置导出换成 `./loader-config`。** 0.1.5 上用户设置住在插件自己注册的 settings 命名空间里，为此存在的 `./compat`、`DISCOVERY_SETTINGS_NS` 与 `DiscoverySettings` 都不再导出，`@deepseek-ai/dsh-settings` 也不再是这个包的 peer。用户设置现在是插件 `Config` 里标了 `.volatile()` 的字段（这一点从 0.1.7 起才是宿主认的写法），`dsh-llm-discovery` 自己不再碰 settings 服务。
 
 ### 新增
 
 - **支持 0.1.7 宿主线。** 0.1.7 把插件设置整个换了：`SettingsProvider` 不再导出，`ctx.settings` 变成 `SettingsForms`，命名空间就是插件的 Loader entry id，schema 取自插件自己导出的 `Config`，只有标了 `.volatile()` 的字段可编辑，改动通知也从 `settings/updated` 换成 Loader 只发给 owner fiber 的 `loader/volatile-update`；浏览器半边的 `ctx.settingsScope` 换成 `ctx.configForms`。三个包都按这条线接好了：目录刷新间隔与动态路由表分别是各自插件 `Config` 里的 volatile 字段（读值走 `.get()`），页面改走 `configForms`，插件自己的路由端点照旧写同一份设置。
 - `dsh-llm-discovery` 新增 `./loader-config` 子路径导出：volatile 配置就地点更后的通知收口，以及写设置用的 Loader entry id。
+- **支持 0.2.0-rc 宿主线。** 0.2.0-rc 的 `dsh-llm`、`dsh-settings`、`dsh-storage`、`dsh-storage-domain`、`dsh-client-ui-slots` 等 peer 与 0.1.7-rc.2 逐字节相同，其余 peer 的变化是新增加导出或 JSDoc，插件源码不必改；`node scripts/compat/check.mjs --host <0.2.0-rc.2 宿主树>` 六项全过。`@earendil-works/pi-ai` 的编译期副本随之由 `^0.85.1` 同步到 `^0.87.1`（0.2.0-rc.2 的 `dsh-llm-pi-ai` 依赖的范围），而 **peer 范围写成两条线的并集 `^0.85.1 || ^0.87.1`**：只写 `^0.87.1` 会让 0.1.7 宿主拿到 unmet peer，或由包管理器再装一份 pi-ai——两份 pi-ai 交到跨插件边界的 `Provider` 上就是两种类型。
 
 ### 变更
 
@@ -28,12 +29,15 @@
 
 ### 修复
 
+- **`dsh-llm-dynamic-provider` 的两个 HTTP 端点可能整轮不注册。** 插件挂载时只读一次 `ctx.get('webServer')`，而宿主 Web 服务在自己 fiber 变成 active（`listen` 完成）之前对别的插件不可见——先挂载的插件把「服务还没就绪」当成「这个部署没有 Web 服务器」，于是 `/llm-dynamic-provider/routes` 与 `/llm-dynamic-provider/probe` 一个都不注册：设置页「动态路由」打开就是 `读取动态路由失败:HTTP 404`，「模型目录」页的刷新同样失败（目录状态那个端点由设置页插件自己提供，所以只有它照常）。现在注册收进一个 `serveEndpoints`，按 `ctx.inject(['webServer'], ...)` 等服务就绪后再跑，与设置页插件、宿主自己的 `dsh-client-modules` 同一套写法；真的没有 Web 服务器的部署照旧不受影响，端点随插件卸载撤销。
 - **原来的设置集成在 0.1.7 上整体不可用。** 它用的 `ctx.settings.register(...)` / `get(...)` 与 `settings/updated` 在 0.1.7 上都不存在，插件会在设置这一步直接失败；现在整条链路按 0.1.7 写。
 - `dsh-llm-dynamic-provider` 把路由表交给 settings 组成层当普通对象用时，会拿到 volatile 引用；现在取值统一走 `.get()`。
 
 ### 开发
 
-- `pnpm run check` 参数不再需要写成 `-- --host`（那个 `--` 会被脚本按未知参数拒掉）；宿主树用 `.compat/hosts/next`（0.1.7-rc.2），做法记在 [`scripts/compat/README.md`](./scripts/compat/README.md)。
+- `pnpm run check` 参数不再需要写成 `-- --host`（那个 `--` 会被脚本按未知参数拒掉）；宿主树用 `.compat/hosts/next`（0.1.7-rc.2）或 0.2.0-rc.2 的依赖闭包，做法记在 [`scripts/compat/README.md`](./scripts/compat/README.md)。
+- `check:pi-ai` 与 `sync:pi-ai` 不再把所有声明对齐到同一个字符串：`devDependencies` 必须逐字等于编译期权威范围，`peerDependencies` 必须覆盖每条受支持宿主线自己钉的范围（`checks/pi-ai.mjs` 的 `OTHER_HOST_LINES`：0.1.7-rc 线 `^0.85.1` + 权威 `^0.87.1` → `^0.85.1 || ^0.87.1`）。
+- 新增 `pnpm run release:prep`：一条命令走完 `install → sync:pi-ai → install → check → build`。`sync:pi-ai` 读的是已安装的 `dsh-llm-pi-ai`，改完声明 lockfile 又落后一格，所以两头都要 install；`build` 里不挂这一步，CI 在 build 之前已经用 `check` 卡过漂移了。
 - 测试用真实 schema（schemastery 3.18.4 + cordis 4.0.4 会把 volatile 字段解析成引用）加 `tests/volatile.ts` 里照着 Loader 做法提交的写入；直接调 `resolveDiscoveryConfig` 的用例用同一个模块里的 `volatileRef()` 造引用，程序化挂载则按 `ctx.plugin` 的类型要求把写下来的普通配置传给 schema。`dsh-llm-dynamic-provider` 的 `@deepseek-ai/dsh-attachment` devDependency 只为测试导入 `dsh-llm-pi-ai` 时需要，不是本插件的运行时依赖。
 - 0.1.7 的 Loader 用 `Promise.allSettled` 等条目，被 schema 拒掉的配置不会让 `loader.await()` 抛出；相关的组合用例改为断言插件没有注册探测 offer。
 

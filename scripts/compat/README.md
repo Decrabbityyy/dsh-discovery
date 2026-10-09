@@ -23,12 +23,23 @@ pnpm run check:manifest                     # 等价于 --only manifest
 
 退出码：`0` 通过（允许有 warning）；`1` 有 FAIL；`2` 参数错误，或给了 `--require-host` 但没找到宿主树。
 
+换宿主线时用一条命令走完「装 → 同步 pi-ai → 再装 → 校验 → 构建」：
+
+```sh
+pnpm run release:prep
+```
+
+三步的顺序不能省：`sync:pi-ai` 读的是**已安装**的那份 `dsh-llm-pi-ai` 声明的范围，所以要先装；它改写声明之后 lockfile 又落后一格，所以要再装一次；`check` 与 `build` 放最后。
+
+`build` 里刻意不挂这一步。CI 的 `publish.yml` 先 `pnpm install --frozen-lockfile` 再 `pnpm run check`，任何漂移都在 build 之前就 FAIL；让 build 去写清单，只会在发布前改掉一个已经锁定、且没人 review 过的 manifest。
+
 ## 宿主树
 
-peer 范围只覆盖 0.1.7-rc 一条宿主线，所以针对要跑的宿主预检一次就够：
+peer 范围覆盖 0.1.7-rc 与 0.2.0-rc 两条宿主线，针对要跑的宿主各预检一次就够：
 
 ```sh
 node scripts/compat/check.mjs --host .compat/hosts/next   # 0.1.7-rc.2
+node scripts/compat/check.mjs --host <0.2.0-rc.2 的依赖闭包>   # 0.2.0-rc.2
 ```
 
 这棵树是 git 忽略的本地产物，把宿主闭包装进去就行：
@@ -46,7 +57,7 @@ npm install --prefix .compat/hosts/next --ignore-scripts
 | id | 标题 | 需要宿主 | 检查内容 |
 |---|---|---|---|
 | `deps` | dependency versions | 否 | peer 范围是否接受宿主版本（含 npm 的预发布规则）；同一依赖在各包是否钉了同一范围；peer 是否在 `devDependencies` 里有对应副本 |
-| `pi-ai` | pi-ai alignment | 否 | `@earendil-works/pi-ai` 的声明是否与所钉 `dsh-llm-pi-ai` 自己依赖的范围一致 |
+| `pi-ai` | pi-ai alignment | 否 | `@earendil-works/pi-ai` 的 `devDependencies` 是否为所钉 `dsh-llm-pi-ai` 自己依赖的范围，`peerDependencies` 是否覆盖所有受支持宿主线各钉的范围 |
 | `surface` | harness surface | 是 | 插件 import 的 specifier 是否在宿主的 exports 映射里可解析；具名导出是否存在于宿主的运行时模块（不只看 `.d.ts`）；同名包在多个宿主根上是否为兼容版本 |
 | `types` | workspace types (src + tests) | 否 | `tsc -b` 只覆盖 `src`，tsdown 不做类型检查；这一项用 `noEmit` 把 `src` 与 `tests` 一起检查 |
 | `host-types` | plugin sources vs host declarations | 是 | 按宿主 exports 把每个 harness specifier 映射到宿主的 `.d.ts`，重新类型检查插件源码与测试，报告精确到 `file:line` |
@@ -70,12 +81,14 @@ npm install --prefix .compat/hosts/next --ignore-scripts
 
 `@earendil-works/pi-ai` 由宿主决定：宿主把 `ResolvedPiAiProviderProfile` 连同它那份 `Provider` 类型一起交回来，编译期用另一份就会撞类型。权威是所钉 `@deepseek-ai/dsh-llm-pi-ai` 自己声明的 pi-ai 范围。
 
+两段声明的期望值不一样：`devDependencies` 是编译期对着的那一份，必须逐字等于权威范围；`peerDependencies` 是「本包接受哪些宿主线」，必须覆盖每条受支持宿主线自己钉的范围（0.1.7-rc 线 `^0.85.1`、0.2.0-rc 线 `^0.87.1`，合成 `^0.85.1 || ^0.87.1`）。peer 少写一截的话，旧线宿主会拿到 unmet peer 或第二份 pi-ai——正是这一项要防的事。列在 `checks/pi-ai.mjs` 的 `OTHER_HOST_LINES` 里。
+
 ```sh
-pnpm run sync:pi-ai               # 把权威范围写到每个 peer/dev 声明
+pnpm run sync:pi-ai               # 按段写：peer 并集、dev 权威范围
 pnpm run sync:pi-ai -- --check    # 只报告偏离，不写回（CI 用，有偏离则退出 1）
 ```
 
-`pi-ai` 这一项按同一条规则判定：任何一处声明偏离权威就 FAIL，并在输出里给出上面的命令。宿主那份 `dsh-llm-pi-ai` 若属于另一条发布线（例如机器上装的是别的宿主系列、钉 `^0.84.2`），只报 warn——一个包只能对着一个 pi-ai 编译，最终判定兼容性的是 `host-types`，它拿宿主的 `.d.ts` 重新编译插件源码。
+`pi-ai` 这一项按同一条规则判定：任何一处声明与它那一段的期望值不一致就 FAIL，并在输出里给出上面的命令。宿主那份 `dsh-llm-pi-ai` 若属于另一条发布线（例如机器上装的是别的宿主系列、钉 `^0.84.2`），只报 warn——一个包只能对着一个 pi-ai 编译，最终判定兼容性的是 `host-types`，它拿宿主的 `.d.ts` 重新编译插件源码。
 
 ## 生成物
 

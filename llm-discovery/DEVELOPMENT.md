@@ -92,9 +92,9 @@ tsdown 的 `clean: false` 是刻意的：`lib/types` 由 `tsc -b` 写在同一�
 ## 依赖约定
 
 - `@deepseek-ai/dsh-*` 同时声明为 peer（运行时由宿主注入）与 devDependency（编译期钉一份）；`autoInstallPeers: false`，peer 不会自动安装。
-- peer 范围只覆盖 0.1.7-rc：`^0.1.7-rc.1`。这条线上的宿主要求 cordis `~4.0.4`，所以 peer 与编译期钉的都是 cordis `~4.0.4` / schemastery `^3.18.4`——只有一份 cordis 时，`declare module` 的服务增强才不会被劈成两半。
+- peer 范围覆盖 0.1.7-rc 与 0.2.0-rc 两条宿主线：`^0.1.7-rc.1 || ^0.2.0-rc.2`。这两条线上的宿主要求 cordis `~4.0.4`，所以 peer 与编译期钉的都是 cordis `~4.0.4` / schemastery `^3.18.4`——只有一份 cordis 时，`declare module` 的服务增强才不会被劈成两半。
 - volatile 配置字段的取值一律走 `.get()`（`config.<field>.get()`），因为它交到插件手上时是引用而不是普通值；`Config` 接口按宿主 `.d.ts` 的写法把这些字段声明成 `Volatile<T>`，schema 那一边则直接 `.volatile()`。注意 `ctx.plugin()` 的 config 参数类型取自 `apply` 的第二个参数，所以程序化挂载要传 schema 解析后的配置，或者由 `ctx.plugin(plugin, raw as never)` 交给注册表解析。
-- pi-ai 只能有一份：宿主 `dsh-llm-pi-ai` 声明的范围是权威，用 `pnpm run sync:pi-ai` 同步到各包的 peer/dev 声明。
+- pi-ai 只能有一份：宿主 `dsh-llm-pi-ai` 声明的范围是权威。`devDependencies` 钉的必须逐字等于它（编译期就对着这一份）；`peerDependencies` 则是「本包接受哪些宿主线」的并集，要一并覆盖每条宿主线自己钉的范围——0.1.7-rc 线是 `^0.85.1`，0.2.0-rc 线是 `^0.87.1`，所以 peer 写 `^0.85.1 || ^0.87.1`。少了这一截，0.1.7 的宿主会拿到 unmet peer 或第二份 pi-ai。两段都由 `pnpm run sync:pi-ai` 写，各段的期望值见 `scripts/compat/checks/pi-ai.mjs`。
 - `zod`、`@earendil-works/pi-ai` 等留在 external，不打进产物。
 
 ## 发布
