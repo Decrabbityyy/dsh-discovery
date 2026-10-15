@@ -4,7 +4,7 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [未发布]
+## [0.2.1] - 2026-10-15
 
 ### 破坏性变更
 
@@ -110,5 +110,6 @@
 
 - Harness 依赖改为从 npm 的发布频道解析，不再需要 checkout Harness 源码；CI 相应简化为单仓库的安装 → 测试 → 构建 → 发布。
 
+[0.2.1]: https://github.com/Decrabbityyy/dsh-discovery/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Decrabbityyy/dsh-discovery/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/Decrabbityyy/dsh-discovery/releases/tag/v0.1.2
